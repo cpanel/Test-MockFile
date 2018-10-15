@@ -159,7 +159,7 @@ sub EOF {
     if ( $self->{'mode'} ne '<' ) {
         warn q{Filehandle STDOUT opened only for output};
     }
-    return $tell == length $self->{'data'}->{'contents'};
+    return $self-{'tell'} == length $self->{'data'}->{'contents'};
 }
 
 sub BINMODE {
