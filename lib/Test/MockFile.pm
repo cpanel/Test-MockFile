@@ -15,6 +15,7 @@ use Symbol                     ();
 use Test::MockFile::Stat       ();
 use Test::MockFile::FileHandle ();
 use Scalar::Util               ();
+use Errno qw/ENOENT/;
 
 =head1 NAME
 
@@ -46,7 +47,7 @@ BEGIN {
 
         # If contents is undef, we act like the file isn't there.
         if ( $mode eq '<' && !defined $mock_file->{'contents'} ) {
-            $! = "No such file or directory";
+            $! = ENOENT;
             return;
         }
 

@@ -9,6 +9,7 @@ package Test::MockFile::FileHandle;
 
 use strict;
 use warnings;
+use Errno qw/EBADF/;
 
 my $files_being_mocked = \%Test::MockFile::files_being_mocked;
 
@@ -50,7 +51,11 @@ sub PRINT {
     my ( $self, @list ) = @_;
 
     if ( $self->{'mode'} eq '<' ) {
-        $! = 'Bad file descriptor';
+
+        # Filehandle $fh opened only for input at t/readline.t line 27, <$fh> line 2.
+        # https://github.com/CpanelInc/Test-MockFile/issues/1
+        CORE::warn(("Filehandle ???? opened only for input at ???? line ???, <???> line ???.");
+        $! = EBADF;
         return;
     }
 
@@ -63,9 +68,10 @@ sub PRINT {
 # This method will be triggered every time the tied handle is printed to with the printf() function.
 # Beyond its self reference it also expects the format and list that was passed to the printf function.
 sub PRINTF {
-    my $self = shift;
+    my $self   = shift;
+    my $format = shift;
 
-    return $self->( sprintf(@_) );
+    return $self->PRINT( sprintf( $format, @_ ) );
 }
 
 # This method will be called when the handle is written to via the syswrite function.
@@ -157,7 +163,7 @@ sub EOF {
     my ($self) = @_;
 
     if ( $self->{'mode'} ne '<' ) {
-        warn q{Filehandle STDOUT opened only for output};
+        CORE::warn(q{Filehandle STDOUT opened only for output});
     }
     return $self->{'tell'} == length $self->{'data'}->{'contents'};
 }
@@ -178,8 +184,18 @@ sub FILENO {
 }
 
 sub SEEK {
-    my ($self) = @_;
+    my ( $self, $pos, $whence ) = @_;
+
     ...;
+    if ($whence) {
+        ...;
+    }
+    my $file_size = length $self->{'data'}->{'contents'};
+    return if $file_size < $pos;
+
+    $self->{'tell'} = $pos;
+
+    return 1;
 }
 
 sub TELL {

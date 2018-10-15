@@ -4,6 +4,8 @@ use strict;
 use warnings;
 
 use Test::More;
+use Errno qw/ENOENT EBADF/;
+
 use Test::MockFile;    # Everything below this can have its open overridden.
 
 use File::Temp qw/tempfile/;
@@ -12,13 +14,24 @@ my ( $fh_real, $filename ) = tempfile();
 print {$fh_real} "not\nmocked\n";
 close $fh_real;
 
+note "-------------- REAL MODE --------------";
 is( -s $filename, 11, "Temp file is on disk and right size" );
-is( open( my $fh_real, '<', $filename ), 1, "Open a real file written by File::Temp" );
+is( open( $fh_real, '<', $filename ), 1, "Open a real file written by File::Temp" );
 like( "$fh_real", qr/^GLOB\(0x[0-9a-f]+\)$/, '$fh2 stringifies to a GLOB' );
 is( <$fh_real>, "not\n",    " ... line 1" );
-is( <$fh_real>, "mocked\n", " ... line 1" );
+is( <$fh_real>, "mocked\n", " ... line 2" );
+
+{
+    my $warn_msg;
+    local $SIG{__WARN__} = sub { $warn_msg = shift };
+    is( print( {$fh_real} "TEST" ), undef, "Fails to write to a read handle in mock mode." );
+    is( $! + 0, EBADF, q{$! when the file is written to and it's a read file handle.} );
+    like( $warn_msg, qr{^Filehandle \$fh opened only for input at t/readline.t line \d+}, "Warns about writing to a read file handle" );
+}
+
 close $fh_real;
 
+note "-------------- MOCK MODE --------------";
 my $bar = Test::MockFile->file( $filename, "abc\ndef\nghi\n" );
 is( open( my $fh, '<', $filename ), 1, "Mocked temp file opens and returns true" );
 isa_ok( $fh, "IO::File", '$fh is a IO::File' );
@@ -37,12 +50,39 @@ is( <$fh>, "pqr",   '7th read on $fh is "pqr"' );
 is( <$fh>, undef,   '8th read on $fh undef at EOF' );
 is( <$fh>, undef,   '9th read on $fh undef at EOF' );
 
+{
+    my $warn_msg;
+    local $SIG{__WARN__} = sub { $warn_msg = shift };
+    is( print( {$fh} "TEST" ), undef, "Fails to write to a read handle in mock mode." );
+    is( $! + 0, EBADF, q{$! when the file is written to and it's a read file handle.} );
+    like( $warn_msg, qr{^Filehandle .+? opened only for input at .+? line \d+\.$}, "Warns about writing to a read file handle" );
+}
+
+close $fh;
 undef $bar;
 
+note "-------------- REAL MODE --------------";
 is( open( $fh_real, '<', $filename ), 1, "Once the mock file object is cleared, the next open reverts to the file on disk." );
 like( "$fh_real", qr/^GLOB\(0x[0-9a-f]+\)$/, '$fh2 stringifies to a GLOB' );
 is( <$fh_real>, "not\n",    " ... line 1" );
 is( <$fh_real>, "mocked\n", " ... line 1" );
 close $fh_real;
 
+# Missing file handling
+{
+    local $!;
+    unlink $filename;
+}
+
+my $missing_error = 'No such file or directory';
+undef $fh;
+is( open( $fh, '<', $filename ), undef, qq{Can't open a missing file "$filename"} );
+is( $! + 0, ENOENT, 'What $! looks like when failing to open the missing file.' );
+
+note "-------------- MOCK MODE --------------";
+my $baz = Test::MockFile->file($filename);
+is( open( $fh, '<', $filename ), undef, qq{Can't open a missing file "$filename"} );
+is( $! + 0, ENOENT, 'What $! looks like when failing to open the missing file.' );
+
 done_testing();
+

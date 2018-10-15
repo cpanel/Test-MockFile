@@ -4,9 +4,9 @@ use strict;
 use warnings;
 
 use Test::More;
-use Test::MockFile;    # Everything below this can have its open overridden.
-
 use File::Temp qw/tempfile/;
+
+use Test::MockFile;    # Everything below this can have its open overridden.
 
 my ( $fh_real, $filename ) = tempfile();
 print $fh_real "will be thrown out";
@@ -25,15 +25,17 @@ is( open( my $fh, '>', $filename ), 1, "Mocked temp file opens for write and ret
 isa_ok( $fh, "IO::File", '$fh is a IO::File' );
 like( "$fh", qr/^IO::File=GLOB\(0x[0-9a-f]+\)$/, '$fh stringifies to a IO::File GLOB' );
 my $oneline = "Just one line";
-is( print( {$fh} $oneline ), 13, "overwrite the contents" );
+is( ( print {$fh} $oneline ), 13, "overwrite the contents" );
 is( $bar->contents, $oneline, '$foo->contents reflects an overwrite' );
 is( close($fh),     1,        'Close $fh' );
 ok( $!, '$! hasn\'t been cleared' );
 
 is( open( $fh, '>>', $filename ), 1, 'Re-open $fh for append' );
-print $fh " but really long\n";
-is( $bar->contents, "$oneline but really long\n", '$foo->contents reflects an append' );
-is( close($fh), 1, 'Close $fh' );
+is( ( print $fh " but really long\n" ), 17, "Append line" );
+my $bytes = printf $fh "%04d", 42;
+is( $bytes,         4,                                "Append line with a printf" );
+is( $bar->contents, "$oneline but really long\n0042", '$foo->contents reflects an append' );
+is( close($fh),     1,                                'Close $fh' );
 ok( $!, '$! hasn\'t been cleared' );
 undef $bar;
 
