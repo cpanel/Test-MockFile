@@ -133,7 +133,7 @@ sub CLOSE {
     delete $self->{'data'}->{'fh'};
     untie $self;
 
-    return;
+    return 1;
 }
 
 # As with the other types of ties, this method will be called when untie happens.
@@ -159,7 +159,7 @@ sub EOF {
     if ( $self->{'mode'} ne '<' ) {
         warn q{Filehandle STDOUT opened only for output};
     }
-    return $self-{'tell'} == length $self->{'data'}->{'contents'};
+    return $self->{'tell'} == length $self->{'data'}->{'contents'};
 }
 
 sub BINMODE {
