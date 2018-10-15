@@ -134,7 +134,14 @@ sub contents {
     my ($self) = @_;
     $self or return;
 
-    return $files_being_mocked{ $self->{'file'} }->{'contents'};
+    my $mock_file_data = $files_being_mocked{ $self->{'file'} };
+
+    # If 2nd arg was passed.
+    if ( scalar @_ == 2 ) {
+        return $mock_file_data->{'contents'} = $_[1];
+    }
+
+    return $mock_file_data->{'contents'};
 }
 
 =head1 AUTHOR
