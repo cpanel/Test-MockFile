@@ -54,7 +54,7 @@ sub PRINT {
 
         # Filehandle $fh opened only for input at t/readline.t line 27, <$fh> line 2.
         # https://github.com/CpanelInc/Test-MockFile/issues/1
-        CORE::warn(("Filehandle ???? opened only for input at ???? line ???, <???> line ???.");
+        CORE::warn("Filehandle ???? opened only for input at ???? line ???, <???> line ???.");
         $! = EBADF;
         return;
     }
