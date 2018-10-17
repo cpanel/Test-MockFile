@@ -61,7 +61,10 @@ is( <$fh>, undef,   '9th read on $fh undef at EOF' );
 }
 
 close $fh;
+ok(!exists $Test::MockFile::files_being_mocked{$filename}->{'fh'}, "file handle clears from files_being_mocked hash when it goes out of scope.");
+
 undef $bar;
+is(scalar %Test::MockFile::files_being_mocked, 0, "files_being_mocked empties when \$bar is cleared");
 
 note "-------------- REAL MODE --------------";
 is( open( $fh_real, '<', $filename ), 1, "Once the mock file object is cleared, the next open reverts to the file on disk." );
