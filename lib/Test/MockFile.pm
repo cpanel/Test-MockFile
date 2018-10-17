@@ -12,7 +12,6 @@ use warnings;
 
 use IO::File                   ();
 use Symbol                     ();
-use Test::MockFile::Stat       ();
 use Test::MockFile::FileHandle ();
 use Scalar::Util               ();
 use Errno qw/ENOENT ELOOP/;
@@ -33,6 +32,18 @@ our $VERSION = '0.001';
 
 our %files_being_mocked;
 our $strict_mode = 0;
+
+# From http://man7.org/linux/man-pages/man7/inode.7.html
+use constant S_IFMT    => 0170000;    # bit mask for the file type bit field
+use constant S_IFPERMS => 07777;      # bit mask for file perms.
+
+use constant S_IFSOCK => 0140000;     # socket
+use constant S_IFLNK  => 0120000;     # symbolic link
+use constant S_IFREG  => 0100000;     # regular file
+use constant S_IFBLK  => 0060000;     # block device
+use constant S_IFDIR  => 0040000;     # directory
+use constant S_IFCHR  => 0020000;     # character device
+use constant S_IFIFO  => 0010000;     # FIFO
 
 BEGIN {
     *CORE::GLOBAL::open = sub : prototype(*;$@) {
@@ -58,8 +69,8 @@ BEGIN {
 
         # This is how we tell if the file is open by something.
 
-        $mock_file->{'fh'} = $_[0];
-        Scalar::Util::weaken( $mock_file->{'fh'} );    # Will this make it go out of scope?
+        $files_being_mocked{ $_[2] }->{'fh'} = $_[0];
+        Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
 
         return 1;
     };
@@ -87,8 +98,7 @@ sub _mock_stat {
     return if !defined $file_data->{'contents'};
 
     # Make sure the file size is correct in the stats before returning its contents.
-    $file_data->{'info'}->resize( length $file_data->{'contents'} || 0 );
-    return $file_data->{'info'}->get_stats;
+    return $file_data->stat;
 }
 
 sub _fh_to_file {
@@ -122,7 +132,7 @@ sub _find_file_or_fh {
         die("Mocked file $parent points to unmocked file $file");
     }
 
-    return $file unless $files_being_mocked{$file}->{'info'}->is_link;
+    return $file unless $files_being_mocked{$file}->is_link;
 
     #print STDERR "# looking for $file\n";
 
@@ -135,7 +145,7 @@ sub _find_file_or_fh {
         return;
     }
 
-    return _find_file_or_fh( $files_being_mocked{$file}->{'info'}->readlink, 1, $depth, $file );
+    return _find_file_or_fh( $files_being_mocked{$file}->readlink, 1, $depth, $file );
 }
 
 =head1 SYNOPSIS
@@ -176,63 +186,258 @@ This will mock a file and intercept all calls related to the file you pass to th
 
 =cut
 
-sub file {
-    my ( $class, $file, $contents, $stats ) = @_;
-    $file or die("No file provided to instantiate $class");
+sub new {
+    my $class = shift @_;
 
-    $files_being_mocked{$file} and die("It looks like $file is already being mocked. We don't support double mocking yet.");
+    my %opts;
+    if ( scalar @_ == 1 && ref $_[0] ) {
+        %opts = %{ $_[0] };
+    }
+    elsif ( scalar @_ % 2 ) {
+        die sprintf( "Unknown args (%d) passed to new", scalar @_ );
+    }
+    else {
+        %opts = @_;
+    }
 
-    my $self = bless { 'file' => $file }, $class;
-    $files_being_mocked{$file}->{'contents'}  = $contents;
-    $files_being_mocked{$file}->{'info'}      = $stats || Test::MockFile::Stat->file;
-    $files_being_mocked{$file}->{'mocked_by'} = "$self";
+    my $file_name = $opts{'file_name'} or die("Mock file created without a file name!");
+
+    my $now = time;
+
+    my $self = bless {
+        'dev'       => 0,        # stat[0]
+        'inode'     => 0,        # stat[1]
+        'mode'      => 0,        # stat[2]
+        'nlink'     => 0,        # stat[3]
+        'uid'       => 0,        # stat[4]
+        'gid'       => 0,        # stat[5]
+        'rdev'      => 0,        # stat[6]
+                                 # 'size'     => undef,    # stat[7] -- Method call
+        'atime'     => $now,     # stat[8]
+        'mtime'     => $now,     # stat[9]
+        'ctime'     => $now,     # stat[10]
+        'blksize'   => 4096,     # stat[11]
+                                 # 'blocks'   => 0,        # stat[12] -- Method call
+        'fileno'    => undef,    # fileno()
+        'tty'       => 0,        # possibly this is already provided in mode?
+        'readlink'  => '',       # what the symlink points to.
+        'file_name' => undef,
+        'contents'  => undef,
+    }, $class;
+
+    foreach my $key ( keys %opts ) {
+
+        # Ignore Stuff that's not a valid key for this class.
+        next unless exists $self->{$key};
+
+        # If it's passed in, we override them.
+        $self->{$key} = $opts{$key};
+    }
+
+    $self->{'fileno'} //= _unused_fileno();
+
+    $files_being_mocked{$file_name} = $self;
+
+    Scalar::Util::weaken( $files_being_mocked{$file_name} );
 
     return $self;
+}
+
+sub file {
+    my ( $class, $file, $contents, @stats ) = @_;
+
+    length $file or die("No file provided to instantiate $class");
+    $files_being_mocked{$file} and die("It looks like $file is already being mocked. We don't support double mocking yet.");
+
+    my %stats;
+    if ( scalar @stats == 1 ) {
+        %stats = %{ $stats[0] };
+    }
+    elsif ( scalar @stats % 2 ) {
+        die sprintf( "Unknown args (%d) passed to file", scalar @_ );
+    }
+    else {
+        %stats = @stats;
+    }
+
+    my $perms = defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666;
+    $stats{'mode'} = ( $perms ^ umask ) & S_IFREG;
+
+    return $class->new(
+        {
+            'file_name' => $file,
+            'contents'  => $contents,
+            %stats
+        }
+    );
 }
 
 # NOTE: We don't directly support taking stats when instantiating.
 sub symlink {
     my ( $class, $file, $readlink ) = @_;
-    $file or die("No file provided to instantiate $class");
+
+    length $file     or die("No file provided to instantiate $class");
+    length $readlink or die("No file provided for $file to point to in $class");
 
     $files_being_mocked{$file} and die("It looks like $file is already being mocked. We don't support double mocking yet.");
 
-    my $self = bless { 'file' => $file }, $class;
-    $files_being_mocked{$file}->{'info'}      = Test::MockFile::Stat->link($readlink);
-    $files_being_mocked{$file}->{'mocked_by'} = "$self";
+    return $class->new(
+        {
+            'file_name' => $file,
+            'contents'  => undef,
+            'readlink'  => $readlink,
+            'mode'      => 0777 | S_IFLNK,
+        }
+    );
+}
 
-    return $self;
+sub dir {
+    my ( $class, $dir_name, @stats ) = @_;
+
+    length $dir_name or die("No directory name provided to instantiate $class");
+    $files_being_mocked{$dir_name} and die("It looks like $dir_name is already being mocked. We don't support double mocking yet.");
+
+    my %stats;
+    if ( scalar @stats == 1 ) {
+        %stats = %{ $stats[0] };
+    }
+    elsif ( scalar @stats % 2 ) {
+        die sprintf( "Unknown args (%d) passed to file", scalar @_ );
+    }
+    else {
+        %stats = @stats;
+    }
+
+    my $perms = defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666;
+    $stats{'mode'} = ( $perms ^ umask ) & S_IFDIR;
+
+    return $class->new(
+        {
+            'file_name' => $dir_name,
+            'contents'  => undef,
+            %stats
+        }
+    );
 }
 
 sub DESTROY {
     my ($self) = @_;
     $self or return;
     ref $self or return;
-    my $file = $self->{'file'} or return;
 
-    $files_being_mocked{$file}->{'mocked_by'} eq "$self" or return;
-    delete $files_being_mocked{$file};
+    my $file_name = $self->{'file_name'} or return;
+
+    $self == $files_being_mocked{$file_name} or die("Tried to destroy object for $file_name ($self) but something else is mocking it?");
+    delete $files_being_mocked{$file_name};
 }
 
 =head2 contents
 
-Reports the current contents of the file.
+Reports or updates the current contents of the file.
 
 =cut
 
 sub contents {
     my ($self) = @_;
-    $self or return;
-
-    my $mock_file_data = $files_being_mocked{ $self->{'file'} };
+    $self or die;
 
     # If 2nd arg was passed.
     if ( scalar @_ == 2 ) {
-        return $mock_file_data->{'contents'} = $_[1];
+        return $self->{'contents'} = $_[1];
     }
 
-    return $mock_file_data->{'contents'};
+    return $self->{'contents'};
 }
+
+sub stat {
+    my $self = shift;
+
+    return (
+        $self->{'dev'},        # stat[0]
+        $self->{'inode'},      # stat[1]
+        $self->{'mode'},       # stat[2]
+        $self->{'nlink'},      # stat[3]
+        $self->{'uid'},        # stat[4]
+        $self->{'gid'},        # stat[5]
+        $self->{'rdev'},       # stat[6]
+        $self->size,           # stat[7]
+        $self->{'atime'},      # stat[8]
+        $self->{'mtime'},      # stat[9]
+        $self->{'ctime'},      # stat[10]
+        $self->{'blksize'},    # stat[11]
+        $self->blocks,         # stat[12]
+    );
+}
+
+sub _unused_fileno {
+    return 900;                # TODO
+}
+
+sub readlink {
+    my ($self) = @_;
+
+    return $self->{'readlink'};
+}
+
+sub is_link {
+    my ($self) = @_;
+
+    return ( length $self->{'readlink'} && $self->{'mode'} & S_IFLNK ) ? 1 : 0;
+}
+
+sub size {
+    my ($self) = @_;
+
+    return length $self->contents;
+}
+
+sub blocks {
+    my ($self) = @_;
+
+    return $self->size / abs( $self->{'blksize'} || 1 );
+}
+
+sub chmod {
+    my ( $self, $mode ) = @_;
+
+    $mode = int($mode) | S_IFPERMS;
+
+    $self->{'mode'} = ( $self->{'mode'} & S_IFMT ) + $mode;
+
+    return $mode;
+}
+
+sub mtime {
+    my ( $self, $time ) = @_;
+
+    if ( @_ == 2 && defined $time && $time =~ m/^[0-9]+$/ ) {
+        $self->{'mtime'} = $time;
+    }
+
+    return $self->{'mtime'};
+}
+
+sub ctime {
+    my ( $self, $time ) = @_;
+
+    if ( @_ == 2 && defined $time && $time =~ m/^[0-9]+$/ ) {
+        $self->{'ctime'} = $time;
+    }
+
+    return $self->{'ctime'};
+}
+
+sub atime {
+    my ( $self, $time ) = @_;
+
+    if ( @_ == 2 && defined $time && $time =~ m/^[0-9]+$/ ) {
+        $self->{'atime'} = $time;
+    }
+
+    return $self->{'atime'};
+}
+
+1;
 
 =head1 AUTHOR
 
