@@ -13,6 +13,7 @@ use warnings;
 use IO::File                   ();
 use Symbol                     ();
 use Test::MockFile::FileHandle ();
+use Test::MockFile::DirHandle  ();
 use Scalar::Util               ();
 use Errno qw/ENOENT ELOOP/;
 
@@ -72,6 +73,128 @@ BEGIN {
         $files_being_mocked{ $_[2] }->{'fh'} = $_[0];
         Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
 
+        return 1;
+    };
+
+    *CORE::GLOBAL::opendir = sub : prototype(*$) {
+        if ($strict_mode) {
+            scalar @_ == 2 or die;
+            defined $files_being_mocked{ $_[1] } or die;
+        }
+        goto \&CORE::opendir if scalar @_ != 2;
+        goto \&CORE::opendir unless defined $files_being_mocked{ $_[1] };
+
+        my $mock_dir = $files_being_mocked{ $_[1] };
+        if ( !defined $mock_dir->{'contents'} ) {
+            $! = ENOENT;
+            return undef;
+        }
+
+        # This isn't a real IO::Dir.
+        $_[0] = Test::MockFile::DirHandle->new( $_[1], $mock_dir->{'contents'} );
+
+        # This is how we tell if the file is open by something.
+        $files_being_mocked{ $_[1] }->{'fh'} = $_[0];
+        Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
+
+        return 1;
+
+    };
+    *CORE::GLOBAL::readdir = sub : prototype(*) {
+        my ($self) = @_;
+
+        goto \&CORE::readdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+        goto \&CORE::readdir unless defined $files_being_mocked{ $self->{'dir'} };
+
+        if ( !defined $self->{'files_in_readdir'} ) {
+            die("Did a readdir on an empty dir. This shouldn't have been able to have been opened!");
+        }
+
+        if ( !defined $self->{'tell'} ) {
+            die("readdir called on a closed dirhandle");
+        }
+
+        # At EOF for the dir handle.
+        return undef if $self->{'tell'} > $#{ $self->{'files_in_readdir'} };
+
+        if (wantarray) {
+            my @return;
+            foreach my $pos ( $self->{'tell'} .. $#{ $self->{'files_in_readdir'} } ) {
+                push @return, $self->{'files_in_readdir'}->[$pos];
+            }
+            $self->{'tell'} = $#{ $self->{'files_in_readdir'} } + 1;
+            return @return;
+        }
+
+        return $self->{'files_in_readdir'}->[ $self->{'tell'}++ ];
+    };
+
+    *CORE::GLOBAL::telldir = sub : prototype(*) {
+        my ($self) = @_;
+
+        goto \&CORE::telldir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+        goto \&CORE::telldir unless defined $files_being_mocked{ $self->{'dir'} };
+
+        if ( !defined $self->{'files_in_readdir'} ) {
+            die("Did a telldir on an empty dir. This shouldn't have been able to have been opened!");
+        }
+
+        if ( !defined $self->{'tell'} ) {
+            die("telldir called on a closed dirhandle");
+        }
+
+        return $self->{'tell'};
+    };
+
+    *CORE::GLOBAL::rewinddir = sub : prototype(*) {
+        my ($self) = @_;
+
+        goto \&CORE::rewinddir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+        goto \&CORE::rewinddir unless defined $files_being_mocked{ $self->{'dir'} };
+
+        if ( !defined $self->{'files_in_readdir'} ) {
+            die("Did a rewinddir on an empty dir. This shouldn't have been able to have been opened!");
+        }
+
+        if ( !defined $self->{'tell'} ) {
+            die("rewinddir called on a closed dirhandle");
+        }
+
+        $self->{'tell'} = 0;
+        return 1;
+    };
+
+    *CORE::GLOBAL::seekdir = sub : prototype(*$) {
+        my ( $self, $goto ) = @_;
+
+        goto \&CORE::seekdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+        goto \&CORE::seekdir unless defined $files_being_mocked{ $self->{'dir'} };
+
+        if ( !defined $self->{'files_in_readdir'} ) {
+            die("Did a seekdir on an empty dir. This shouldn't have been able to have been opened!");
+        }
+
+        if ( !defined $self->{'tell'} ) {
+            die("seekdir called on a closed dirhandle");
+        }
+
+        return $self->{'tell'} = $goto;
+    };
+
+    *CORE::GLOBAL::closedir = sub : prototype(*) {
+        my ($self) = @_;
+
+        goto \&CORE::closedir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+        goto \&CORE::closedir unless defined $files_being_mocked{ $self->{'dir'} };
+
+        if ( !defined $self->{'files_in_readdir'} ) {
+            die("Did a closedir on an empty dir. This shouldn't have been able to have been opened!");
+        }
+
+        # Already closed?
+        return if !defined $self->{'tell'};
+
+        delete $self->{'tell'};
         return 1;
     };
 }
@@ -292,10 +415,16 @@ sub symlink {
 }
 
 sub dir {
-    my ( $class, $dir_name, @stats ) = @_;
+    my ( $class, $dir_name, $contents, @stats ) = @_;
 
     length $dir_name or die("No directory name provided to instantiate $class");
     $files_being_mocked{$dir_name} and die("It looks like $dir_name is already being mocked. We don't support double mocking yet.");
+
+    # Because undef means it's a missing dir.
+    if ( defined $contents ) {
+        $contents ||= [qw/. ../];
+        ref $contents eq 'ARRAY' or die("directory contents must be an array ref or undef.");
+    }
 
     my %stats;
     if ( scalar @stats == 1 ) {
@@ -314,7 +443,7 @@ sub dir {
     return $class->new(
         {
             'file_name' => $dir_name,
-            'contents'  => undef,
+            'contents'  => $contents,
             %stats
         }
     );
