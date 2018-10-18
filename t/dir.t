@@ -31,7 +31,7 @@ ok( -e $f2, "File 2 ($f2) exists but...." );
 is( scalar readdir $dir_fh, undef, "readdir doesn't see it since it's there after the opendir." );
 is( closedir $dir_fh,       1,     "close the fake dir handle" );
 
-like( warning { readdir($dir_fh) }, qr/^readdir\(\) attempted on invalid dirhandle __\w+__ /, "warn on readdir when file handle is closed." );
+like( warning { readdir($dir_fh) }, qr/^readdir\(\) attempted on invalid dirhandle \S+ /, "warn on readdir when file handle is closed." );
 
 is( opendir( my $bad_fh, "/not/a/valid/path/kdshjfkjd" ), undef, "opendir on a bad path returns false" );
 is( $! + 0, ENOENT, '$! numeric is right.' );
