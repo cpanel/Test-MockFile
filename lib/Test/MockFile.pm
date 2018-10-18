@@ -10,12 +10,15 @@ package Test::MockFile;
 use strict;
 use warnings;
 
+use Cwd                        ();
 use IO::File                   ();
-use Symbol                     ();
 use Test::MockFile::FileHandle ();
 use Test::MockFile::DirHandle  ();
 use Scalar::Util               ();
+
 use Errno qw/ENOENT ELOOP/;
+
+#use Overload::FileCheck ('from_stat' => \&_mock_stat);
 
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
@@ -81,6 +84,11 @@ BEGIN {
             scalar @_ == 2 or die;
             defined $files_being_mocked{ $_[1] } or die;
         }
+
+        if ( $file_name !~ m{^/} ) {
+            $file_name = $opts{'file_name'} = _abs_path_to_file($file_name);
+        }
+
         goto \&CORE::opendir if scalar @_ != 2;
         goto \&CORE::opendir unless defined $files_being_mocked{ $_[1] };
 
@@ -271,6 +279,15 @@ sub _find_file_or_fh {
     return _find_file_or_fh( $files_being_mocked{$file}->readlink, 1, $depth, $file );
 }
 
+sub _abs_path_to_file {
+    my ($path) = shift;
+
+    defined $path or return;
+    return $path if $path =~ m{^/};
+
+    return Cwd::getcwd() . "/$path";
+}
+
 =head1 SYNOPSIS
 
 Intercepts file system calls for specific files so unit testing can take place without any files being altered on disk.
@@ -324,6 +341,10 @@ sub new {
     }
 
     my $file_name = $opts{'file_name'} or die("Mock file created without a file name!");
+
+    if ( $file_name !~ m{^/} ) {
+        $file_name = $opts{'file_name'} = _abs_path_to_file($file_name);
+    }
 
     my $now = time;
 
