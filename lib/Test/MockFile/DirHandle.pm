@@ -15,8 +15,6 @@ use warnings;
 sub new {
     my ( $class, $dir, $files_in_readdir ) = @_;
 
-    print STDERR "# HERE for $dir\n";
-
     return bless {
         files_in_readdir => $files_in_readdir,
         'dir'            => $dir,
