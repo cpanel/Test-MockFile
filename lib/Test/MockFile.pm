@@ -51,15 +51,17 @@ use constant S_IFIFO  => 0010000;     # FIFO
 
 BEGIN {
     *CORE::GLOBAL::open = sub : prototype(*;$@) {
+        my $abs_path = _abs_path_to_file( $_[2] );
+
         if ($strict_mode) {
             scalar @_ == 3 or die;
-            defined $files_being_mocked{ $_[2] } or die;
+            defined $files_being_mocked{$abs_path} or die("Unexpected open of $_[2] in strict Test::MockFile strict mode");
         }
         goto \&CORE::open if scalar @_ != 3;
-        goto \&CORE::open unless defined $files_being_mocked{ $_[2] };
+        goto \&CORE::open unless defined $files_being_mocked{$abs_path};
 
         #
-        my $mock_file = $files_being_mocked{ $_[2] };
+        my $mock_file = $files_being_mocked{$abs_path};
         my $mode      = $_[1];
 
         # If contents is undef, we act like the file isn't there.
@@ -69,45 +71,44 @@ BEGIN {
         }
 
         $_[0] = IO::File->new;
-        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $_[1], $_[2];
+        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $_[1], $abs_path;
 
         # This is how we tell if the file is open by something.
 
-        $files_being_mocked{ $_[2] }->{'fh'} = $_[0];
+        $files_being_mocked{$abs_path}->{'fh'} = $_[0];
         Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
 
         return 1;
     };
 
     *CORE::GLOBAL::opendir = sub : prototype(*$) {
+
+        my $abs_path = _abs_path_to_file( $_[1] );
         if ($strict_mode) {
             scalar @_ == 2 or die;
-            defined $files_being_mocked{ $_[1] } or die;
-        }
-
-        if ( $file_name !~ m{^/} ) {
-            $file_name = $opts{'file_name'} = _abs_path_to_file($file_name);
+            defined $files_being_mocked{$abs_path} or die;
         }
 
         goto \&CORE::opendir if scalar @_ != 2;
-        goto \&CORE::opendir unless defined $files_being_mocked{ $_[1] };
+        goto \&CORE::opendir unless defined $files_being_mocked{$abs_path};
 
-        my $mock_dir = $files_being_mocked{ $_[1] };
+        my $mock_dir = $files_being_mocked{$abs_path};
         if ( !defined $mock_dir->{'contents'} ) {
             $! = ENOENT;
             return undef;
         }
 
         # This isn't a real IO::Dir.
-        $_[0] = Test::MockFile::DirHandle->new( $_[1], $mock_dir->{'contents'} );
+        $_[0] = Test::MockFile::DirHandle->new( $abs_path, $mock_dir->{'contents'} );
 
         # This is how we tell if the file is open by something.
-        $files_being_mocked{ $_[1] }->{'fh'} = $_[0];
+        $files_being_mocked{$abs_path}->{'fh'} = $_[0];
         Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
 
         return 1;
 
     };
+
     *CORE::GLOBAL::readdir = sub : prototype(*) {
         my ($self) = @_;
 
@@ -220,16 +221,17 @@ sub _mock_stat {
     }
 
     my $file = _find_file_or_fh( $file_or_fh, $follow_link );
+    return $file if ref $file eq 'ARRAY';    # Allow an ELOOP to fall through here.
     return -1 unless length $file;
 
     my $file_data = $files_being_mocked{$file};
     return -1 unless $file_data;
 
     # File is not present so no stats for you!
-    return if !defined $file_data->{'contents'};
+    return [] if !defined $file_data->{'contents'};
 
     # Make sure the file size is correct in the stats before returning its contents.
-    return $file_data->stat;
+    return [ $file_data->stat ];
 }
 
 sub _fh_to_file {
@@ -273,7 +275,7 @@ sub _find_file_or_fh {
     #Protect against circular loops.
     if ( $depth > FOLLOW_LINK_MAX_DEPTH ) {
         $! = ELOOP;
-        return;
+        return [];
     }
 
     return _find_file_or_fh( $files_being_mocked{$file}->readlink, 1, $depth, $file );
