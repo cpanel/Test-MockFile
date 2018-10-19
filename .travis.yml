@@ -29,5 +29,4 @@ perl:
   - "5.12"
   - "5.10"
 script:
-  - cpanm --installdeps .
   - perl Makefile.PL && make test
