@@ -8,6 +8,7 @@ use File::Temp qw/tempfile/;
 
 use Test::MockFile;    # Everything below this can have its open overridden.
 
+note "-------------- REAL MODE --------------";
 my ( $fh_real, $filename ) = tempfile();
 print $fh_real "will be thrown out";
 close $fh_real;
@@ -20,6 +21,7 @@ is( close $fh_real, 1, "Close \$real_fh" );
 ok( $!, '$! hasn\'t been cleared' );
 is( -s $filename, 11, "Temp file is on disk and right size assuming a re-write happened." );
 
+note "-------------- MOCK MODE --------------";
 my $bar = Test::MockFile->file($filename);
 is( open( my $fh, '>', $filename ), 1, "Mocked temp file opens for write and returns true" );
 isa_ok( $fh, "IO::File", '$fh is a IO::File' );
@@ -39,6 +41,7 @@ is( close($fh),     1,                                'Close $fh' );
 ok( $!, '$! hasn\'t been cleared' );
 undef $bar;
 
+note "-------------- REAL MODE --------------";
 is( -s $filename, 11, "Temp file on disk is unaltered once \$bar is clear." );
 
 done_testing();

@@ -10,13 +10,16 @@ package Test::MockFile;
 use strict;
 use warnings;
 
+# perl -MFcntl -E'eval "say q{$_: } . $_" foreach sort {eval "$a" <=> eval "$b"} qw/O_RDONLY O_WRONLY O_RDWR O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND O_NONBLOCK O_NDELAY O_EXLOCK O_SHLOCK O_DIRECTORY O_NOFOLLOW O_SYNC O_BINARY O_LARGEFILE/'
+use Fcntl;    # O_RDONLY, etc.
+
 use Cwd                        ();
 use IO::File                   ();
 use Test::MockFile::FileHandle ();
 use Test::MockFile::DirHandle  ();
 use Scalar::Util               ();
 
-use Errno qw/ENOENT ELOOP/;
+use Errno qw/ENOENT ELOOP EEXIST/;
 
 #use Overload::FileCheck ('from_stat' => \&_mock_stat);
 
@@ -57,26 +60,138 @@ BEGIN {
             scalar @_ == 3 or die;
             defined $files_being_mocked{$abs_path} or die("Unexpected open of $_[2] in strict Test::MockFile strict mode");
         }
+
+        # open(my $fh, ">filehere"); # Just don't do this. It's bad.
         goto \&CORE::open if scalar @_ != 3;
+
+        my $mode = $_[1];
+
+        # TODO: We technically need to support this.
+        # open(my $fh, "-|", "/bin/hostname"); # Read from command
+        # open(my $fh, "|-", "/bin/passwd"); # Write to command
+        goto \&CORE::open if ( $mode eq '|-' || $mode eq '-|' );
+
+        # These are the only modes we support right now.
+        goto \&CORE::open unless grep { $_ eq $mode } qw/> < >> +< +> +>>/;
+
         goto \&CORE::open unless defined $files_being_mocked{$abs_path};
 
         #
         my $mock_file = $files_being_mocked{$abs_path};
-        my $mode      = $_[1];
 
         # If contents is undef, we act like the file isn't there.
-        if ( $mode eq '<' && !defined $mock_file->{'contents'} ) {
+        if ( !defined $mock_file->{'contents'} && grep { $mode eq $_ } qw/< +</ ) {
             $! = ENOENT;
             return;
         }
 
+        my $rw = '';
+        $rw .= 'r' if grep { $_ eq $mode } qw/+< +> +>> </;
+        $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
+
         $_[0] = IO::File->new;
-        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $_[1], $abs_path;
+        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
 
         # This is how we tell if the file is open by something.
 
         $files_being_mocked{$abs_path}->{'fh'} = $_[0];
         Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
+
+        # Fix tell based on open options.
+        if ( $mode eq '>>' or $mode eq '+>>' ) {
+            $files_being_mocked{$abs_path}->{'contents'} //= '';
+            seek $_[0], length( $files_being_mocked{$abs_path}->{'contents'} ), 0;
+        }
+        elsif ( $mode eq '>' or $mode eq '+>' ) {
+            $files_being_mocked{$abs_path}->{'contents'} = '';
+        }
+
+        return 1;
+    };
+
+    # sysopen FILEHANDLE, FILENAME, MODE, MASK
+    # sysopen FILEHANDLE, FILENAME, MODE
+
+    # We curently support:
+    # 1 - O_RDONLY - Read only.
+    # 2 - O_WRONLY - Write only.
+    # 3 - O_RDWR - Read and write.
+
+    # 6 - O_APPEND - Append to the file.
+    # 7 - O_TRUNC - Truncate the file.
+
+    # 5 - O_EXCL - Fail if the file already exists.
+    # 4 - O_CREAT - Create the file if it doesn't exist.
+    # 8 - O_NOFOLLOW - Fail if the last path component is a symbolic link.
+
+    *CORE::GLOBAL::sysopen = sub : prototype(*$$;$) {
+        my $abs_path = _abs_path_to_file( $_[1] );
+
+        if ($strict_mode) {
+            defined $files_being_mocked{$abs_path} or die("Unexpected sysopen of $_[1] in strict Test::MockFile strict mode");
+        }
+
+        goto \&CORE::sysopen unless defined $files_being_mocked{$abs_path};
+
+        my $mock_file    = $files_being_mocked{$abs_path};
+        my $sysopen_mode = $_[2];
+
+        if ( $sysopen_mode & ( O_NDELAY | O_SYNC | O_EXLOCK | O_SHLOCK | O_DIRECTORY | O_BINARY | O_LARGEFILE | O_NOCTTY | O_NONBLOCK ) ) {
+            die( sprintf( "Sorry, can't open %s with 0x%x permissions. Some of your permissions are not yet supported by %s", $_[1], $sysopen_mode, __PACKAGE__ ) );
+        }
+
+        # O_NOFOLLOW
+        if ( ( $sysopen_mode & O_NOFOLLOW ) == O_NOFOLLOW && $mock_file->is_link ) {
+            $! = 40;
+            return undef;
+        }
+
+        # O_EXCL
+        if ( $sysopen_mode & O_EXCL && $sysopen_mode & O_CREAT && defined $mock_file->{'contents'} ) {
+            $! = EEXIST;
+            return;
+        }
+
+        # O_CREAT
+        if ( $sysopen_mode & O_CREAT && !defined $mock_file->{'contents'} ) {
+            $mock_file->{'contents'} = '';
+        }
+
+        # O_TRUNC
+        if ( $sysopen_mode & O_TRUNC && defined $mock_file->{'contents'} ) {
+            $mock_file->{'contents'} = '';
+
+        }
+
+        my $rd_wr_mode = $sysopen_mode & 3;
+        my $rw =
+            $rd_wr_mode == O_RDONLY ? 'r'
+          : $rd_wr_mode == O_WRONLY ? 'w'
+          : $rd_wr_mode == O_RDWR   ? 'rw'
+          :                           die("Unexpected sysopen read/write mode ($rd_wr_mode)");    # O_WRONLY| O_RDWR mode makes no sense and we should die.
+
+        # If contents is undef, we act like the file isn't there.
+        if ( !defined $mock_file->{'contents'} && $rd_wr_mode == O_RDONLY ) {
+            $! = ENOENT;
+            return;
+        }
+
+        $_[0] = IO::File->new;
+        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
+
+        # This is how we tell if the file is open by something.
+        $files_being_mocked{$abs_path}->{'fh'} = $_[0];
+        Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
+
+        # O_TRUNC
+        if ( $sysopen_mode & O_TRUNC ) {
+            $mock_file->{'contents'} = '';
+        }
+
+        # O_APPEND
+        if ( $sysopen_mode & O_APPEND ) {
+            $_[0]->{'tell'} = length( $mock_file->{'contents'} );
+        }
 
         return 1;
     };
@@ -208,6 +323,16 @@ BEGIN {
     };
 }
 
+sub _mode_can_write {
+    my ($mode) = @_;
+    return ( $mode eq '<' ) ? 0 : 1;
+}
+
+sub _mode_can_read {
+    my ($mode) = @_;
+    return ( $mode eq '>' or $mode eq '>>' ) ? 0 : 1;
+}
+
 #Overload::FileCheck::mock_stat(\&mock_stat);
 sub _mock_stat {
     my ( $file_or_fh, $follow_link ) = @_;
@@ -266,8 +391,6 @@ sub _find_file_or_fh {
     }
 
     return $file unless $files_being_mocked{$file}->is_link;
-
-    #print STDERR "# looking for $file\n";
 
     $depth ||= 0;
     $depth++;

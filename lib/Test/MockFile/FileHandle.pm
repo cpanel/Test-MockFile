@@ -11,38 +11,26 @@ use strict;
 use warnings;
 use Errno qw/EBADF/;
 
-my $files_being_mocked = \%Test::MockFile::files_being_mocked;
+my $files_being_mocked;
+{
+    no warnings 'once';
+    $files_being_mocked = \%Test::MockFile::files_being_mocked;
+}
 
 sub TIEHANDLE {
-    my ( $class, $mode, $file ) = @_;
+    my ( $class, $file, $mode ) = @_;
 
-    _validate_open_mode( $mode, $file // '' );
     length $file or die("No file name passed!");
 
     my $self = bless {
-        'mode' => $mode,
-        'file' => $file,
-        'data' => $files_being_mocked->{$file},
-        'tell' => 0,
+        'file'  => $file,
+        'data'  => $files_being_mocked->{$file},
+        'tell'  => 0,
+        'read'  => $mode =~ m/r/ ? 1 : 0,
+        'write' => $mode =~ m/w/ ? 1 : 0,
     }, $class;
 
-    # Need to move to EOF if the file was opened for append.
-    if ( $self->{'mode'} eq '>>' ) {
-        $self->{'tell'} = length $self->{'data'}->{'contents'};
-    }
-    elsif ( $self->{'mode'} eq '>' ) {    #truncate.
-        $self->{'data'}->{'contents'} = '';
-    }
-
     return $self;
-}
-
-sub _validate_open_mode {
-    my ( $mode, $file ) = @_;
-
-    defined $mode or die "Unknown file mode provided to open $file!";
-    return if ( $mode =~ m/^(>|>>|<)$/ );
-    die "Unknown file mode '$mode' provided to open $file!";
 }
 
 # This method will be triggered every time the tied handle is printed to with the print() or say() functions.
@@ -50,7 +38,7 @@ sub _validate_open_mode {
 sub PRINT {
     my ( $self, @list ) = @_;
 
-    if ( $self->{'mode'} eq '<' ) {
+    if ( !$self->{'write'} ) {
 
         # Filehandle $fh opened only for input at t/readline.t line 27, <$fh> line 2.
         # https://github.com/CpanelInc/Test-MockFile/issues/1
@@ -162,7 +150,7 @@ sub DESTROY {
 sub EOF {
     my ($self) = @_;
 
-    if ( $self->{'mode'} ne '<' ) {
+    if ( !$self->{'read'} ) {
         CORE::warn(q{Filehandle STDOUT opened only for output});
     }
     return $self->{'tell'} == length $self->{'data'}->{'contents'};
@@ -183,10 +171,10 @@ sub FILENO {
     ...;
 }
 
+# seek FILEHANDLE, OFFSET, WHENCE
 sub SEEK {
     my ( $self, $pos, $whence ) = @_;
 
-    ...;
     if ($whence) {
         ...;
     }
