@@ -35,6 +35,7 @@
       },
       "runtime" : {
          "requires" : {
+            "Overload::FileCheck" : "0",
             "perl" : "5.006"
          }
       }

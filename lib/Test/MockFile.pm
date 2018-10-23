@@ -18,6 +18,7 @@ use IO::File                   ();
 use Test::MockFile::FileHandle ();
 use Test::MockFile::DirHandle  ();
 use Scalar::Util               ();
+use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
 use Errno qw/ENOENT ELOOP EEXIST/;
 
@@ -334,22 +335,29 @@ sub _mode_can_read {
 
 #Overload::FileCheck::mock_stat(\&mock_stat);
 sub _mock_stat {
-    my ( $file_or_fh, $follow_link ) = @_;
+    my ( $type, $file_or_fh ) = @_;
 
-    if ( scalar @_ != 1 ) {
-        return -1;
+    $type or die("_mock_stat called without a stat type");
+
+    my $follow_link =
+        $type eq 'stat'  ? 1
+      : $type eq 'lstat' ? 0
+      :                    die("Unexpected stat type '$type'");
+
+    if ( scalar @_ != 2 ) {
+        return FALLBACK_TO_REAL_OP();
     }
 
     if ( !length $file_or_fh ) {
-        return -1;
+        return FALLBACK_TO_REAL_OP();
     }
 
     my $file = _find_file_or_fh( $file_or_fh, $follow_link );
     return $file if ref $file eq 'ARRAY';    # Allow an ELOOP to fall through here.
-    return -1 unless length $file;
+    return FALLBACK_TO_REAL_OP() unless length $file;
 
     my $file_data = $files_being_mocked{$file};
-    return -1 unless $file_data;
+    return FALLBACK_TO_REAL_OP() unless $file_data;
 
     # File is not present so no stats for you!
     return [] if !defined $file_data->{'contents'};
@@ -387,6 +395,11 @@ sub _find_file_or_fh {
 
     if ( $parent and !$files_being_mocked{$file} ) {
         die("Mocked file $parent points to unmocked file $file");
+    }
+
+    if ( !$files_being_mocked{$file} ) {
+        return [] if $depth;
+        return $file;
     }
 
     return $file unless $files_being_mocked{$file}->is_link;
