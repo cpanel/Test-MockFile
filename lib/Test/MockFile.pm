@@ -61,6 +61,9 @@ This is useful for L<small tests|https://en.wikipedia.org/wiki/Google_Test#Small
 
 A strict mode is even provided which can throw a die when files are accessed during your tests!
 
+    # Loaded before Test::MockModule so uses the core perl functions without any hooks.
+    use Module::I::Dont::Want::To::Alter;
+
     use Test::MockFile;
 
     my $mock_file = Test::MockFile->file("/foo/bar", "contents\ngo\nhere");
@@ -103,7 +106,7 @@ This will make cause $file to be mocked in all file checks, opens, etc.
 
 undef contents means that the file should act like it's not there.
 
-See L<Stats> for what goes in this hash ref.
+See L<Mock Stats> for what goes in this hash ref.
 
 =cut
 
@@ -124,7 +127,7 @@ sub file {
         %stats = @stats;
     }
 
-    my $perms = defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666;
+    my $perms = S_IFPERMS & ( defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666 );
     $stats{'mode'} = ( $perms ^ umask ) | S_IFREG;
 
     return $class->new(
@@ -175,7 +178,7 @@ This will cause $dir to be mocked in all file checks, and opendir interactions.
 @contents should be provided in the sort order you expect to see the files from readdir.
 NOTE: Because "." and ".." will always be the first things readdir returns, These files are automatically inserted at the front of the array.
 
-See L<Stats> for what goes in this hash ref.
+See L<Mock Stats> for what goes in this hash ref.
 
 =cut
 
@@ -189,9 +192,9 @@ sub dir {
     if ( defined $contents ) {
         ref $contents eq 'ARRAY' or die("directory contents must be an array ref or undef if the directory is to be missing.");
 
-        # Push . and .. on if not listed in the dir.        
-        unshift @$contents, '.'  if(!grep {$_ eq '.'  }, @$contents);
-        unshift @$contents, '..' if(!grep {$_ eq '..' }, @$contents);
+        # Push . and .. on if not listed in the dir.
+        unshift @$contents, '.'  if ( !grep { $_ eq '.' },  @$contents );
+        unshift @$contents, '..' if ( !grep { $_ eq '..' }, @$contents );
     }
 
     my %stats;
@@ -205,7 +208,7 @@ sub dir {
         %stats = @stats;
     }
 
-    my $perms = defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666;
+    my $perms = S_IFPERMS & ( defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666 );
     $stats{'mode'} = ( $perms ^ umask ) | S_IFDIR;
 
     return $class->new(
@@ -216,6 +219,28 @@ sub dir {
         }
     );
 }
+
+=head2 Mock Stats
+
+When creating mocked files or directories, we default their stats to:
+
+    Test::MockModule->new( $file, $contents, {
+            'dev'       => 0,        # stat[0]
+            'inode'     => 0,        # stat[1]
+            'mode'      => $mode,    # stat[2]
+            'nlink'     => 0,        # stat[3]
+            'uid'       => 0,        # stat[4]
+            'gid'       => 0,        # stat[5]
+            'rdev'      => 0,        # stat[6]
+            'atime'     => $now,     # stat[8]
+            'mtime'     => $now,     # stat[9]
+            'ctime'     => $now,     # stat[10]
+            'blksize'   => 4096,     # stat[11]
+            'fileno'    => undef,    # fileno()
+    };
+    
+You'll notice that mode, size, and blocks have been left out of this. Mode is set to 666 (for files) or 777 (for directores), xored against the current umask.
+Size and blocks are calculated based on the size of 'contents' a.k.a. the fake file.
 
 =head2 new
     
@@ -296,12 +321,13 @@ sub _mode_can_read {
 #Overload::FileCheck::mock_stat(\&mock_stat);
 sub _mock_stat {
     my ( $type, $file_or_fh ) = @_;
-    
+
     $type or die("_mock_stat called without a stat type");
-    
-    my $follow_link = $type eq 'stat' ? 1
-                    : $type eq 'lstat' ? 0
-                    : die ("Unexpected stat type '$type'");
+
+    my $follow_link =
+        $type eq 'stat'  ? 1
+      : $type eq 'lstat' ? 0
+      :                    die("Unexpected stat type '$type'");
 
     if ( scalar @_ != 2 ) {
         return FALLBACK_TO_REAL_OP();
@@ -356,11 +382,11 @@ sub _find_file_or_fh {
         die("Mocked file $parent points to unmocked file $file");
     }
 
-    if(!$files_being_mocked{$file}) {
+    if ( !$files_being_mocked{$file} ) {
         return [] if $depth;
         return $file;
     }
-    
+
     return $file unless $files_being_mocked{$file}->is_link;
 
     $depth ||= 0;
@@ -384,7 +410,6 @@ sub _abs_path_to_file {
     return Cwd::getcwd() . "/$path";
 }
 
-
 sub DESTROY {
     my ($self) = @_;
     $self or return;
@@ -407,18 +432,18 @@ To update, pass an array ref of strings for a dir or a string for a file. Symlin
 =cut
 
 sub contents {
-    my ($self, $new_contents) = @_;
+    my ( $self, $new_contents ) = @_;
     $self or die;
 
     die("checking or setting contents on a symlink is not supported") if $self->is_link;
-    
+
     # If 2nd arg was passed.
     if ( scalar @_ == 2 ) {
-        if(defined $new_contents) { # undef is legal everywhere.
-            if($self->is_file && ref $new_contents) {
+        if ( defined $new_contents ) {    # undef is legal everywhere.
+            if ( $self->is_file && ref $new_contents ) {
                 die("File contents should be a simple string");
             }
-            elsif(ref $new_contents ne 'ARRAY' ) {
+            elsif ( ref $new_contents ne 'ARRAY' ) {
                 die("Directory contents should be an array ref of strings corresponding to what you want readdir to return.");
             }
         }
@@ -427,7 +452,6 @@ sub contents {
 
     return $self->{'contents'};
 }
-
 
 =head2 stat
 
@@ -468,15 +492,15 @@ Returns the stat of a mocked file (does not follow symlinks.) You can also use t
 =cut
 
 sub readlink {
-    my ($self, $readlink) = @_;
-    
+    my ( $self, $readlink ) = @_;
+
     $self->is_link or die("readlink is only supported for symlinks");
-    
+
     if ( scalar @_ == 2 ) {
-        if( defined $readlink && ref $readlink) {
+        if ( defined $readlink && ref $readlink ) {
             die("readlink can only be set to simple strings.");
         }
-        
+
         $self->{'readlink'} = $readlink;
     }
 
@@ -504,7 +528,7 @@ returns true/false, depending on whether this object is a directory.
 sub is_dir {
     my ($self) = @_;
 
-    return ( ($self->{'mode'} & S_IFMT) == S_IFDIR ) ? 1 : 0;
+    return ( ( $self->{'mode'} & S_IFMT ) == S_IFDIR ) ? 1 : 0;
 }
 
 =head2 is_file
@@ -516,7 +540,7 @@ returns true/false, depending on whether this object is regular file.
 sub is_file {
     my ($self) = @_;
 
-    return ( ($self->{'mode'} & S_IFMT) == S_IFREG ) ? 1 : 0;
+    return ( ( $self->{'mode'} & S_IFMT ) == S_IFREG ) ? 1 : 0;
 }
 
 =head2 size
@@ -541,7 +565,7 @@ sub blocks {
     my ($self) = @_;
 
     my $blocks = $self->size / abs( $self->{'blksize'} || 1 );
-    if(int($blocks) > $blocks) {
+    if ( int($blocks) > $blocks ) {
         $blocks = int($blocks) + 1;
     }
     return $blocks;
