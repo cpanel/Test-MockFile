@@ -116,10 +116,8 @@ BEGIN {
     # 1 - O_RDONLY - Read only.
     # 2 - O_WRONLY - Write only.
     # 3 - O_RDWR - Read and write.
-
     # 6 - O_APPEND - Append to the file.
     # 7 - O_TRUNC - Truncate the file.
-
     # 5 - O_EXCL - Fail if the file already exists.
     # 4 - O_CREAT - Create the file if it doesn't exist.
     # 8 - O_NOFOLLOW - Fail if the last path component is a symbolic link.
@@ -136,7 +134,8 @@ BEGIN {
         my $mock_file    = $files_being_mocked{$abs_path};
         my $sysopen_mode = $_[2];
 
-        if ( $sysopen_mode & ( O_NDELAY | O_SYNC | O_EXLOCK | O_SHLOCK | O_DIRECTORY | O_BINARY | O_LARGEFILE | O_NOCTTY | O_NONBLOCK ) ) {
+        # Not supported by my vendor: O_EXLOCK | O_SHLOCK
+        if ( $sysopen_mode & ( O_NDELAY | O_SYNC | O_DIRECTORY | O_BINARY | O_LARGEFILE | O_NOCTTY | O_NONBLOCK ) ) {
             die( sprintf( "Sorry, can't open %s with 0x%x permissions. Some of your permissions are not yet supported by %s", $_[1], $sysopen_mode, __PACKAGE__ ) );
         }
 
@@ -506,7 +505,6 @@ sub new {
     $self->{'fileno'} //= _unused_fileno();
 
     $files_being_mocked{$file_name} = $self;
-
     Scalar::Util::weaken( $files_being_mocked{$file_name} );
 
     return $self;
