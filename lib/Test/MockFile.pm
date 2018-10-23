@@ -541,7 +541,7 @@ sub file {
     }
 
     my $perms = defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666;
-    $stats{'mode'} = ( $perms ^ umask ) & S_IFREG;
+    $stats{'mode'} = ( $perms ^ umask ) | S_IFREG;
 
     return $class->new(
         {
@@ -595,7 +595,7 @@ sub dir {
     }
 
     my $perms = defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666;
-    $stats{'mode'} = ( $perms ^ umask ) & S_IFDIR;
+    $stats{'mode'} = ( $perms ^ umask ) | S_IFDIR;
 
     return $class->new(
         {
