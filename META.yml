@@ -3,6 +3,7 @@ abstract: 'Lets tests validate code which interacts with files without them '
 author:
   - 'Todd Rinaldo <toddr@cpanel.net>'
 build_requires:
+  File::Slurper: '0'
   Test2::Bundle::Extended: '0'
   Test2::Plugin::NoWarnings: '0'
   Test2::Tools::Explain: '0'
