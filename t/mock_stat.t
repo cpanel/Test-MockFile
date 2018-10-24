@@ -11,8 +11,15 @@ use Test::MockFile ();
 use Overload::FileCheck qw/:check/;
 use Errno qw/ELOOP/;
 
-note "_fh_to_file";
+use Cwd ();
 
+note "_abs_path_to_file";
+my $cwd = Cwd::getcwd();
+is( Test::MockFile::_abs_path_to_file("0"),    "$cwd/0", "no / prefix makes prepends path on it." );
+is( Test::MockFile::_abs_path_to_file("/lib"), "/lib",   "/lib is /lib" );
+is( Test::MockFile::_abs_path_to_file(),       undef,    "undef is undef" );
+
+note "_fh_to_file";
 my @mocked_files;
 
 push @mocked_files, Test::MockFile->file( '/foo/bar', "" );
@@ -21,9 +28,9 @@ open( my $fh,  "<", "/foo/bar" ) or die;
 open( my $fh2, "<", "/bar/foo" ) or die;
 
 is( Test::MockFile::_fh_to_file(),              undef,         "_fh_to_file()" );
-is( Test::MockFile::_fh_to_file(0),             0,             "_fh_to_file(0)" );
-is( Test::MockFile::_fh_to_file(''),            '',            "_fh_to_file('')" );
-is( Test::MockFile::_fh_to_file(' '),           ' ',           "_fh_to_file(' ')" );
+is( Test::MockFile::_fh_to_file(0),             "$cwd/0",      "_fh_to_file(0)" );
+is( Test::MockFile::_fh_to_file(''),            "$cwd/",       "_fh_to_file('')" );
+is( Test::MockFile::_fh_to_file(' '),           "$cwd/ ",      "_fh_to_file(' ')" );
 is( Test::MockFile::_fh_to_file('/etc/passwd'), '/etc/passwd', "_fh_to_file('/etc/passwd')" );
 
 is( Test::MockFile::_fh_to_file($fh),  '/foo/bar', "_fh_to_file(\$fh)" );
@@ -61,7 +68,7 @@ is( Test::MockFile::_mock_stat( 'stat',  ' ' ), FALLBACK_TO_REAL_OP(), "A space 
 my $basic_stat_return = array {
     item 0;
     item 0;
-    item 0;
+    item 0100644;
     item 0;
     item 0;
     item 0;
@@ -75,8 +82,6 @@ my $basic_stat_return = array {
 };
 
 is( Test::MockFile::_mock_stat( 'lstat', '/foo/bar' ), $basic_stat_return, "/foo/bar mock stat" );
-done_testing();
-exit;
 is( Test::MockFile::_mock_stat( 'stat', '/aaa' ), [], "/aaa mock stat when looped." );
 is( $! + 0, ELOOP, "Throws an ELOOP error" );
 
