@@ -780,7 +780,7 @@ BEGIN {
         my $sysopen_mode = $_[2];
 
         # Not supported by my linux vendor: O_EXLOCK | O_SHLOCK
-        if ( $sysopen_mode ^ SUPPORTED_SYSOPEN_MODES ) {
+        if ( ( $sysopen_mode & SUPPORTED_SYSOPEN_MODES ) != $sysopen_mode ) {
             die( sprintf( "Sorry, can't open %s with 0x%x permissions. Some of your permissions are not yet supported by %s", $_[1], $sysopen_mode, __PACKAGE__ ) );
         }
 
