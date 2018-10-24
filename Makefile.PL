@@ -26,4 +26,15 @@ WriteMakefile(
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES    => 'Test-MockFile-*' },
+    'META_MERGE' => {
+        'meta-spec' => { version => 2 },
+        "resources" => {
+            "bugtracker" => { web => "https://github.com/CpanelInc/Test-MockFile/issues" },
+            "repository" => {
+                "type" => "git",
+                "url" => "https://github.com/CpanelInc/Test-MockFile.git",
+                "web" => "https://github.com/CpanelInc/Test-MockFile"
+            },
+        },
+    },
 );
