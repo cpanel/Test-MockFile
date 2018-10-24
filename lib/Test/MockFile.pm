@@ -453,7 +453,7 @@ sub contents {
             if ( $self->is_file && ref $new_contents ) {
                 die("File contents should be a simple string");
             }
-            elsif ( ref $new_contents ne 'ARRAY' ) {
+            elsif ( $self->is_dir && ref $new_contents ne 'ARRAY' ) {
                 die("Directory contents should be an array ref of strings corresponding to what you want readdir to return.");
             }
         }
