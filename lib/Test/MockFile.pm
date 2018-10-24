@@ -661,7 +661,7 @@ Test::MockModule uses 2 methods to mock file access:
 It is currently not possible in pure perl to override L<stat|http://perldoc.perl.org/functions/stat.html>, L<lstat|http://perldoc.perl.org/functions/lstat.html> and L<-X operators|http://perldoc.perl.org/functions/-X.html>.
 In conjunction with this module, we've developed L<Overload::FileCheck>.
 
-This enables us to intercept calls to stat, lstat and -X operators (like -e, -f, -d, -s, etc.) and passe them to our control.If the file is currently being mocked, we return the stat (or lstat) information on the file to be used to determine the answer to whatever check was made. This even works for things like C<-e _>.
+This enables us to intercept calls to stat, lstat and -X operators (like -e, -f, -d, -s, etc.) and pass them to our control. If the file is currently being mocked, we return the stat (or lstat) information on the file to be used to determine the answer to whatever check was made. This even works for things like C<-e _>.
 If we do not control the file in question, we return C<FALLBACK_TO_REAL_OP()> which then makes a normal check.
 
 =head3 CORE::GLOBAL:: overrides
