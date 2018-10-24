@@ -10,6 +10,7 @@ package Test::MockFile::FileHandle;
 use strict;
 use warnings;
 use Errno qw/EBADF/;
+use Scalar::Util ();
 
 my $files_being_mocked;
 {
@@ -29,6 +30,9 @@ sub TIEHANDLE {
         'read'  => $mode =~ m/r/ ? 1 : 0,
         'write' => $mode =~ m/w/ ? 1 : 0,
     }, $class;
+
+    # This ref count can't hold the object from getting released.
+    Scalar::Util::weaken( $self->{'data'} );
 
     return $self;
 }
@@ -78,17 +82,20 @@ sub WRITE {
         return 0;
     }
 
-    my $strlen = strlen($buf);
-    if ( $strlen > abs($len) ) {
+    my $strlen = length($buf);
+    $offset //= 0;
+
+    if ( $strlen - $offset < abs($len) ) {
         $! = q{Offset outside string at ???.};
         return 0;
     }
 
+    $offset //= 0;
     if ( $offset < 0 ) {
         $offset = $strlen + $offset;
     }
 
-    return $self->PRINT( substr( $buf, $len, $offset ) );
+    return $self->PRINT( substr( $buf, $offset, $len ) );
 }
 
 # This method is called when the handle is read via <HANDLE> or readline HANDLE .
@@ -112,12 +119,28 @@ sub READLINE {
 sub GETC {
     my ($self) = @_;
 
+    ...;
 }
 
 # This method will be called when the handle is read from via the read or sysread functions.
 sub READ {
-    my ($self) = @_;
-    ...;
+    my ( $self, undef, $len, $offset ) = @_;
+
+    my $contents_len = length $self->{'data'}->{'contents'};
+    my $buf_len      = length $_[1];
+    $offset //= 0;
+    if ( $offset > $buf_len ) {
+        $_[1] .= "\0" x ( $offset - $buf_len );
+    }
+    my $tell = $self->{'tell'};
+
+    my $read_len = ( $contents_len - $tell < $len ) ? $contents_len - $tell : $len;
+
+    substr( $_[1], $offset ) = substr( $self->{'data'}->{'contents'}, $tell, $read_len );
+
+    $self->{'tell'} += $read_len;
+
+    return $read_len;
 }
 
 # This method will be called when the handle is closed via the close function.
