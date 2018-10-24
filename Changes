@@ -1,7 +1,13 @@
 Revision history for Test-MockFile
 
+0.003   10/24/2018
+        Correct bug in use constant statement. 0.002 was broken on release.
+        Changes to code to give basic support for Perl 5.10+. Ideally you should be on
+            perl 5.16 to run this code but it'll mostly work below that.
+
 0.002   10/24/2018
         Set bug tracker to github
+        Fix Fcntl bug when you use unsupported constants.
 
 0.001   10/23/2018
         First release with basic support for open/sysopen/opendir
