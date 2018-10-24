@@ -119,7 +119,7 @@ sub READLINE {
 sub GETC {
     my ($self) = @_;
 
-    ...;
+    die('Unimplemented');
 }
 
 # This method will be called when the handle is read from via the read or sysread functions.
@@ -181,17 +181,17 @@ sub EOF {
 
 sub BINMODE {
     my ($self) = @_;
-    ...;
+    die('Unimplemented');
 }
 
 sub OPEN {
     my ($self) = @_;
-    ...;
+    die('Unimplemented');
 }
 
 sub FILENO {
     my ($self) = @_;
-    ...;
+    die('Unimplemented');
 }
 
 # seek FILEHANDLE, OFFSET, WHENCE
@@ -199,7 +199,7 @@ sub SEEK {
     my ( $self, $pos, $whence ) = @_;
 
     if ($whence) {
-        ...;
+        die('Unimplemented');
     }
     my $file_size = length $self->{'data'}->{'contents'};
     return if $file_size < $pos;
