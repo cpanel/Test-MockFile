@@ -193,8 +193,12 @@ sub dir {
         ref $contents eq 'ARRAY' or die("directory contents must be an array ref or undef if the directory is to be missing.");
 
         # Push . and .. on if not listed in the dir.
-        unshift @$contents, '.'  if ( !grep { $_ eq '.' },  @$contents );
-        unshift @$contents, '..' if ( !grep { $_ eq '..' }, @$contents );
+        if ( !grep { $_ eq '..' } @$contents ) {
+            unshift @$contents, '..';
+        }
+        if ( !grep { $_ eq '.' } @$contents ) {
+            unshift @$contents, '.';
+        }
     }
 
     my %stats;
@@ -241,6 +245,12 @@ When creating mocked files or directories, we default their stats to:
     
 You'll notice that mode, size, and blocks have been left out of this. Mode is set to 666 (for files) or 777 (for directores), xored against the current umask.
 Size and blocks are calculated based on the size of 'contents' a.k.a. the fake file.
+
+When you want to override one of the defaults, all you need to do is specify that when you declare the file or directory. The rest will continue to default.
+
+    Test::MockModule->file("/root/abc", "...", {inode => 65, uid => 123, mtime => int((2000-1970) * 365.25 * 24 * 60 * 60 }));
+
+    Test::MockModule->dir("/sbin", "...", { mode => 0700 }));
 
 =head2 new
     
