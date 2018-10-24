@@ -1,5 +1,5 @@
 {
-   "abstract" : "Lets tests validate code which interacts with files without them ",
+   "abstract" : "Lets tests validate code which interacts with files without the file system ever being touched. ",
    "author" : [
       "Todd Rinaldo <toddr@cpanel.net>"
    ],
@@ -42,6 +42,17 @@
       }
    },
    "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "web" : "https://github.com/cpanelinc/Test-MockFile/issues"
+      },
+      "license" : [
+         "http://dev.perl.org/licenses/"
+      ],
+      "repository" : {
+         "url" : "https://github.com/cpanelinc/Test-MockFile"
+      }
+   },
    "version" : "0.001",
    "x_serialization_backend" : "JSON::PP version 2.97001"
 }

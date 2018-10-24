@@ -26,4 +26,11 @@ WriteMakefile(
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES    => 'Test-MockFile-*' },
+    META_MERGE => {
+        resources => {
+            license    => 'http://dev.perl.org/licenses/',
+            bugtracker => 'https://github.com/cpanelinc/Test-MockFile/issues',
+            repository => 'https://github.com/cpanelinc/Test-MockFile',
+        }
+    },
 );
