@@ -13,6 +13,9 @@ use Errno qw/ELOOP/;
 
 use Cwd ();
 
+# Assures testers don't mess up with our hard coded perms expectations.
+umask 022;
+
 note "_abs_path_to_file";
 my $cwd = Cwd::getcwd();
 is( Test::MockFile::_abs_path_to_file("0"),    "$cwd/0", "no / prefix makes prepends path on it." );
