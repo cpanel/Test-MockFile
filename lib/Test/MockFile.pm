@@ -666,32 +666,33 @@ If we do not control the file in question, we return C<FALLBACK_TO_REAL_OP()> wh
 
 =head3 CORE::GLOBAL:: overrides
 
-Since 5.20, it has been possible to override function calls by defining them. like:
+Since 5.10, it has been possible to override function calls by defining them. like:
 
     *CORE::GLOBAL::open = sub(*;$@) {...}
     
 Any code which is loaded B<AFTER> this happens will use the alternate open. This means you can place your C<use Test::MockFile> statement after statements you don't want mocked and
 there is no risk that that code will ever be altered by Test::MockModule.
 
-We oveload the following statements and then return tied handles to enable the rest of the IO functions to work properly:
+We oveload the following statements and then return tied handles to enable the rest of the IO functions to work properly. Only B<open> / B<sysopen> are needed to address file operations.
+However B<opendir> file handles were never setup for tie so we have to override all of B<opendir>'s related functions.
 
 =over
 
-=item open
+=item * open
 
-=item sysopen
+=item * sysopen
 
-=item opendir
+=item * opendir
 
-=item readdir
+=item * readdir
 
-=item telldir
+=item * telldir
 
-=item seekdir
+=item * seekdir
 
-=item rewinddir
+=item * rewinddir
 
-=item closedir
+=item * closedir
 
 =back
 
