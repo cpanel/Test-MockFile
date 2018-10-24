@@ -19,6 +19,7 @@ WriteMakefile(
         'Test2::Bundle::Extended'   => '0',
         'Test2::Tools::Explain'     => '0',
         'Test2::Plugin::NoWarnings' => '0',
+        'File::Slurper'             => 0,
     },
     PREREQ_PM => {
         'Overload::FileCheck' => 0,

@@ -3,3 +3,4 @@ requires 'Test2::Tools::Explain';
 requires 'Test2::Plugin::NoWarnings';
 requires 'Test::CheckManifest';
 requires 'Overload::FileCheck';
+requires 'File::Slurper';
