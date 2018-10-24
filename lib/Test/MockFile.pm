@@ -22,8 +22,6 @@ use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
 use Errno qw/ENOENT ELOOP EEXIST/;
 
-#use Overload::FileCheck ('from_stat' => \&_mock_stat);
-
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
 =head1 NAME
@@ -361,38 +359,19 @@ sub _mock_stat {
     return [ $file_data->stat ];
 }
 
-sub _fh_to_file {
-    my ($fh) = @_;
-
-    # Return if it's a string. Nothing to do here!
-    return $fh unless ref $fh;
-
-    foreach my $file_name ( keys %files_being_mocked ) {
-        my $mock_fh = $files_being_mocked{$file_name}->{'fh'};
-        next unless $mock_fh;              # File isn't open.
-        next unless "$mock_fh" eq "$fh";
-
-        return $file_name;
-    }
-
-    return;
-}
-
 sub _find_file_or_fh {
     my ( $file_or_fh, $follow_link, $depth, $parent ) = @_;
 
-    if ( $follow_link and !defined $depth ) {
-        $depth = 0;
+    my $file        = _fh_to_file($file_or_fh);
+    my $mock_object = $files_being_mocked{$file};
+
+    if ( $parent and !$mock_object ) {
+        die( sprintf( "Mocked file %s points to unmocked file %s", $parent, $file || '??' ) );
     }
 
-    my $file = _fh_to_file($file_or_fh);
-    return $file unless $follow_link;
+    return $file unless $follow_link && $mock_object && $mock_object->is_link;
 
-    if ( $parent and !$files_being_mocked{$file} ) {
-        die("Mocked file $parent points to unmocked file $file");
-    }
-
-    if ( !$files_being_mocked{$file} ) {
+    if ( !$mock_object ) {
         return [] if $depth;
         return $file;
     }
@@ -409,6 +388,23 @@ sub _find_file_or_fh {
     }
 
     return _find_file_or_fh( $files_being_mocked{$file}->readlink, 1, $depth, $file );
+}
+
+sub _fh_to_file {
+    my ($fh) = @_;
+
+    # Return if it's a string. Nothing to do here!
+    return _abs_path_to_file($fh) unless ref $fh;
+
+    foreach my $file_name ( keys %files_being_mocked ) {
+        my $mock_fh = $files_being_mocked{$file_name}->{'fh'};
+        next unless $mock_fh;              # File isn't open.
+        next unless "$mock_fh" eq "$fh";
+
+        return $file_name;
+    }
+
+    return;
 }
 
 sub _abs_path_to_file {
