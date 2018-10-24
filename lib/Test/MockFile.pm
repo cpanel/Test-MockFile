@@ -13,6 +13,8 @@ use warnings;
 # perl -MFcntl -E'eval "say q{$_: } . $_" foreach sort {eval "$a" <=> eval "$b"} qw/O_RDONLY O_WRONLY O_RDWR O_CREAT O_EXCL O_NOCTTY O_TRUNC O_APPEND O_NONBLOCK O_NDELAY O_EXLOCK O_SHLOCK O_DIRECTORY O_NOFOLLOW O_SYNC O_BINARY O_LARGEFILE/'
 use Fcntl;    # O_RDONLY, etc.
 
+use constant SUPPORTED_SYSOPEN_MODES = O_RDONLY | O_WRONLY | O_RDWR | O_APPEND | O_TRUNC | O_EXCL | O_CREAT | O_NOFOLLOW;
+
 use Cwd                        ();
 use IO::File                   ();
 use Test::MockFile::FileHandle ();
@@ -777,8 +779,8 @@ BEGIN {
         my $mock_file    = $files_being_mocked{$abs_path};
         my $sysopen_mode = $_[2];
 
-        # Not supported by my vendor: O_EXLOCK | O_SHLOCK
-        if ( $sysopen_mode & ( O_NDELAY | O_SYNC | O_DIRECTORY | O_BINARY | O_LARGEFILE | O_NOCTTY | O_NONBLOCK ) ) {
+        # Not supported by my linux vendor: O_EXLOCK | O_SHLOCK
+        if ( $sysopen_mode ^ SUPPORTED_SYSOPEN_MODES ) {
             die( sprintf( "Sorry, can't open %s with 0x%x permissions. Some of your permissions are not yet supported by %s", $_[1], $sysopen_mode, __PACKAGE__ ) );
         }
 
