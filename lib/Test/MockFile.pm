@@ -63,56 +63,35 @@ BEGIN {
 
         return 1;
     };
-
-    *CORE::GLOBAL::lstat = sub : prototype(;*) {
-        my ($file_or_fh) = @_;
-
-        scalar @_ == 1 or die( "I don't know how to handle " . scalar @_ . " args to lstat" );
-
-        if ( !length $file_or_fh ) {
-            CORE::warn("Use of uninitialized value \$_ in lstat at ...");
-            return;
-        }
-
-        my $file = find_file_or_fh($file_or_fh);
-
-        my $file_data = $files_being_mocked{$file};
-        return CORE::lstat($file) unless $file_data;
-
-        # File is not present so no stats for you!
-        return if !defined $file_data->{'contents'};
-
-        # Make sure the file size is correct in the stats before returning its contents.
-        $file_data->{'info'}->resize( length $file_data->{'contents'} || 0 );
-        return $file_data->{'info'}->get_stats;
-    };
-
-    *CORE::GLOBAL::stat = sub : prototype(;*) {
-        my ($file_or_fh) = @_;
-
-        scalar @_ == 1 or die( "I don't know how to handle " . scalar @_ . " args to lstat" );
-
-        if ( !length $file_or_fh ) {
-            CORE::warn("Use of uninitialized value \$_ in lstat at ...");
-            return;
-        }
-
-        # Do a recursive search if the file we're pointing to is a symlink.
-        my $file = find_file_or_fh( $file_or_fh, 1, 0 );
-
-        my $file_data = $files_being_mocked{$file};
-        return CORE::stat($file) unless $file_data;
-
-        # File is not present so no stats for you!
-        return if !defined $file_data->{'contents'};
-
-        # Make sure the file size is correct in the stats before returning its contents.
-        $file_data->{'info'}->resize( length $file_data->{'content'} );
-        return $file_data->{'info'}->get_stats;
-    };
 }
 
-sub fh_to_file {
+#Overload::FileCheck::mock_stat(\&mock_stat);
+sub _mock_stat {
+    my ( $file_or_fh, $follow_link ) = @_;
+
+    if ( scalar @_ != 1 ) {
+        return -1;
+    }
+
+    if ( !length $file_or_fh ) {
+        return -1;
+    }
+
+    my $file = _find_file_or_fh( $file_or_fh, $follow_link );
+    return -1 unless length $file;
+
+    my $file_data = $files_being_mocked{$file};
+    return -1 unless $file_data;
+
+    # File is not present so no stats for you!
+    return if !defined $file_data->{'contents'};
+
+    # Make sure the file size is correct in the stats before returning its contents.
+    $file_data->{'info'}->resize( length $file_data->{'contents'} || 0 );
+    return $file_data->{'info'}->get_stats;
+}
+
+sub _fh_to_file {
     my ($fh) = @_;
 
     # Return if it's a string. Nothing to do here!
@@ -129,12 +108,23 @@ sub fh_to_file {
     return;
 }
 
-sub find_file_or_fh {
-    my ( $file_or_fh, $follow_link, $depth ) = @_;
+sub _find_file_or_fh {
+    my ( $file_or_fh, $follow_link, $depth, $parent ) = @_;
 
-    my $file = fh_to_file($file_or_fh);
+    if ( $follow_link and !defined $depth ) {
+        $depth = 0;
+    }
+
+    my $file = _fh_to_file($file_or_fh);
     return $file unless $follow_link;
+
+    if ( $parent and !$files_being_mocked{$file} ) {
+        die("Mocked file $parent points to unmocked file $file");
+    }
+
     return $file unless $files_being_mocked{$file}->{'info'}->is_link;
+
+    #print STDERR "# looking for $file\n";
 
     $depth ||= 0;
     $depth++;
@@ -145,7 +135,7 @@ sub find_file_or_fh {
         return;
     }
 
-    return find_file_or_fh( $file->readlink, 1, $depth );
+    return _find_file_or_fh( $files_being_mocked{$file}->{'info'}->readlink, 1, $depth, $file );
 }
 
 =head1 SYNOPSIS
@@ -195,6 +185,20 @@ sub file {
     my $self = bless { 'file' => $file }, $class;
     $files_being_mocked{$file}->{'contents'}  = $contents;
     $files_being_mocked{$file}->{'info'}      = $stats || Test::MockFile::Stat->file;
+    $files_being_mocked{$file}->{'mocked_by'} = "$self";
+
+    return $self;
+}
+
+# NOTE: We don't directly support taking stats when instantiating.
+sub symlink {
+    my ( $class, $file, $readlink ) = @_;
+    $file or die("No file provided to instantiate $class");
+
+    $files_being_mocked{$file} and die("It looks like $file is already being mocked. We don't support double mocking yet.");
+
+    my $self = bless { 'file' => $file }, $class;
+    $files_being_mocked{$file}->{'info'}      = Test::MockFile::Stat->link($readlink);
     $files_being_mocked{$file}->{'mocked_by'} = "$self";
 
     return $self;

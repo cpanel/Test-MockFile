@@ -121,7 +121,7 @@ sub link {
     length $target_file or die("Symlinks must point to a file.");
 
     $opt{'readlink'} = $target_file;
-    $opt{'mode'}     = 0777 & S_IFLNK;
+    $opt{'mode'}     = 0777 | S_IFLNK;
 
     return $class->new( \%opt );
 }
