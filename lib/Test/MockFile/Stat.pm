@@ -72,7 +72,7 @@ sub new {
     return $self;
 }
 
-sub stats {
+sub get_stats {
     my $self = shift;
 
     return (
@@ -141,7 +141,7 @@ sub is_link {
 sub resize {
     my ( $self, $new_size ) = @_;
 
-    $self->{'size'} = abs( int($new_size) );
+    $self->{'size'} = abs( int( $new_size || 0 ) );
     $self->{'blocks'} = $self->{'size'} / abs( $self->{'blksize'} || 1 );
 }
 

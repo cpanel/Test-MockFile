@@ -17,7 +17,7 @@ use Test::MockFile::FileHandle ();
 use Scalar::Util               ();
 use Errno qw/ENOENT ELOOP/;
 
-use constant FOLLOW_LINK_MAX_DEPTH = 10;
+use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
 =head1 NAME
 
@@ -77,17 +77,17 @@ BEGIN {
         my $file = find_file_or_fh($file_or_fh);
 
         my $file_data = $files_being_mocked{$file};
-        goto \&CORE::lstat unless $file_data;
+        return CORE::lstat($file) unless $file_data;
 
         # File is not present so no stats for you!
         return if !defined $file_data->{'contents'};
 
         # Make sure the file size is correct in the stats before returning its contents.
-        $file_data->{'info'}->resize( length $file_data->{'content'} );
-        return $file_data->{'info'}->stat;
-      }
+        $file_data->{'info'}->resize( length $file_data->{'contents'} || 0 );
+        return $file_data->{'info'}->get_stats;
+    };
 
-      *CORE::GLOBAL::stat = sub : prototype(;*) {
+    *CORE::GLOBAL::stat = sub : prototype(;*) {
         my ($file_or_fh) = @_;
 
         scalar @_ == 1 or die( "I don't know how to handle " . scalar @_ . " args to lstat" );
@@ -101,15 +101,15 @@ BEGIN {
         my $file = find_file_or_fh( $file_or_fh, 1, 0 );
 
         my $file_data = $files_being_mocked{$file};
-        goto \&CORE::lstat unless $file_data;
+        return CORE::stat($file) unless $file_data;
 
         # File is not present so no stats for you!
         return if !defined $file_data->{'contents'};
 
         # Make sure the file size is correct in the stats before returning its contents.
         $file_data->{'info'}->resize( length $file_data->{'content'} );
-        return $file_data->{'info'}->stat;
-      }
+        return $file_data->{'info'}->get_stats;
+    };
 }
 
 sub fh_to_file {
@@ -119,8 +119,9 @@ sub fh_to_file {
     return $fh unless ref $fh;
 
     foreach my $file_name ( keys %files_being_mocked ) {
-        next   unless $files_being_mocked{$file_name}->{'fh'}                     # File isn't open.
-          next unless "$files_being_mocked{$file_name}->{fh}" eq "$file_or_fh";
+        my $mock_fh = $files_being_mocked{$file_name}->{'fh'};
+        next unless $mock_fh;              # File isn't open.
+        next unless "$mock_fh" eq "$fh";
 
         return $file_name;
     }
@@ -131,7 +132,7 @@ sub fh_to_file {
 sub find_file_or_fh {
     my ( $file_or_fh, $follow_link, $depth ) = @_;
 
-    FOLLOW_LINK_MAX_DEPTH my $file = fh_to_file($file_or_fh);
+    my $file = fh_to_file($file_or_fh);
     return $file unless $follow_link;
     return $file unless $files_being_mocked{$file}->{'info'}->is_link;
 
