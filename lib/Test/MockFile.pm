@@ -666,7 +666,7 @@ If we do not control the file in question, we return C<FALLBACK_TO_REAL_OP()> wh
 
 Since 5.20, it has been possible to override function calls by defining them. like:
 
-    *CORE::GLOBAL::open = sub : prototype(*;$@) {...}
+    *CORE::GLOBAL::open = sub(*;$@) {...}
     
 Any code which is loaded B<AFTER> this happens will use the alternate open. This means you can place your C<use Test::MockFile> statement after statements you don't want mocked and
 there is no risk that that code will ever be altered by Test::MockModule.
@@ -696,7 +696,7 @@ We oveload the following statements and then return tied handles to enable the r
 =cut
 
 BEGIN {
-    *CORE::GLOBAL::open = sub : prototype(*;$@) {
+    *CORE::GLOBAL::open = sub(*;$@) {
         my $abs_path = _abs_path_to_file( $_[2] );
 
         if ($strict_mode) {
@@ -765,7 +765,7 @@ BEGIN {
     # 4 - O_CREAT - Create the file if it doesn't exist.
     # 8 - O_NOFOLLOW - Fail if the last path component is a symbolic link.
 
-    *CORE::GLOBAL::sysopen = sub : prototype(*$$;$) {
+    *CORE::GLOBAL::sysopen = sub(*$$;$) {
         my $abs_path = _abs_path_to_file( $_[1] );
 
         if ($strict_mode) {
@@ -838,7 +838,7 @@ BEGIN {
         return 1;
     };
 
-    *CORE::GLOBAL::opendir = sub : prototype(*$) {
+    *CORE::GLOBAL::opendir = sub(*$) {
 
         my $abs_path = _abs_path_to_file( $_[1] );
         if ($strict_mode) {
@@ -866,7 +866,7 @@ BEGIN {
 
     };
 
-    *CORE::GLOBAL::readdir = sub : prototype(*) {
+    *CORE::GLOBAL::readdir = sub(*) {
         my ($self) = @_;
 
         goto \&CORE::readdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
@@ -895,7 +895,7 @@ BEGIN {
         return $self->{'files_in_readdir'}->[ $self->{'tell'}++ ];
     };
 
-    *CORE::GLOBAL::telldir = sub : prototype(*) {
+    *CORE::GLOBAL::telldir = sub(*) {
         my ($self) = @_;
 
         goto \&CORE::telldir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
@@ -912,7 +912,7 @@ BEGIN {
         return $self->{'tell'};
     };
 
-    *CORE::GLOBAL::rewinddir = sub : prototype(*) {
+    *CORE::GLOBAL::rewinddir = sub(*) {
         my ($self) = @_;
 
         goto \&CORE::rewinddir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
@@ -930,7 +930,7 @@ BEGIN {
         return 1;
     };
 
-    *CORE::GLOBAL::seekdir = sub : prototype(*$) {
+    *CORE::GLOBAL::seekdir = sub(*$) {
         my ( $self, $goto ) = @_;
 
         goto \&CORE::seekdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
@@ -947,7 +947,7 @@ BEGIN {
         return $self->{'tell'} = $goto;
     };
 
-    *CORE::GLOBAL::closedir = sub : prototype(*) {
+    *CORE::GLOBAL::closedir = sub(*) {
         my ($self) = @_;
 
         goto \&CORE::closedir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
