@@ -8,6 +8,7 @@ use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 
 use Test::MockFile ();
+use Overload::FileCheck qw/:check/;
 use Errno qw/ELOOP/;
 
 note "_fh_to_file";
@@ -51,10 +52,11 @@ is( $! + 0, ELOOP, '$! is ELOOP' );
 
 note "_mock_stat";
 
-is( Test::MockFile::_mock_stat("/lib"), -1, "An unmocked file will return -1 to tell XS to handle it" );
-is( Test::MockFile::_mock_stat(),       -1, "no args passes to XS" );
-is( Test::MockFile::_mock_stat(""),     -1, "empty string passes to XS" );
-is( Test::MockFile::_mock_stat(' '),    -1, "A space string passes to XS" );
+is( Test::MockFile::_mock_stat( 'lstat', "/lib" ), FALLBACK_TO_REAL_OP(), "An unmocked file will return FALLBACK_TO_REAL_OP() to tell XS to handle it" );
+like( dies { Test::MockFile::_mock_stat() }, qr/^_mock_stat called without a stat type at /, "no args fails cause we should have gotten a stat type." );
+like( dies { Test::MockFile::_mock_stat( 'notastat', '' ) }, qr/^Unexpected stat type 'notastat' at /, "An unknown stat type fails cause this should never happen." );
+is( Test::MockFile::_mock_stat( 'lstat', "" ),  FALLBACK_TO_REAL_OP(), "empty string passes to XS" );
+is( Test::MockFile::_mock_stat( 'stat',  ' ' ), FALLBACK_TO_REAL_OP(), "A space string passes to XS" );
 
 my $basic_stat_return = array {
     item 0;
@@ -71,13 +73,15 @@ my $basic_stat_return = array {
     item 4096;
     item 0;
 };
-is( Test::MockFile::_mock_stat('/foo/bar'), $basic_stat_return, "/foo/bar mock stat" );
 
-is( Test::MockFile::_mock_stat('/aaa'), [], "/aaa mock stat when looped." );
+is( Test::MockFile::_mock_stat( 'lstat', '/foo/bar' ), $basic_stat_return, "/foo/bar mock stat" );
+done_testing();
+exit;
+is( Test::MockFile::_mock_stat( 'stat', '/aaa' ), [], "/aaa mock stat when looped." );
 is( $! + 0, ELOOP, "Throws an ELOOP error" );
 
 push @mocked_files, Test::MockFile->file('/foo/baz');    # Missing file but mocked.
-is( Test::MockFile::_mock_stat('/foo/baz'), [], "/foo/baz mock stat when missing." );
+is( Test::MockFile::_mock_stat( 'lstat', '/foo/baz' ), [], "/foo/baz mock stat when missing." );
 
 done_testing();
 exit;

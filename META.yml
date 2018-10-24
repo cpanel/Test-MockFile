@@ -21,6 +21,7 @@ no_index:
     - t
     - inc
 requires:
+  Overload::FileCheck: '0'
   perl: '5.006'
 version: '0.001'
 x_serialization_backend: 'CPAN::Meta::YAML version 0.018'
