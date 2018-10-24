@@ -51,7 +51,7 @@ sub new {
         'blocks'   => 0,        # stat[12]
         'fileno'   => undef,    # fileno()
         'tty'      => 0,        # possibly this is already provided in mode?
-        'readlink' => 0,        # what the symlink points to.
+        'readlink' => '',       # what the symlink points to.
     }, $class;
 
     foreach my $key ( keys %opts ) {
@@ -72,8 +72,28 @@ sub new {
     return $self;
 }
 
+sub stats {
+    my $self = shift;
+
+    return (
+        $self->{'dev'},        # stat[0]
+        $self->{'inode'},      # stat[1]
+        $self->{'mode'},       # stat[2]
+        $self->{'nlink'},      # stat[3]
+        $self->{'uid'},        # stat[4]
+        $self->{'gid'},        # stat[5]
+        $self->{'rdev'},       # stat[6]
+        $self->{'size'},       # stat[7]
+        $self->{'atime'},      # stat[8]
+        $self->{'mtime'},      # stat[9]
+        $self->{'ctime'},      # stat[10]
+        $self->{'blksize'},    # stat[11]
+        $self->{'blocks'},     # stat[12]
+    );
+}
+
 sub _unused_fileno {
-    return 900;    # TODO
+    return 900;                # TODO
 }
 
 # Helpers for making file/link/dir
@@ -104,6 +124,18 @@ sub link {
     $opt{'mode'}     = 0777 & S_IFLNK;
 
     return $class->new( \%opt );
+}
+
+sub readlink {
+    my ($self) = @_;
+
+    return $self->{'readlink'};
+}
+
+sub is_link {
+    my ($self) = @_;
+
+    return ( length $self->{'readlink'} && $self->{'mode'} & S_IFLNK ) ? 1 : 0;
 }
 
 sub resize {

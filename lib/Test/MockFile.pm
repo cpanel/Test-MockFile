@@ -15,7 +15,9 @@ use Symbol                     ();
 use Test::MockFile::Stat       ();
 use Test::MockFile::FileHandle ();
 use Scalar::Util               ();
-use Errno qw/ENOENT/;
+use Errno qw/ENOENT ELOOP/;
+
+use constant FOLLOW_LINK_MAX_DEPTH = 10;
 
 =head1 NAME
 
@@ -61,6 +63,88 @@ BEGIN {
 
         return 1;
     };
+
+    *CORE::GLOBAL::lstat = sub : prototype(;*) {
+        my ($file_or_fh) = @_;
+
+        scalar @_ == 1 or die( "I don't know how to handle " . scalar @_ . " args to lstat" );
+
+        if ( !length $file_or_fh ) {
+            CORE::warn("Use of uninitialized value \$_ in lstat at ...");
+            return;
+        }
+
+        my $file = find_file_or_fh($file_or_fh);
+
+        my $file_data = $files_being_mocked{$file};
+        goto \&CORE::lstat unless $file_data;
+
+        # File is not present so no stats for you!
+        return if !defined $file_data->{'contents'};
+
+        # Make sure the file size is correct in the stats before returning its contents.
+        $file_data->{'info'}->resize( length $file_data->{'content'} );
+        return $file_data->{'info'}->stat;
+      }
+
+      *CORE::GLOBAL::stat = sub : prototype(;*) {
+        my ($file_or_fh) = @_;
+
+        scalar @_ == 1 or die( "I don't know how to handle " . scalar @_ . " args to lstat" );
+
+        if ( !length $file_or_fh ) {
+            CORE::warn("Use of uninitialized value \$_ in lstat at ...");
+            return;
+        }
+
+        # Do a recursive search if the file we're pointing to is a symlink.
+        my $file = find_file_or_fh( $file_or_fh, 1, 0 );
+
+        my $file_data = $files_being_mocked{$file};
+        goto \&CORE::lstat unless $file_data;
+
+        # File is not present so no stats for you!
+        return if !defined $file_data->{'contents'};
+
+        # Make sure the file size is correct in the stats before returning its contents.
+        $file_data->{'info'}->resize( length $file_data->{'content'} );
+        return $file_data->{'info'}->stat;
+      }
+}
+
+sub fh_to_file {
+    my ($fh) = @_;
+
+    # Return if it's a string. Nothing to do here!
+    return $fh unless ref $fh;
+
+    foreach my $file_name ( keys %files_being_mocked ) {
+        next   unless $files_being_mocked{$file_name}->{'fh'}                     # File isn't open.
+          next unless "$files_being_mocked{$file_name}->{fh}" eq "$file_or_fh";
+
+        return $file_name;
+    }
+
+    return;
+}
+
+sub find_file_or_fh {
+    my ( $file_or_fh, $follow_link, $depth ) = @_;
+
+    FOLLOW_LINK_MAX_DEPTH my $file = fh_to_file($file_or_fh);
+    return $file unless $follow_link;
+    return $file unless $files_being_mocked{$file}->{'info'}->is_link;
+
+    $depth ||= 0;
+    $depth++;
+
+    #Protect against circular loops.
+    if ( $depth > FOLLOW_LINK_MAX_DEPTH ) {
+        $! = ELOOP;
+        return;
+    }
+
+    return find_file_or_fh( $file->readlink, 1, $depth );
 }
 
 =head1 SYNOPSIS
@@ -109,7 +193,7 @@ sub file {
 
     my $self = bless { 'file' => $file }, $class;
     $files_being_mocked{$file}->{'contents'}  = $contents;
-    $files_being_mocked{$file}->{'info'}      = $stats;
+    $files_being_mocked{$file}->{'info'}      = $stats || Test::MockFile::Stat->file;
     $files_being_mocked{$file}->{'mocked_by'} = "$self";
 
     return $self;
