@@ -26,7 +26,7 @@ is( <$fh_real>, "mocked\n", " ... line 2" );
     local $SIG{__WARN__} = sub { $warn_msg = shift };
     is( print( {$fh_real} "TEST" ), undef, "Fails to write to a read handle in mock mode." );
     is( $! + 0, EBADF, q{$! when the file is written to and it's a read file handle.} );
-    like( $warn_msg, qr{^Filehandle \$fh opened only for input at t/readline.t line \d+}, "Warns about writing to a read file handle" );
+    like( $warn_msg, qr{^Filehandle \S+ opened only for input at t/readline.t line \d+}, "Warns about writing to a read file handle" );
 }
 
 close $fh_real;
@@ -38,7 +38,8 @@ is( open( my $fh, '<', $filename ), 1, "Mocked temp file opens and returns true"
 
 isa_ok( $fh, "IO::File", '$fh is a IO::File' );
 like( "$fh", qr/^IO::File=GLOB\(0x[0-9a-f]+\)$/, '$fh stringifies to a IO::File GLOB' );
-is( <$fh>,          "abc\n",           '1st read on $fh is "abc\n"' );
+is( <$fh>, "abc\n", '1st read on $fh is "abc\n"' );
+
 is( <$fh>,          "def\n",           '2nd read on $fh is "def\n"' );
 is( readline($fh),  "ghi\n",           '3rd read on $fh via readline is "ghi\n"' );
 is( <$fh>,          undef,             '4th read on $fh undef at EOF' );
@@ -61,10 +62,10 @@ is( <$fh>, undef,   '9th read on $fh undef at EOF' );
 }
 
 close $fh;
-ok(!exists $Test::MockFile::files_being_mocked{$filename}->{'fh'}, "file handle clears from files_being_mocked hash when it goes out of scope.");
+ok( !exists $Test::MockFile::files_being_mocked{$filename}->{'fh'}, "file handle clears from files_being_mocked hash when it goes out of scope." );
 
 undef $bar;
-is(scalar %Test::MockFile::files_being_mocked, 0, "files_being_mocked empties when \$bar is cleared");
+is( scalar %Test::MockFile::files_being_mocked, 0, "files_being_mocked empties when \$bar is cleared" );
 
 note "-------------- REAL MODE --------------";
 is( open( $fh_real, '<', $filename ), 1, "Once the mock file object is cleared, the next open reverts to the file on disk." );
