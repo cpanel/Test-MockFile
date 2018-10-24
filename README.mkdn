@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/CpanelInc/Test-MockFile.png?branch=master)](https://travis-ci.org/CpanelInc/Test-MockFile)
+
 # NAME
 
 Test::MockFile - Lets tests validate code which interacts with files without the file system ever being touched. 
