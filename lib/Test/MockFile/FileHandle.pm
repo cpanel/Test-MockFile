@@ -281,7 +281,7 @@ sub DESTROY {
 =head2 EOF
 
 This method will be called when the eof function is called.
-Based on C<$self->{'tell'}>, we determine if we're at EOF.
+Based on C<$self-E<gt>{'tell'}>, we determine if we're at EOF.
 
 =cut
 
