@@ -1,5 +1,8 @@
 Revision history for Test-MockFile
 
+0.005   10/24/2018
+ - Complete basic documentation for all public methods.
+
 0.004   10/24/2018
  - Raise the Test::More requirement to address an issue with Test2::Formatter::TAP
    Fixes https://github.com/CpanelInc/Test-MockFile/issues/6
