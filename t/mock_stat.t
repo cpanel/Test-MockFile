@@ -45,7 +45,7 @@ like(
 
 push @mocked_files, Test::MockFile->symlink( '/aaa', '/bbb' );
 push @mocked_files, Test::MockFile->symlink( '/bbb', '/aaa' );
-is( Test::MockFile::_find_file_or_fh( '/aaa', 1 ), undef, "_find_file_or_fh('/aaaa', 1) - with circular links" );
+is( Test::MockFile::_find_file_or_fh( '/aaa', 1 ), [], "_find_file_or_fh('/aaaa', 1) - with circular links" );
 is( $!, "Too many levels of symbolic links", '$! text message' );
 is( $! + 0, ELOOP, '$! is ELOOP' );
 
@@ -71,12 +71,13 @@ my $basic_stat_return = array {
     item 4096;
     item 0;
 };
-is( [ Test::MockFile::_mock_stat('/foo/bar') ], $basic_stat_return, "/foo/bar mock stat" );
+is( Test::MockFile::_mock_stat('/foo/bar'), $basic_stat_return, "/foo/bar mock stat" );
 
-is( [ Test::MockFile::_mock_stat('/aaa') ], [], "/aaa mock stat when looped." );
+is( Test::MockFile::_mock_stat('/aaa'), [], "/aaa mock stat when looped." );
+is( $! + 0, ELOOP, "Throws an ELOOP error" );
 
 push @mocked_files, Test::MockFile->file('/foo/baz');    # Missing file but mocked.
-is( [ Test::MockFile::_mock_stat('/foo/baz') ], [], "/foo/baz mock stat when missing." );
+is( Test::MockFile::_mock_stat('/foo/baz'), [], "/foo/baz mock stat when missing." );
 
 done_testing();
 exit;
