@@ -39,7 +39,11 @@ No exports are provided by this module.
 
 Args: ($class, $dir, $files_array_ref)
 
-Returns a blessed object for Test::MockFile::DirHandle. There are no error conditions handled here. 
+Returns a blessed object for Test::MockFile::DirHandle. There are no error conditions handled here.
+
+B<NOTE:> the permanent directory contents are stored in a hash in Test::MockFile. However when opendir
+is called, a copy is stored here. This is because through experimentation, we've determined that adding
+files in a dir during a opendir/readdir does not affect the return of readdir.
 
 See L<Test::MockFile>.
 
