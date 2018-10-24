@@ -16,6 +16,9 @@ WriteMakefile(
     },
     BUILD_REQUIRES => {
         'Test::More' => '0',
+        'Test2::Bundle::Extended' => '0',
+        'Test2::Tools::Explain' => '0',
+        'Test2::Plugin::NoWarnings' => '0',
     },
     PREREQ_PM => {
         #'ABC'              => '1.6',
