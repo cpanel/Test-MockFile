@@ -707,19 +707,38 @@ BEGIN {
         }
 
         # open(my $fh, ">filehere"); # Just don't do this. It's bad.
-        goto \&CORE::open if scalar @_ != 3;
+        if ( scalar @_ != 3 ) {
+            goto \&CORE::open if $] > 5.015;
+            if ( @_ == 1 ) {
+                return CORE::open( $_[0] );
+            }
+            elsif ( @_ == 2 ) {
+                return CORE::open( $_[0], $_[1] );
+            }
+            elsif ( @_ >= 3 ) {
+                return CORE::open( $_[0], $_[1], @_[ 2 .. $#_ ] );
+            }
+        }
 
         my $mode = $_[1];
 
         # TODO: We technically need to support this.
         # open(my $fh, "-|", "/bin/hostname"); # Read from command
         # open(my $fh, "|-", "/bin/passwd"); # Write to command
-        goto \&CORE::open if ( $mode eq '|-' || $mode eq '-|' );
-
-        # These are the only modes we support right now.
-        goto \&CORE::open unless grep { $_ eq $mode } qw/> < >> +< +> +>>/;
-
-        goto \&CORE::open unless defined $files_being_mocked{$abs_path};
+        if (   ( $mode eq '|-' || $mode eq '-|' )
+            or !grep { $_ eq $mode } qw/> < >> +< +> +>>/
+            or !defined $files_being_mocked{$abs_path} ) {
+            goto \&CORE::open if $] > 5.015;
+            if ( @_ == 1 ) {
+                return CORE::open( $_[0] );
+            }
+            elsif ( @_ == 2 ) {
+                return CORE::open( $_[0], $_[1] );
+            }
+            elsif ( @_ >= 3 ) {
+                return CORE::open( $_[0], $_[1], @_[ 2 .. $#_ ] );
+            }
+        }
 
         #
         my $mock_file = $files_being_mocked{$abs_path};
@@ -774,7 +793,10 @@ BEGIN {
             defined $files_being_mocked{$abs_path} or die("Unexpected sysopen of $_[1] in strict Test::MockFile strict mode");
         }
 
-        goto \&CORE::sysopen unless defined $files_being_mocked{$abs_path};
+        if ( !defined $files_being_mocked{$abs_path} ) {
+            goto \&CORE::sysopen if $] > 5.015;
+            return CORE::sysopen( $_[0], $_[1], @_[ 2 .. $#_ ] );
+        }
 
         my $mock_file    = $files_being_mocked{$abs_path};
         my $sysopen_mode = $_[2];
@@ -848,8 +870,14 @@ BEGIN {
             defined $files_being_mocked{$abs_path} or die;
         }
 
-        goto \&CORE::opendir if scalar @_ != 2;
-        goto \&CORE::opendir unless defined $files_being_mocked{$abs_path};
+        if ( $] > 5.015 ) {
+            goto \&CORE::opendir if scalar @_ != 2;
+            goto \&CORE::opendir unless defined $files_being_mocked{$abs_path};
+        }
+        else {
+            return CORE::opendir( $_[0], @_[ 1 .. $#_ ] ) if scalar @_ != 2;
+            return CORE::opendir( $_[0], $_[1] ) unless defined $files_being_mocked{$abs_path};
+        }
 
         my $mock_dir = $files_being_mocked{$abs_path};
         if ( !defined $mock_dir->{'contents'} ) {
@@ -871,8 +899,14 @@ BEGIN {
     *CORE::GLOBAL::readdir = sub(*) {
         my ($self) = @_;
 
-        goto \&CORE::readdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-        goto \&CORE::readdir unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( $] > 5.015 ) {
+            goto \&CORE::readdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            goto \&CORE::readdir unless defined $files_being_mocked{ $self->{'dir'} };
+        }
+        else {
+            return CORE::readdir( $_[0] ) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            return CORE::readdir( $_[0] ) unless defined $files_being_mocked{ $self->{'dir'} };
+        }
 
         if ( !defined $self->{'files_in_readdir'} ) {
             die("Did a readdir on an empty dir. This shouldn't have been able to have been opened!");
@@ -900,8 +934,14 @@ BEGIN {
     *CORE::GLOBAL::telldir = sub(*) {
         my ($self) = @_;
 
-        goto \&CORE::telldir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-        goto \&CORE::telldir unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( $] > 5.015 ) {
+            goto \&CORE::telldir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            goto \&CORE::telldir unless defined $files_being_mocked{ $self->{'dir'} };
+        }
+        else {
+            return CORE::telldir($self) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            return CORE::telldir($self) unless defined $files_being_mocked{ $self->{'dir'} };
+        }
 
         if ( !defined $self->{'files_in_readdir'} ) {
             die("Did a telldir on an empty dir. This shouldn't have been able to have been opened!");
@@ -917,8 +957,14 @@ BEGIN {
     *CORE::GLOBAL::rewinddir = sub(*) {
         my ($self) = @_;
 
-        goto \&CORE::rewinddir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-        goto \&CORE::rewinddir unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( $] > 5.015 ) {
+            goto \&CORE::rewinddir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            goto \&CORE::rewinddir unless defined $files_being_mocked{ $self->{'dir'} };
+        }
+        else {
+            return CORE::rewinddir($self) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            return CORE::rewinddir($self) unless defined $files_being_mocked{ $self->{'dir'} };
+        }
 
         if ( !defined $self->{'files_in_readdir'} ) {
             die("Did a rewinddir on an empty dir. This shouldn't have been able to have been opened!");
@@ -935,8 +981,14 @@ BEGIN {
     *CORE::GLOBAL::seekdir = sub(*$) {
         my ( $self, $goto ) = @_;
 
-        goto \&CORE::seekdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-        goto \&CORE::seekdir unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( $] > 5.015 ) {
+            goto \&CORE::seekdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            goto \&CORE::seekdir unless defined $files_being_mocked{ $self->{'dir'} };
+        }
+        else {
+            return CORE::seekdir( $self, $goto ) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            return CORE::seekdir( $self, $goto ) unless defined $files_being_mocked{ $self->{'dir'} };
+        }
 
         if ( !defined $self->{'files_in_readdir'} ) {
             die("Did a seekdir on an empty dir. This shouldn't have been able to have been opened!");
@@ -952,8 +1004,14 @@ BEGIN {
     *CORE::GLOBAL::closedir = sub(*) {
         my ($self) = @_;
 
-        goto \&CORE::closedir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-        goto \&CORE::closedir unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( $] > 5.015 ) {
+            goto \&CORE::closedir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            goto \&CORE::closedir unless defined $files_being_mocked{ $self->{'dir'} };
+        }
+        else {
+            return CORE::closedir($self) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
+            return CORE::closedir($self) unless defined $files_being_mocked{ $self->{'dir'} };
+        }
 
         if ( !defined $self->{'files_in_readdir'} ) {
             die("Did a closedir on an empty dir. This shouldn't have been able to have been opened!");
