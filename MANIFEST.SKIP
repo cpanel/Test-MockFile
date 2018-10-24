@@ -2,6 +2,7 @@
 \bdiffs?\b
 ^MANIFEST\.
 ^RELEASE
+^README\.mkdn
 ^MYMETA
 ^Makefile$
 ~$
