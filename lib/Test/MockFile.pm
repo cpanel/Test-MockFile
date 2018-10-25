@@ -143,7 +143,7 @@ sub file {
 
 Args: ($file, $readlink )
 
-This will make cause $file to be mocked in all file checks, opens, etc.
+This will cause $file to be mocked in all file checks, opens, etc.
 
 $readlink indicates what "fake" file it points to. If the file $readlink points to is not mocked, it will act like a broken link, regardless of what's on disk.
 
@@ -243,7 +243,7 @@ When creating mocked files or directories, we default their stats to:
             'fileno'    => undef,    # fileno()
     };
     
-You'll notice that mode, size, and blocks have been left out of this. Mode is set to 666 (for files) or 777 (for directores), xored against the current umask.
+You'll notice that mode, size, and blocks have been left out of this. Mode is set to 666 (for files) or 777 (for directories), xored against the current umask.
 Size and blocks are calculated based on the size of 'contents' a.k.a. the fake file.
 
 When you want to override one of the defaults, all you need to do is specify that when you declare the file or directory. The rest will continue to default.
@@ -495,7 +495,7 @@ sub _unused_fileno {
 
 Optional Arg: $readlink
 
-Returns the stat of a mocked file (does not follow symlinks.) You can also use this to change what your symlink is poointing to.
+Returns the stat of a mocked file (does not follow symlinks.) You can also use this to change what your symlink is pointing to.
 
 =cut
 
