@@ -37,7 +37,6 @@ like( warning { readdir($dir_fh) }, qr/^readdir\(\) attempted on invalid dirhand
 
 is( opendir( my $bad_fh, "/not/a/valid/path/kdshjfkjd" ), undef, "opendir on a bad path returns false" );
 is( $! + 0, ENOENT, '$! numeric is right.' );
-is( $!, "No such file or directory", '$! text is right.' );
 
 like( dies { readdir("abc"); }, qr/^Bad symbol for dirhandle at/, "Dies if string passed instead of dir fh" );
 
