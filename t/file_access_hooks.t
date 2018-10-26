@@ -29,7 +29,6 @@ like( dies { opendir( my $fh, $temp_dir ) }, qr/^Use of opendir on unmocked file
 
 like( dies { -e '/abc' },    qr{^Use of stat on unmocked file /abc in strict mode at $0 line \d+.\n$},       "-e on an unmocked file throws a croak" );
 like( dies { -e '' },        qr{^Use of stat on unmocked file  in strict mode at $0 line \d+.\n$},           "-e on an unmocked empty file name throws a croak" );
-like( dies { -e _ },         qr{^Use of stat on unmocked file _ in strict mode at $0 line \d+.\n$},          "-e on an unmocked _ throws a croak (Overload::FileCheck shouldn't ever do this)" );
 like( dies { -d $temp_dir }, qr{^Use of stat on unmocked file $temp_dir in strict mode at $0 line \d+.\n$},  "-d on an unmocked dir throws a croak" );
 like( dies { -l $temp_dir }, qr{^Use of lstat on unmocked file $temp_dir in strict mode at $0 line \d+.\n$}, "-l on an unmocked dir throws a croak" );
 

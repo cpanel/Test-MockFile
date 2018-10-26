@@ -135,9 +135,6 @@ sub _strict_mode_violation {
     }
 
     my $filename = scalar @$at_under_ref <= $file_arg ? '<not specified>' : $at_under_ref->[$file_arg];
-    if ( !defined $filename && $command =~ m/^(stat|lstat)$/ ) {
-        $filename = '_';
-    }
 
     Carp::croak("Use of $command on unmocked file $filename in strict mode");
 }
