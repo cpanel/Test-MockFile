@@ -15,6 +15,11 @@ use Fcntl;    # O_RDONLY, etc.
 
 use constant SUPPORTED_SYSOPEN_MODES => O_RDONLY | O_WRONLY | O_RDWR | O_APPEND | O_TRUNC | O_EXCL | O_CREAT | O_NOFOLLOW;
 
+# we're going to use carp but the errors should come from outside of our package.
+use Carp ();
+$Carp::Internal{__PACKAGE__}++;
+$Carp::Internal{'Overload::FileCheck'}++;
+
 use Cwd                        ();
 use IO::File                   ();
 use Test::MockFile::FileHandle ();
@@ -39,7 +44,6 @@ Version 0.006
 our $VERSION = '0.006';
 
 our %files_being_mocked;
-our $strict_mode = 0;
 
 # From http://man7.org/linux/man-pages/man7/inode.7.html
 use constant S_IFMT    => 0170000;    # bit mask for the file type bit field
@@ -92,9 +96,59 @@ A strict mode is even provided which can throw a die when files are accessed dur
     # The file check will now happen on file system now the file is no longer mocked.
     say "ok" if !-e "/foo/baz";
 
-=head1 EXPORT
+=head1 IMPORT
 
-No exports are provided by this module.
+If the module is loaded in strict mode, any file checks, open, sysopen, opendir, stat, or lstat will throw a die.
+
+For example:
+
+    use Test::MockFile qw/strict/;
+
+    # This will not die.
+    Test::MockFile->file("/bar", "...");
+    Test::MockFile->link("/foo", "/bar");
+    -l "/foo" or print "ok\n";
+    open(my $fh, ">", "/foo");
+    
+    # All of these will die
+    open(my $fh, ">", "/unmocked/file"); # Dies
+    sysopen(my $fh, "/other/file", O_RDONLY);
+    opendir(my $fh, "/dir");
+    -e "/file";
+    -l "/file"
+
+=cut
+
+sub strict_mode_violation {
+    my ( $command, $at_under_ref ) = @_;
+
+    my $file_arg =
+        $command eq 'open'    ? 2
+      : $command eq 'sysopen' ? 1
+      : $command eq 'opendir' ? 1
+      : $command eq 'stat'    ? 0
+      : $command eq 'lstat'   ? 0
+      :                         Carp::croak("Unknown strict mode violation for $command");
+
+    if ( $command eq 'open' and scalar @$at_under_ref != 3 ) {
+        $file_arg = 1 if scalar @$at_under_ref == 2;
+    }
+
+    my $filename = scalar @$at_under_ref <= $file_arg ? '<not specified>' : $at_under_ref->[$file_arg];
+    if ( !defined $filename && $command =~ m/^(stat|lstat)$/ ) {
+        $filename = '_';
+    }
+
+    Carp::croak("Use of $command on unmocked file $filename in strict mode");
+}
+
+sub import {
+    my ( $class, @args ) = @_;
+
+    if ( grep { $_ =~ m/strict/i } @args ) {
+        add_file_access_hook( \&strict_mode_violation );
+    }
+}
 
 =head1 SUBROUTINES/METHODS
 
@@ -318,16 +372,6 @@ sub new {
     return $self;
 }
 
-sub _mode_can_write {
-    my ($mode) = @_;
-    return ( $mode eq '<' ) ? 0 : 1;
-}
-
-sub _mode_can_read {
-    my ($mode) = @_;
-    return ( $mode eq '>' or $mode eq '>>' ) ? 0 : 1;
-}
-
 #Overload::FileCheck::mock_stat(\&mock_stat);
 sub _mock_stat {
     my ( $type, $file_or_fh ) = @_;
@@ -340,19 +384,28 @@ sub _mock_stat {
       :                    die("Unexpected stat type '$type'");
 
     if ( scalar @_ != 2 ) {
+        _real_file_access_hook( $type, [$file_or_fh] );
         return FALLBACK_TO_REAL_OP();
     }
 
     if ( !length $file_or_fh ) {
+        _real_file_access_hook( $type, [$file_or_fh] );
         return FALLBACK_TO_REAL_OP();
     }
 
     my $file = _find_file_or_fh( $file_or_fh, $follow_link );
     return $file if ref $file eq 'ARRAY';    # Allow an ELOOP to fall through here.
-    return FALLBACK_TO_REAL_OP() unless length $file;
+
+    if ( !length $file ) {
+        _real_file_access_hook( $type, [$file_or_fh] );
+        return FALLBACK_TO_REAL_OP();
+    }
 
     my $file_data = $files_being_mocked{$file};
-    return FALLBACK_TO_REAL_OP() unless $file_data;
+    if ( !$file_data ) {
+        _real_file_access_hook( $type, [$file_or_fh] );
+        return FALLBACK_TO_REAL_OP();
+    }
 
     # File is not present so no stats for you!
     return [] if !defined $file_data->{'contents'};
@@ -541,7 +594,7 @@ sub is_dir {
 
 =head2 is_file
 
-returns true/false, depending on whether this object is regular file.
+returns true/false, depending on whether this object is a regular file.
 
 =cut
 
@@ -652,6 +705,53 @@ sub atime {
     return $self->{'atime'};
 }
 
+=head2 add_file_access_hook
+
+Args: ( $code_ref )
+
+You can use B<add_file_access_hook> to add a code ref that gets called every time a real file (not mocked) operation happens.
+We use this for strict mode to die if we detect your program is unexpectedly accessing files. You are welcome to use it for whatever you like.
+
+Whenever the code ref is called, we pass 2 arguments: C<$code-E<gt>($access_type, $at_under_ref)>. Be aware that altering the variables in
+C<$at_under_ref> will affect the variables passed to open / sysopen, etc.
+
+=cut
+
+my @file_access_hooks;
+
+sub add_file_access_hook {
+    my ($code_ref) = @_;
+
+    ( $code_ref && ref $code_ref eq 'CODE' ) or die("add_file_access_hook needs to be passed a code reference.");
+    push @file_access_hooks, $code_ref;
+
+    return 1;
+}
+
+=head2 clear_file_access_hooks
+
+Calling this subroutine will clear everything that was passed to B<add_file_access_hook>
+
+=cut
+
+sub clear_file_access_hooks {
+    @file_access_hooks = ();
+
+    return 1;
+}
+
+# This code is called whenever an unmocked file is accessed. Any hooks that are setup get called from here.
+
+sub _real_file_access_hook {
+    my ( $access_type, $at_under_ref ) = @_;
+
+    foreach my $code (@file_access_hooks) {
+        $code->( $access_type, $at_under_ref );
+    }
+
+    return 1;
+}
+
 =head2 How this mocking is done:
 
 Test::MockModule uses 2 methods to mock file access:
@@ -702,13 +802,9 @@ BEGIN {
     *CORE::GLOBAL::open = sub(*;$@) {
         my $abs_path = _abs_path_to_file( $_[2] );
 
-        if ($strict_mode) {
-            scalar @_ == 3 or die;
-            defined $files_being_mocked{$abs_path} or die("Unexpected open of $_[2] in strict Test::MockFile strict mode");
-        }
-
         # open(my $fh, ">filehere"); # Just don't do this. It's bad.
         if ( scalar @_ != 3 ) {
+            _real_file_access_hook( "open", \@_ );
             goto \&CORE::open if $] > 5.015;
             if ( @_ == 1 ) {
                 return CORE::open( $_[0] );
@@ -729,6 +825,7 @@ BEGIN {
         if (   ( $mode eq '|-' || $mode eq '-|' )
             or !grep { $_ eq $mode } qw/> < >> +< +> +>>/
             or !defined $files_being_mocked{$abs_path} ) {
+            _real_file_access_hook( "open", \@_ );
             goto \&CORE::open if $] > 5.015;
             if ( @_ == 1 ) {
                 return CORE::open( $_[0] );
@@ -790,11 +887,8 @@ BEGIN {
     *CORE::GLOBAL::sysopen = sub(*$$;$) {
         my $abs_path = _abs_path_to_file( $_[1] );
 
-        if ($strict_mode) {
-            defined $files_being_mocked{$abs_path} or die("Unexpected sysopen of $_[1] in strict Test::MockFile strict mode");
-        }
-
         if ( !defined $files_being_mocked{$abs_path} ) {
+            _real_file_access_hook( "sysopen", \@_ );
             goto \&CORE::sysopen if $] > 5.015;
             return CORE::sysopen( $_[0], $_[1], @_[ 2 .. $#_ ] );
         }
@@ -866,18 +960,19 @@ BEGIN {
     *CORE::GLOBAL::opendir = sub(*$) {
 
         my $abs_path = _abs_path_to_file( $_[1] );
-        if ($strict_mode) {
-            scalar @_ == 2 or die;
-            defined $files_being_mocked{$abs_path} or die;
+
+        if ( scalar @_ != 2 ) {
+            _real_file_access_hook( "opendir", \@_ );
+            if ( $] > 5.015 ) {
+                goto \&CORE::opendir;
+            }
+            return CORE::opendir( $_[0], @_[ 1 .. $#_ ] );
         }
 
-        if ( $] > 5.015 ) {
-            goto \&CORE::opendir if scalar @_ != 2;
-            goto \&CORE::opendir unless defined $files_being_mocked{$abs_path};
-        }
-        else {
-            return CORE::opendir( $_[0], @_[ 1 .. $#_ ] ) if scalar @_ != 2;
-            return CORE::opendir( $_[0], $_[1] ) unless defined $files_being_mocked{$abs_path};
+        if ( !defined $files_being_mocked{$abs_path} ) {
+            _real_file_access_hook( "opendir", \@_ );
+            goto \&CORE::opendir if $] > 5.015;
+            return CORE::opendir( $_[0], $_[1] );
         }
 
         my $mock_dir = $files_being_mocked{$abs_path};
