@@ -119,7 +119,7 @@ For example:
 
 =cut
 
-sub strict_mode_violation {
+sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
     my $file_arg =
@@ -146,7 +146,7 @@ sub import {
     my ( $class, @args ) = @_;
 
     if ( grep { $_ =~ m/strict/i } @args ) {
-        add_file_access_hook( \&strict_mode_violation );
+        add_file_access_hook( \&_strict_mode_violation );
     }
 }
 
