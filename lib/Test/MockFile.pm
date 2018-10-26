@@ -715,6 +715,10 @@ We use this for strict mode to die if we detect your program is unexpectedly acc
 Whenever the code ref is called, we pass 2 arguments: C<$code-E<gt>($access_type, $at_under_ref)>. Be aware that altering the variables in
 C<$at_under_ref> will affect the variables passed to open / sysopen, etc.
 
+One use might be:
+
+    Test::MockFile::add_file_access_hook(sub { my $type = shift; print "$type called at: " . Carp::longmess() } );
+
 =cut
 
 my @file_access_hooks;
