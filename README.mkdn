@@ -6,7 +6,7 @@ Test::MockFile - Lets tests validate code which interacts with files without the
 
 # VERSION
 
-Version 0.008
+Version 0.009
 
 # SYNOPSIS
 
