@@ -119,6 +119,14 @@ For example:
 
 =cut
 
+our %authorized_strict_mode_packages;
+
+BEGIN {
+    %authorized_strict_mode_packages = (
+        'DynaLoader' => 1,
+    );
+}
+
 sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
@@ -130,13 +138,29 @@ sub _strict_mode_violation {
       : $command eq 'lstat'   ? 0
       :                         Carp::croak("Unknown strict mode violation for $command");
 
+    my @stack;
+    foreach my $stack_level ( 1 .. 100 ) {
+        @stack = caller($stack_level);
+        last if !scalar @stack;
+        last if !defined $stack[0];                       # We don't know when this would ever happen.
+        next if ( $stack[0] eq __PACKAGE__ );
+        next if ( $stack[0] eq 'Overload::FileCheck' );
+
+        # We found a package that isn't one of ours. Is it allowed to access files?
+        # If so we're not going to die.
+        return if $authorized_strict_mode_packages{ $stack[0] };
+
+        #
+        last;
+    }
+
     if ( $command eq 'open' and scalar @$at_under_ref != 3 ) {
         $file_arg = 1 if scalar @$at_under_ref == 2;
     }
 
     my $filename = scalar @$at_under_ref <= $file_arg ? '<not specified>' : $at_under_ref->[$file_arg];
 
-    Carp::croak("Use of $command on unmocked file $filename in strict mode");
+    Carp::croak("Use of $command to access unmocked file or directory '$filename' in strict mode at $stack[1] line $stack[2]");
 }
 
 sub import {
