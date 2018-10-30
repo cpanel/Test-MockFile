@@ -18,3 +18,4 @@
 ^\.travis.yml$
 ^Test-MockFile-\d\.\d+/
 ^cpanfile$
+^.perltidyrc$
