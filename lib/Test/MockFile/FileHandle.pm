@@ -213,8 +213,12 @@ Based on C<$offset> and C<$len>, it's possible to end up with some really weird 
 sub READ {
     my ( $self, undef, $len, $offset ) = @_;
 
+    # If the caller's buffer is undef, we need to make it a string of 0 length to start out with.
+    $_[1] = '' if !defined $_[1];    # TODO: test me
+
     my $contents_len = length $self->{'data'}->{'contents'};
     my $buf_len      = length $_[1];
+
     $offset //= 0;
     if ( $offset > $buf_len ) {
         $_[1] .= "\0" x ( $offset - $buf_len );

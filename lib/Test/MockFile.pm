@@ -124,6 +124,7 @@ our %authorized_strict_mode_packages;
 BEGIN {
     %authorized_strict_mode_packages = (
         'DynaLoader' => 1,
+        'lib'        => 1,
     );
 }
 
@@ -160,7 +161,10 @@ sub _strict_mode_violation {
 
     my $filename = scalar @$at_under_ref <= $file_arg ? '<not specified>' : $at_under_ref->[$file_arg];
 
-    Carp::croak("Use of $command to access unmocked file or directory '$filename' in strict mode at $stack[1] line $stack[2]");
+    # Ignore stats on STDIN, STDOUT, STDERR
+    return if $filename =~ m/^\*?(?:main::)?[<*&+>]*STD(?:OUT|IN|ERR)$/;
+
+    Carp::confess("Use of $command to access unmocked file or directory '$filename' in strict mode at $stack[1] line $stack[2]");
 }
 
 sub import {
