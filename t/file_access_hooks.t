@@ -32,4 +32,12 @@ like( dies { -e '' },        qr{^Use of stat to access unmocked file or director
 like( dies { -d $temp_dir }, qr{^Use of stat to access unmocked file or directory '$temp_dir' in strict mode at $0 line \d+},  "-d on an unmocked dir throws a croak" );
 like( dies { -l $temp_dir }, qr{^Use of lstat to access unmocked file or directory '$temp_dir' in strict mode at $0 line \d+}, "-l on an unmocked dir throws a croak" );
 
+package DynaLoader;
+main::is( __PACKAGE__, "DynaLoader", "Testing from a different source scope (DynaLoader)" );
+main::is( -d '/tmp',   1,            "-d is allowed in certain packages without a die (DynaLoader)" );
+
+package main;
+
+is( open( my $fh, '<&STDIN' ), 1, "open STDIN isn't an error" );
+diag "$!";
 done_testing();
