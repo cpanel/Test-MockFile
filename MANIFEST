@@ -13,6 +13,7 @@ t/dir.t
 t/file_access_hooks.t
 t/manifest.t
 t/mock_stat.t
+t/open.t
 t/pod-coverage.t
 t/pod.t
 t/readline.t

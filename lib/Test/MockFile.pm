@@ -902,6 +902,10 @@ BEGIN {
 
         my $mode = $_[1];
 
+        # For now we're going to just strip off the binmode and hope for the best.
+        $mode =~ s/(:.+$)//;
+        my $encoding_mode = $1;
+
         # TODO: We technically need to support this.
         # open(my $fh, "-|", "/bin/hostname"); # Read from command
         # open(my $fh, "|-", "/bin/passwd"); # Write to command
