@@ -218,6 +218,35 @@ sub file {
     );
 }
 
+=head2 file_from_disk
+
+Args: C<($file_to_mock, $file_on_disk, $stats)>
+
+This will make cause $file to be mocked in all file checks, opens, etc.
+
+If C<file_on_disk> isn't present, then this will die.
+
+See L<Mock Stats> for what goes in this hash ref.
+
+=cut
+
+sub file_from_disk {
+    my ( $class, $file, $file_on_disk, @stats ) = @_;
+
+    my $fh;
+    local $!;
+    if ( !CORE::open( $fh, '<', $file_on_disk ) ) {
+        $file_on_disk //= '<no file specified>';
+        die("Sorry, I cannot read from $file_on_disk to mock $file. It doesn't appear to be present ($!)");
+    }
+
+    local $/;
+    my $contents = <$fh>;    # Slurp!
+    close $fh;
+
+    return __PACKAGE__->file( $file, $contents, @stats );
+}
+
 =head2 symlink
 
 Args: ($file, $readlink )
