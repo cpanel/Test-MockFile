@@ -1,5 +1,8 @@
 Revision history for Test-MockFile
 
+0.11    ???
+ - Fix for my $file_contents = do { local $/; <$fh> };
+
 0.010   10/31/2018
  - Add .perltidyrc policy
  - When reporting strict mode violations, be sure to report the a stack location outside of our modules.

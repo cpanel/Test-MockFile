@@ -174,7 +174,8 @@ sub READLINE {
     my ($self) = @_;
 
     my $tell = $self->{'tell'};
-    my $new_tell = index( $self->{'data'}->{'contents'}, $/, $tell ) + length($/);
+    my $rs = $/ // '';
+    my $new_tell = index( $self->{'data'}->{'contents'}, $rs, $tell ) + length($rs);
 
     if ( $new_tell == 0 ) {
         $new_tell = length( $self->{'data'}->{'contents'} );
