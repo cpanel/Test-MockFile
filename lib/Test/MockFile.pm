@@ -527,12 +527,20 @@ sub _abs_path_to_file {
 
 sub DESTROY {
     my ($self) = @_;
-    $self or return;
     ref $self or return;
 
-    my $file_name = $self->{'file_name'} or return;
+    # This is just a safety. It doesn't make much sense if we get here but
+    # $self doesn't have a file_name. Either way we can't delete it.
+    my $file_name = $self->{'file_name'};
+    defined $file_name or return;
 
-    $self == $files_being_mocked{$file_name} or die("Tried to destroy object for $file_name ($self) but something else is mocking it?");
+    # If the object survives into global destruction, the object which is
+    # the value of $files_being_mocked{$file_name} might destroy early.
+    # As a result, don't worry about the self == check just delete the key.
+    if ( defined $files_being_mocked{$file_name} ) {
+        $self == $files_being_mocked{$file_name} or die("Tried to destroy object for $file_name ($self) but something else is mocking it?");
+    }
+
     delete $files_being_mocked{$file_name};
 }
 
