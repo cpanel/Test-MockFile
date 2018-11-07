@@ -3,6 +3,10 @@ branches:
     - /^issue\d+/
     - /^gh\d+/
 language: perl
+notifications:
+  slack:
+    rooms:
+      - cpanelllc:V6BAp4TZMPzu6ieWNznycYKK#busy-camels
 env:
   global:
     - PERL_USE_UNSAFE_INC=0
