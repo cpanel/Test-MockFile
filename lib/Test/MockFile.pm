@@ -27,7 +27,7 @@ use Test::MockFile::DirHandle  ();
 use Scalar::Util               ();
 use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
-use Errno qw/ENOENT ELOOP EEXIST/;
+use Errno qw/EPERM ENOENT ELOOP EEXIST EISDIR/;
 
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
@@ -586,10 +586,21 @@ sub unlink {
     my ($self) = @_;
     $self or die("unlink is a method");
 
-    $self->is_file or die("unlink only supports files");
+    $self->is_link and die("unlink behavior for mocked symlinks is not yet implemented");
+
+    my $file_is_present = defined $self->contents ? 1 : 0;
+
+    if ( !$file_is_present ) {
+        $! = ENOENT;
+        return 0;
+    }
+
+    if ( $self->is_dir ) {
+        $! = EISDIR;
+        return 0;
+    }
 
     $self->contents(undef);
-
     return 1;
 }
 
@@ -1243,6 +1254,27 @@ BEGIN {
         delete $self->{'tell'};
         return 1;
     };
+
+    *CORE::GLOBAL::unlink = sub(@) {
+        my @files_to_unlink = @_;
+        my $files_deleted   = 0;
+
+        foreach my $file (@files_to_unlink) {
+            my $abs_path = _abs_path_to_file($file);
+
+            if ( !defined $files_being_mocked{$abs_path} ) {
+                _real_file_access_hook( "unlink", [$file] );
+                $files_deleted += CORE::unlink($file);
+            }
+            else {
+                $files_deleted += $files_being_mocked{$abs_path}->unlink;
+            }
+        }
+
+        return $files_deleted;
+
+      }
+
 }
 
 =head1 AUTHOR

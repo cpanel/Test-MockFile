@@ -1,7 +1,8 @@
 Revision history for Test-MockFile
 
-0.11    ???
+0.011   ???
  - Fix for my $file_contents = do { local $/; <$fh> };
+ - Mock CORE::GLOBAL::unlink and support directories for unlink
 
 0.010   10/31/2018
  - Add .perltidyrc policy

@@ -21,4 +21,5 @@ t/readline.t
 t/sysopen.t
 t/Test-MockFile_file.t
 t/touch.t
+t/unlink.t
 t/writeline.t
