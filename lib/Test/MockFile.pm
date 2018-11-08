@@ -192,7 +192,7 @@ See L<Mock Stats> for what goes in this hash ref.
 sub file {
     my ( $class, $file, $contents, @stats ) = @_;
 
-    length $file or die("No file provided to instantiate $class");
+    ( defined $file && length $file ) or die("No file provided to instantiate $class");
     $files_being_mocked{$file} and die("It looks like $file is already being mocked. We don't support double mocking yet.");
 
     my %stats;
@@ -264,7 +264,7 @@ Stats are not able to be specified on instantiation but can in theory be altered
 sub symlink {
     my ( $class, $readlink, $file ) = @_;
 
-    length $file or die("No file provided to instantiate $class");
+    ( defined $file && length $file ) or die("No file provided to instantiate $class");
     ( !defined $readlink || length $readlink ) or die("No file provided for $file to point to in $class");
 
     $files_being_mocked{$file} and die("It looks like $file is already being mocked. We don't support double mocking yet.");
@@ -295,7 +295,7 @@ See L<Mock Stats> for what goes in this hash ref.
 sub dir {
     my ( $class, $dir_name, $contents, @stats ) = @_;
 
-    length $dir_name or die("No directory name provided to instantiate $class");
+    ( defined $dir_name && length $dir_name ) or die("No directory name provided to instantiate $class");
     $files_being_mocked{$dir_name} and die("It looks like $dir_name is already being mocked. We don't support double mocking yet.");
 
     # Because undef means it's a missing dir.
@@ -444,7 +444,7 @@ sub _mock_stat {
         return FALLBACK_TO_REAL_OP();
     }
 
-    if ( !length $file_or_fh ) {
+    if ( !defined $file_or_fh || !length $file_or_fh ) {
         _real_file_access_hook( $type, [$file_or_fh] );
         return FALLBACK_TO_REAL_OP();
     }
@@ -452,7 +452,7 @@ sub _mock_stat {
     my $file = _find_file_or_fh( $file_or_fh, $follow_link );
     return $file if ref $file eq 'ARRAY';    # Allow an ELOOP to fall through here.
 
-    if ( !length $file ) {
+    if ( !defined $file or !length $file ) {
         _real_file_access_hook( $type, [$file_or_fh] );
         return FALLBACK_TO_REAL_OP();
     }
@@ -710,7 +710,7 @@ returns true/false, depending on whether this object is a symlink.
 sub is_link {
     my ($self) = @_;
 
-    return ( length $self->{'readlink'} && $self->{'mode'} & S_IFLNK ) ? 1 : 0;
+    return ( defined $self->{'readlink'} && length $self->{'readlink'} && $self->{'mode'} & S_IFLNK ) ? 1 : 0;
 }
 
 =head2 is_dir
