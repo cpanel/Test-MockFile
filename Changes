@@ -1,6 +1,6 @@
 Revision history for Test-MockFile
 
-0.011   ???
+0.011   11/08/2018
  - Fix for my $file_contents = do { local $/; <$fh> };
  - Mock CORE::GLOBAL::unlink and support directories for unlink
  - Mock CORE::GLOBAL::mkdir
