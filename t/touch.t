@@ -16,7 +16,8 @@ my $file = Test::MockFile->file( '/file', "" );
 my $dir = Test::MockFile->dir( '/dir', [] );
 my $link = Test::MockFile->symlink( '/link', '/tonowhere' );
 
-like( dies { $link->unlink }, qr/^unlink behavior for mocked symlinks is not yet implemented at \S/, "unlink /link doesn't work." );
+is( $link->unlink, 1, "unlink /link works." );
+is( $link->exists, 0, "/link is now gone" );
 {
     local $!;
     is( $dir->unlink, 0,      "unlink /dir doesn't work." );
