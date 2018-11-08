@@ -33,7 +33,7 @@ use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
 =head1 NAME
 
-Test::MockFile - Lets tests validate code that interacts with files without the file system ever being touched.
+Test::MockFile - Allows tests to validate code that can interact with files without touching the file system.
 
 =head1 VERSION
 
