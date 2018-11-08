@@ -9,7 +9,7 @@ META.json
 META.yml
 README
 t/00-load.t
-t/dir.t
+t/opendir.t
 t/file_access_hooks.t
 t/file_from_disk.t
 t/manifest.t
