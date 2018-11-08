@@ -1329,7 +1329,12 @@ BEGIN {
         my $mock = _get_file_object($file);
 
         if ( !$mock ) {
-            goto \&CORE::mkdir;
+            if ( $] > 5.015 ) {
+                goto \&CORE::mkdir;
+            }
+            else {
+                return CORE::mkdir(@_);
+            }
         }
 
         # Because we've mocked this to be a file and it doesn't exist we are going to die here.
@@ -1363,7 +1368,12 @@ BEGIN {
         my $mock = _get_file_object($file);
 
         if ( !$mock ) {
-            goto \&CORE::rmdir;
+            if ( $] > 5.015 ) {
+                goto \&CORE::rmdir;
+            }
+            else {
+                return CORE::rmdir($file);
+            }
         }
 
         # Because we've mocked this to be a file and it doesn't exist we are going to die here.
