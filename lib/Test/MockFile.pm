@@ -756,7 +756,7 @@ sub size {
 
 =head2 exists
 
-returns true or false base on if the file exists right now.
+returns true or false based on if the file exists right now.
 
 =cut
 
@@ -938,8 +938,8 @@ Since 5.10, it has been possible to override function calls by defining them. li
 
     *CORE::GLOBAL::open = sub(*;$@) {...}
     
-Any code which is loaded B<AFTER> this happens will use the alternate open. This means you can place your C<use Test::MockFile> statement after statements you don't want mocked and
-there is no risk that that code will ever be altered by Test::MockModule.
+Any code which is loaded B<AFTER> this happens will use the alternate open. This means you can place your C<use Test::MockFile> statement after statements you don't want to be mocked and
+there is no risk that the code will ever be altered by Test::MockModule.
 
 We oveload the following statements and then return tied handles to enable the rest of the IO functions to work properly. Only B<open> / B<sysopen> are needed to address file operations.
 However B<opendir> file handles were never setup for tie so we have to override all of B<opendir>'s related functions.
