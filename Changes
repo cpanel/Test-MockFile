@@ -7,6 +7,7 @@ Revision history for Test-MockFile
  - Mock CORE::GLOBAL::rmdir
  - MockFile->symlink now follows the symlink norm of ($target, $file), not the reverse.
  - New mock helper 'exists' to check if the file is there.
+ - New mock helper 'permissions' tells you the current permissions of the mocked file.
 
 0.010   10/31/2018
  - Add .perltidyrc policy
