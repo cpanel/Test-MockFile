@@ -15,6 +15,9 @@ CORE::rmdir $temp_dir_name;
 
 use Test::MockFile ();
 
+# Proves umask works in this test.
+umask 022;
+
 subtest "basic mkdir" => sub {
     $! = 0;
     is( CORE::mkdir($temp_dir_name), 1, "REAL mkdir when dir is missing." );
