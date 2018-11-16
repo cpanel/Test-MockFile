@@ -602,7 +602,12 @@ sub unlink {
     }
 
     if ( $self->is_dir ) {
-        $! = EISDIR;
+        if ( $^O eq 'freebsd' ) {
+            $! = EPERM;
+        }
+        else {
+            $! = EISDIR;
+        }
         return 0;
     }
 
