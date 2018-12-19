@@ -971,6 +971,18 @@ However B<opendir> file handles were never setup for tie so we have to override 
 
 =cut
 
+# goto doesn't work below 5.16
+#
+# goto messed up refcount between 5.22 and 5.26.
+# Broken in 7bdb4ff0943cf93297712faf504cdd425426e57f
+# Fixed  in https://rt.perl.org/Public/Bug/Display.html?id=115814
+sub _goto_is_available {
+    return 0 if $] < 5.015;
+    return 1 if $] < 5.021;
+    return 1 if $] > 5.027;
+    return 0;    # 5.
+}
+
 BEGIN {
     *CORE::GLOBAL::open = sub(*;$@) {
         my $abs_path = _abs_path_to_file( $_[2] );
@@ -978,7 +990,7 @@ BEGIN {
         # open(my $fh, ">filehere"); # Just don't do this. It's bad.
         if ( scalar @_ != 3 ) {
             _real_file_access_hook( "open", \@_ );
-            goto \&CORE::open if $] > 5.015;
+            goto \&CORE::open if _goto_is_available();
             if ( @_ == 1 ) {
                 return CORE::open( $_[0] );
             }
@@ -1003,7 +1015,7 @@ BEGIN {
             or !grep { $_ eq $mode } qw/> < >> +< +> +>>/
             or !defined $files_being_mocked{$abs_path} ) {
             _real_file_access_hook( "open", \@_ );
-            goto \&CORE::open if $] > 5.015;
+            goto \&CORE::open if _goto_is_available();
             if ( @_ == 1 ) {
                 return CORE::open( $_[0] );
             }
@@ -1066,7 +1078,7 @@ BEGIN {
 
         if ( !defined $files_being_mocked{$abs_path} ) {
             _real_file_access_hook( "sysopen", \@_ );
-            goto \&CORE::sysopen if $] > 5.015;
+            goto \&CORE::sysopen if _goto_is_available();
             return CORE::sysopen( $_[0], $_[1], @_[ 2 .. $#_ ] );
         }
 
@@ -1140,15 +1152,15 @@ BEGIN {
 
         if ( scalar @_ != 2 ) {
             _real_file_access_hook( "opendir", \@_ );
-            if ( $] > 5.015 ) {
-                goto \&CORE::opendir;
-            }
+
+            goto \&CORE::opendir if _goto_is_available();
+
             return CORE::opendir( $_[0], @_[ 1 .. $#_ ] );
         }
 
         if ( !defined $files_being_mocked{$abs_path} ) {
             _real_file_access_hook( "opendir", \@_ );
-            goto \&CORE::opendir if $] > 5.015;
+            goto \&CORE::opendir if _goto_is_available();
             return CORE::opendir( $_[0], $_[1] );
         }
 
@@ -1172,7 +1184,7 @@ BEGIN {
     *CORE::GLOBAL::readdir = sub(*) {
         my ($self) = @_;
 
-        if ( $] > 5.015 ) {
+        if ( _goto_is_available() ) {
             goto \&CORE::readdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
             goto \&CORE::readdir unless defined $files_being_mocked{ $self->{'dir'} };
         }
@@ -1207,7 +1219,7 @@ BEGIN {
     *CORE::GLOBAL::telldir = sub(*) {
         my ($self) = @_;
 
-        if ( $] > 5.015 ) {
+        if ( _goto_is_available() ) {
             goto \&CORE::telldir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
             goto \&CORE::telldir unless defined $files_being_mocked{ $self->{'dir'} };
         }
@@ -1230,7 +1242,7 @@ BEGIN {
     *CORE::GLOBAL::rewinddir = sub(*) {
         my ($self) = @_;
 
-        if ( $] > 5.015 ) {
+        if ( _goto_is_available() ) {
             goto \&CORE::rewinddir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
             goto \&CORE::rewinddir unless defined $files_being_mocked{ $self->{'dir'} };
         }
@@ -1254,7 +1266,7 @@ BEGIN {
     *CORE::GLOBAL::seekdir = sub(*$) {
         my ( $self, $goto ) = @_;
 
-        if ( $] > 5.015 ) {
+        if ( _goto_is_available() ) {
             goto \&CORE::seekdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
             goto \&CORE::seekdir unless defined $files_being_mocked{ $self->{'dir'} };
         }
@@ -1277,7 +1289,7 @@ BEGIN {
     *CORE::GLOBAL::closedir = sub(*) {
         my ($self) = @_;
 
-        if ( $] > 5.015 ) {
+        if ( _goto_is_available() ) {
             goto \&CORE::closedir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
             goto \&CORE::closedir unless defined $files_being_mocked{ $self->{'dir'} };
         }
@@ -1334,12 +1346,9 @@ BEGIN {
         my $mock = _get_file_object($file);
 
         if ( !$mock ) {
-            if ( $] > 5.015 ) {
-                goto \&CORE::mkdir;
-            }
-            else {
-                return CORE::mkdir(@_);
-            }
+            goto \&CORE::mkdir if _goto_is_available();
+
+            return CORE::mkdir(@_);
         }
 
         # Because we've mocked this to be a file and it doesn't exist we are going to die here.
@@ -1373,12 +1382,8 @@ BEGIN {
         my $mock = _get_file_object($file);
 
         if ( !$mock ) {
-            if ( $] > 5.015 ) {
-                goto \&CORE::rmdir;
-            }
-            else {
-                return CORE::rmdir($file);
-            }
+            goto \&CORE::rmdir if _goto_is_available();
+            return CORE::rmdir($file);
         }
 
         # Because we've mocked this to be a file and it doesn't exist we are going to die here.
