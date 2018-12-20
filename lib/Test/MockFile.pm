@@ -1043,7 +1043,8 @@ BEGIN {
         }
 
         #
-        my $mock_file = $files_being_mocked{$abs_path};
+        my $followed_link = _find_file_or_fh( $abs_path, 1 );    # Follow the link.
+        my $mock_file = _get_file_object($followed_link);
 
         # If contents is undef, we act like the file isn't there.
         if ( !defined $mock_file->{'contents'} && grep { $mode eq $_ } qw/< +</ ) {
@@ -1056,7 +1057,7 @@ BEGIN {
         $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
 
         $_[0] = IO::File->new;
-        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
+        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $followed_link, $rw;
 
         # This is how we tell if the file is open by something.
 
