@@ -1,5 +1,10 @@
 Revision history for Test-MockFile
 
+0.014   12/20/2018
+ - Re-factor _find_file_or_fh to handle symlink following logic better. GH #26
+ - Make more standard use of _get_file_object when looking up a file path so we
+   properly handle abs path and symlink following
+
 0.013   12/20/2018
  - Add a helper to determine if goto can be used. Where it's available is complicated
  - First pass at bareword file handles for opendir and friends
