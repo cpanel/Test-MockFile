@@ -614,7 +614,7 @@ sub unlink {
     }
 
     if ( $self->is_dir ) {
-        if ( $^O eq 'freebsd' ) {
+        if ( $^O eq 'darwin' or $^O =~ m/bsd/i ) {
             $! = EPERM;
         }
         else {
