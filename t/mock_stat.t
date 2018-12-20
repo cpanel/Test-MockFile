@@ -48,11 +48,7 @@ is( Test::MockFile::_find_file_or_fh('/abc'), '/abc', "_find_file_or_fh('/abc')"
 is( Test::MockFile::_find_file_or_fh( '/abc', 1 ), '/foo/bar', "_find_file_or_fh('/abc', 1) - follow" );
 
 push @mocked_files, Test::MockFile->symlink( '/not/a/file', '/broken_link' );
-like(
-    dies { Test::MockFile::_find_file_or_fh( '/broken_link', 1 ) },
-    qr{^Mocked file /broken_link points to unmocked file \?\? at },
-    "_find_file_or_fh('/broken_link', 1) dies when /broken_link is mocked."
-);
+is(Test::MockFile::_find_file_or_fh( '/broken_link', 1 ), undef, "_find_file_or_fh('/broken_link', 1) is undef when /broken_link is mocked.");
 
 push @mocked_files, Test::MockFile->symlink( '/aaa', '/bbb' );
 push @mocked_files, Test::MockFile->symlink( '/bbb', '/aaa' );
@@ -80,7 +76,7 @@ my $basic_stat_return = array {
     item match qr/^\d\d\d\d+$/;
     item match qr/^\d\d\d\d+$/;
     item 4096;
-    item 0;
+    item 1;
 };
 
 is( Test::MockFile::_mock_stat( 'lstat', '/foo/bar' ), $basic_stat_return, "/foo/bar mock stat" );
@@ -89,6 +85,25 @@ is( $! + 0, ELOOP, "Throws an ELOOP error" );
 
 push @mocked_files, Test::MockFile->file('/foo/baz');    # Missing file but mocked.
 is( Test::MockFile::_mock_stat( 'lstat', '/foo/baz' ), [], "/foo/baz mock stat when missing." );
+
+my $symlink_lstat_return = array {
+    item 0;
+    item 0;
+    item 0127777;
+    item 0;
+    item 0;
+    item 0;
+    item 0;
+    item 1;
+    item match qr/^\d\d\d\d+$/;
+    item match qr/^\d\d\d\d+$/;
+    item match qr/^\d\d\d\d+$/;
+    item 4096;
+    item 1;
+};
+
+is( Test::MockFile::_mock_stat( 'lstat', '/broken_link' ), $symlink_lstat_return, "lstat on /broken_link returns the stat on the symlink itself." );
+is( Test::MockFile::_mock_stat( 'stat', '/broken_link' ), [], "stat on /broken_link is an empty array since what it points to doesn't exist." );
 
 done_testing();
 exit;

@@ -453,6 +453,12 @@ sub _mock_stat {
     }
 
     my $file = _find_file_or_fh( $file_or_fh, $follow_link );
+
+    # If it's a broken link, we don't want to fall back, we want to return an empty array.
+    if ( $follow_link && !$file && _find_file_or_fh( $file_or_fh, 0 ) ) {
+        return [];
+    }
+
     return $file if ref $file eq 'ARRAY';    # Allow an ELOOP to fall through here.
 
     if ( !defined $file or !length $file ) {
@@ -467,7 +473,7 @@ sub _mock_stat {
     }
 
     # File is not present so no stats for you!
-    return [] if !defined $file_data->{'contents'};
+    return [] if !$file_data->is_link && !defined $file_data->{'contents'};
 
     # Make sure the file size is correct in the stats before returning its contents.
     return [ $file_data->stat ];
@@ -489,7 +495,7 @@ sub _find_file_or_fh {
     my $mock_object = $files_being_mocked{$file_or_fh};
 
     if ( $parent and !$mock_object ) {
-        die( sprintf( "Mocked file %s points to unmocked file %s", $parent, $file // '??' ) );
+        return;
     }
 
     return $file_or_fh unless $follow_link && $mock_object && $mock_object->is_link;
@@ -574,7 +580,7 @@ sub contents {
     my ( $self, $new_contents ) = @_;
     $self or die;
 
-    die("checking or setting contents on a symlink is not supported") if $self->is_link;
+    Carp::confess("checking or setting contents on a symlink is not supported") if $self->is_link;
 
     # If 2nd arg was passed.
     if ( scalar @_ == 2 ) {
@@ -757,6 +763,9 @@ returns the size of the file based on its contents.
 sub size {
     my ($self) = @_;
 
+    # Lstat for a symlink returns 1 for its size.
+    return 1 if $self->is_link;
+
     # length undef is 0 not undef in perl 5.10
     if ( $] < 5.012 ) {
         return undef unless $self->exists;
@@ -788,7 +797,7 @@ Calculates the block count of the file based on its size.
 sub blocks {
     my ($self) = @_;
 
-    my $blocks = $self->size / abs( $self->{'blksize'} || 1 );
+    my $blocks = int( $self->size / abs( $self->{'blksize'} ) + 1 );
     if ( int($blocks) > $blocks ) {
         $blocks = int($blocks) + 1;
     }
