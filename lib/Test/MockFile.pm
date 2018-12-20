@@ -199,7 +199,7 @@ sub file {
     my ( $class, $file, $contents, @stats ) = @_;
 
     ( defined $file && length $file ) or die("No file provided to instantiate $class");
-    $files_being_mocked{$file} and die("It looks like $file is already being mocked. We don't support double mocking yet.");
+    _get_file_object($file) and die("It looks like $file is already being mocked. We don't support double mocking yet.");
 
     my %stats;
     if ( scalar @stats == 1 ) {
@@ -273,7 +273,7 @@ sub symlink {
     ( defined $file && length $file ) or die("No file provided to instantiate $class");
     ( !defined $readlink || length $readlink ) or die("No file provided for $file to point to in $class");
 
-    $files_being_mocked{$file} and die("It looks like $file is already being mocked. We don't support double mocking yet.");
+    _get_file_object($file) and die("It looks like $file is already being mocked. We don't support double mocking yet.");
 
     return $class->new(
         {
@@ -302,7 +302,7 @@ sub dir {
     my ( $class, $dir_name, $contents, @stats ) = @_;
 
     ( defined $dir_name && length $dir_name ) or die("No directory name provided to instantiate $class");
-    $files_being_mocked{$dir_name} and die("It looks like $dir_name is already being mocked. We don't support double mocking yet.");
+    _get_file_object($dir_name) and die("It looks like $dir_name is already being mocked. We don't support double mocking yet.");
 
     # Because undef means it's a missing dir.
     if ( defined $contents ) {
@@ -468,7 +468,7 @@ sub _mock_stat {
         return FALLBACK_TO_REAL_OP();
     }
 
-    my $file_data = $files_being_mocked{$file};
+    my $file_data = _get_file_object($file);
     if ( !$file_data ) {
         _real_file_access_hook( $type, [$file_or_fh] );
         return FALLBACK_TO_REAL_OP();
@@ -526,18 +526,19 @@ sub _find_file_or_fh {
     return _find_file_or_fh( $mock_object->readlink, 1, $depth );
 }
 
+# Tries to find $fh as a open file handle in one of the mocked files.
+
 sub _fh_to_file {
     my ($fh) = @_;
 
-    return unless defined $fh;
-    return unless length $fh;
+    return unless defined $fh && length $fh;
 
     # See if $fh is a file handle. It might be a path.
-    foreach my $file_name ( keys %files_being_mocked ) {
+    foreach my $file_name ( sort keys %files_being_mocked ) {
         my $mock_fh = $files_being_mocked{$file_name}->{'fh'};
 
-        next unless $mock_fh;              # File isn't open.
-        next unless "$mock_fh" eq "$fh";
+        next unless $mock_fh;               # File isn't open.
+        next unless "$mock_fh" eq "$fh";    # This mock doesn't have this file handle open.
 
         return $file_name;
     }
@@ -1071,7 +1072,7 @@ BEGIN {
 
         # This is how we tell if the file is open by something.
 
-        $files_being_mocked{$abs_path}->{'fh'} = $_[0];
+        $mock_file->{'fh'} = $_[0];
         Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
 
         # Fix tell based on open options.
@@ -1100,15 +1101,14 @@ BEGIN {
     # 8 - O_NOFOLLOW - Fail if the last path component is a symbolic link.
 
     *CORE::GLOBAL::sysopen = sub(*$$;$) {
-        my $abs_path = _abs_path_to_file( $_[1] );
+        my $mock_file = _get_file_object( $_[1] );
 
-        if ( !defined $files_being_mocked{$abs_path} ) {
+        if ( !$mock_file ) {
             _real_file_access_hook( "sysopen", \@_ );
             goto \&CORE::sysopen if _goto_is_available();
             return CORE::sysopen( $_[0], $_[1], @_[ 2 .. $#_ ] );
         }
 
-        my $mock_file    = $files_being_mocked{$abs_path};
         my $sysopen_mode = $_[2];
 
         # Not supported by my linux vendor: O_EXLOCK | O_SHLOCK
@@ -1152,6 +1152,8 @@ BEGIN {
             return;
         }
 
+        my $abs_path = $mock_file->{'file_name'};
+
         $_[0] = IO::File->new;
         tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
 
@@ -1173,8 +1175,7 @@ BEGIN {
     };
 
     *CORE::GLOBAL::opendir = sub(*$) {
-
-        my $abs_path = _abs_path_to_file( $_[1] );
+        my $mock_dir = _get_file_object( $_[1] );
 
         # 1 arg Opendir doesn't work??
         if ( scalar @_ != 2 or !defined $_[1] ) {
@@ -1185,14 +1186,12 @@ BEGIN {
             return CORE::opendir( $_[0], @_[ 1 .. $#_ ] );
         }
 
-        if ( !defined $files_being_mocked{$abs_path} ) {
+        if ( !$mock_dir ) {
             _real_file_access_hook( "opendir", \@_ );
             print "Real open\n";
             goto \&CORE::opendir if _goto_is_available();
             return CORE::opendir( $_[0], $_[1] );
         }
-
-        my $mock_dir = $files_being_mocked{$abs_path};
 
         if ( !defined $mock_dir->{'contents'} ) {
             $! = ENOENT;
@@ -1208,6 +1207,7 @@ BEGIN {
         }
 
         # This is how we tell if the file is open by something.
+        my $abs_path = $mock_dir->{'file_name'};
         $mock_dir->{'obj'} = Test::MockFile::DirHandle->new( $abs_path, $mock_dir->{'contents'} );
         $mock_dir->{'fh'} = "$_[0]";
 
@@ -1368,7 +1368,7 @@ BEGIN {
             return;
         }
 
-        my $mock_object = $files_being_mocked{ _abs_path_to_file($file) };
+        my $mock_object = _get_file_object($file);
         if ( !$mock_object ) {
             goto \&CORE::readlink if _goto_is_available();
             return CORE::readlink($file);
