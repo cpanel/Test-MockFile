@@ -30,11 +30,11 @@ push @mocked_files, Test::MockFile->file( '/bar/foo', "" );
 open( my $fh,  "<", "/foo/bar" ) or die;
 open( my $fh2, "<", "/bar/foo" ) or die;
 
-is( Test::MockFile::_fh_to_file(),              undef,         "_fh_to_file()" );
-is( Test::MockFile::_fh_to_file(0),             "$cwd/0",      "_fh_to_file(0)" );
-is( Test::MockFile::_fh_to_file(''),            "$cwd/",       "_fh_to_file('')" );
-is( Test::MockFile::_fh_to_file(' '),           "$cwd/ ",      "_fh_to_file(' ')" );
-is( Test::MockFile::_fh_to_file('/etc/passwd'), '/etc/passwd', "_fh_to_file('/etc/passwd')" );
+is( Test::MockFile::_fh_to_file(),              undef, "_fh_to_file()" );
+is( Test::MockFile::_fh_to_file(0),             undef, "_fh_to_file(0)" );
+is( Test::MockFile::_fh_to_file(''),            undef, "_fh_to_file('')" );
+is( Test::MockFile::_fh_to_file(' '),           undef, "_fh_to_file(' ')" );
+is( Test::MockFile::_fh_to_file('/etc/passwd'), undef, "_fh_to_file('/etc/passwd')" );
 
 is( Test::MockFile::_fh_to_file($fh),  '/foo/bar', "_fh_to_file(\$fh)" );
 is( Test::MockFile::_fh_to_file($fh2), '/bar/foo', "_fh_to_file(\$fh2)" );
@@ -50,7 +50,7 @@ is( Test::MockFile::_find_file_or_fh( '/abc', 1 ), '/foo/bar', "_find_file_or_fh
 push @mocked_files, Test::MockFile->symlink( '/not/a/file', '/broken_link' );
 like(
     dies { Test::MockFile::_find_file_or_fh( '/broken_link', 1 ) },
-    qr{^Mocked file /broken_link points to unmocked file /not/a/file at },
+    qr{^Mocked file /broken_link points to unmocked file \?\? at },
     "_find_file_or_fh('/broken_link', 1) dies when /broken_link is mocked."
 );
 

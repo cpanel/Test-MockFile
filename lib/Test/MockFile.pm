@@ -25,6 +25,9 @@ use IO::File                   ();
 use Test::MockFile::FileHandle ();
 use Test::MockFile::DirHandle  ();
 use Scalar::Util               ();
+
+use Symbol;
+
 use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
 use Errno qw/EPERM ENOENT ELOOP EEXIST EISDIR ENOTDIR/;
@@ -473,7 +476,7 @@ sub _mock_stat {
 sub _get_file_object {
     my ($file_path) = @_;
 
-    my $file = _find_file_or_fh($file_path);
+    my $file = _find_file_or_fh($file_path) or return;
 
     return $files_being_mocked{$file};
 }
@@ -481,21 +484,22 @@ sub _get_file_object {
 sub _find_file_or_fh {
     my ( $file_or_fh, $follow_link, $depth, $parent ) = @_;
 
-    my $file        = _fh_to_file($file_or_fh);
-    my $mock_object = $files_being_mocked{$file};
+    my $file = _fh_to_file($file_or_fh);
+    $file_or_fh = $file if $file;
+    my $mock_object = $files_being_mocked{$file_or_fh};
 
     if ( $parent and !$mock_object ) {
-        die( sprintf( "Mocked file %s points to unmocked file %s", $parent, $file || '??' ) );
+        die( sprintf( "Mocked file %s points to unmocked file %s", $parent, $file // '??' ) );
     }
 
-    return $file unless $follow_link && $mock_object && $mock_object->is_link;
+    return $file_or_fh unless $follow_link && $mock_object && $mock_object->is_link;
 
     if ( !$mock_object ) {
         return [] if $depth;
         return $file;
     }
 
-    return $file unless $files_being_mocked{$file}->is_link;
+    return $file unless $mock_object->is_link;
 
     $depth ||= 0;
     $depth++;
@@ -506,17 +510,19 @@ sub _find_file_or_fh {
         return [];
     }
 
-    return _find_file_or_fh( $files_being_mocked{$file}->readlink, 1, $depth, $file );
+    return _find_file_or_fh( $mock_object->readlink, 1, $depth, $file_or_fh );
 }
 
 sub _fh_to_file {
     my ($fh) = @_;
 
-    # Return if it's a string. Nothing to do here!
-    return _abs_path_to_file($fh) unless ref $fh;
+    return unless defined $fh;
+    return unless length $fh;
 
+    # See if $fh is a file handle. It might be a path.
     foreach my $file_name ( keys %files_being_mocked ) {
         my $mock_fh = $files_being_mocked{$file_name}->{'fh'};
+
         next unless $mock_fh;              # File isn't open.
         next unless "$mock_fh" eq "$fh";
 
@@ -1150,7 +1156,8 @@ BEGIN {
 
         my $abs_path = _abs_path_to_file( $_[1] );
 
-        if ( scalar @_ != 2 ) {
+        # 1 arg Opendir doesn't work??
+        if ( scalar @_ != 2 or !defined $_[1] ) {
             _real_file_access_hook( "opendir", \@_ );
 
             goto \&CORE::opendir if _goto_is_available();
@@ -1160,152 +1167,155 @@ BEGIN {
 
         if ( !defined $files_being_mocked{$abs_path} ) {
             _real_file_access_hook( "opendir", \@_ );
+            print "Real open\n";
             goto \&CORE::opendir if _goto_is_available();
             return CORE::opendir( $_[0], $_[1] );
         }
 
         my $mock_dir = $files_being_mocked{$abs_path};
+
         if ( !defined $mock_dir->{'contents'} ) {
             $! = ENOENT;
             return undef;
         }
 
-        # This isn't a real IO::Dir.
-        $_[0] = Test::MockFile::DirHandle->new( $abs_path, $mock_dir->{'contents'} );
+        if ( !defined $_[0] ) {
+            $_[0] = Symbol::gensym;
+        }
+        elsif ( ref $_[0] ) {
+            no strict 'refs';
+            *{ $_[0] } = Symbol::geniosym;
+        }
 
         # This is how we tell if the file is open by something.
-        $files_being_mocked{$abs_path}->{'fh'} = $_[0];
-        Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
+        $mock_dir->{'obj'} = Test::MockFile::DirHandle->new( $abs_path, $mock_dir->{'contents'} );
+        $mock_dir->{'fh'} = "$_[0]";
 
         return 1;
 
     };
 
     *CORE::GLOBAL::readdir = sub(*) {
-        my ($self) = @_;
+        my $mocked_dir = _get_file_object( $_[0] );
 
-        if ( _goto_is_available() ) {
-            goto \&CORE::readdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            goto \&CORE::readdir unless defined $files_being_mocked{ $self->{'dir'} };
-        }
-        else {
-            return CORE::readdir( $_[0] ) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            return CORE::readdir( $_[0] ) unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( !$mocked_dir ) {
+            _real_file_access_hook( "readdir", \@_ );
+            print "Real read\n";
+            goto \&CORE::readdir if _goto_is_available();
+            return CORE::readdir( $_[0] );
         }
 
-        if ( !defined $self->{'files_in_readdir'} ) {
+        my $obj = $mocked_dir->{'obj'};
+        if ( !$obj ) {
+            die("Read on a closed handle");
+        }
+
+        if ( !defined $obj->{'files_in_readdir'} ) {
             die("Did a readdir on an empty dir. This shouldn't have been able to have been opened!");
         }
 
-        if ( !defined $self->{'tell'} ) {
+        if ( !defined $obj->{'tell'} ) {
             die("readdir called on a closed dirhandle");
         }
 
         # At EOF for the dir handle.
-        return undef if $self->{'tell'} > $#{ $self->{'files_in_readdir'} };
+        return undef if $obj->{'tell'} > $#{ $obj->{'files_in_readdir'} };
 
         if (wantarray) {
             my @return;
-            foreach my $pos ( $self->{'tell'} .. $#{ $self->{'files_in_readdir'} } ) {
-                push @return, $self->{'files_in_readdir'}->[$pos];
+            foreach my $pos ( $obj->{'tell'} .. $#{ $obj->{'files_in_readdir'} } ) {
+                push @return, $obj->{'files_in_readdir'}->[$pos];
             }
-            $self->{'tell'} = $#{ $self->{'files_in_readdir'} } + 1;
+            $obj->{'tell'} = $#{ $obj->{'files_in_readdir'} } + 1;
             return @return;
         }
 
-        return $self->{'files_in_readdir'}->[ $self->{'tell'}++ ];
+        return $obj->{'files_in_readdir'}->[ $obj->{'tell'}++ ];
     };
 
     *CORE::GLOBAL::telldir = sub(*) {
-        my ($self) = @_;
+        my ($fh) = @_;
+        my $mocked_dir = _get_file_object($fh);
 
-        if ( _goto_is_available() ) {
-            goto \&CORE::telldir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            goto \&CORE::telldir unless defined $files_being_mocked{ $self->{'dir'} };
-        }
-        else {
-            return CORE::telldir($self) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            return CORE::telldir($self) unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+            _real_file_access_hook( "telldir", \@_ );
+            goto \&CORE::telldir if _goto_is_available();
+            return CORE::telldir($fh);
         }
 
-        if ( !defined $self->{'files_in_readdir'} ) {
+        my $obj = $mocked_dir->{'obj'};
+
+        if ( !defined $obj->{'files_in_readdir'} ) {
             die("Did a telldir on an empty dir. This shouldn't have been able to have been opened!");
         }
 
-        if ( !defined $self->{'tell'} ) {
+        if ( !defined $obj->{'tell'} ) {
             die("telldir called on a closed dirhandle");
         }
 
-        return $self->{'tell'};
+        return $obj->{'tell'};
     };
 
     *CORE::GLOBAL::rewinddir = sub(*) {
-        my ($self) = @_;
+        my ($fh) = @_;
+        my $mocked_dir = _get_file_object($fh);
 
-        if ( _goto_is_available() ) {
-            goto \&CORE::rewinddir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            goto \&CORE::rewinddir unless defined $files_being_mocked{ $self->{'dir'} };
-        }
-        else {
-            return CORE::rewinddir($self) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            return CORE::rewinddir($self) unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+            _real_file_access_hook( "rewinddir", \@_ );
+            goto \&CORE::rewinddir if _goto_is_available();
+            return CORE::rewinddir( $_[0] );
         }
 
-        if ( !defined $self->{'files_in_readdir'} ) {
+        my $obj = $mocked_dir->{'obj'};
+
+        if ( !defined $obj->{'files_in_readdir'} ) {
             die("Did a rewinddir on an empty dir. This shouldn't have been able to have been opened!");
         }
 
-        if ( !defined $self->{'tell'} ) {
+        if ( !defined $obj->{'tell'} ) {
             die("rewinddir called on a closed dirhandle");
         }
 
-        $self->{'tell'} = 0;
+        $obj->{'tell'} = 0;
         return 1;
     };
 
     *CORE::GLOBAL::seekdir = sub(*$) {
-        my ( $self, $goto ) = @_;
+        my ( $fh, $goto ) = @_;
+        my $mocked_dir = _get_file_object($fh);
 
-        if ( _goto_is_available() ) {
-            goto \&CORE::seekdir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            goto \&CORE::seekdir unless defined $files_being_mocked{ $self->{'dir'} };
-        }
-        else {
-            return CORE::seekdir( $self, $goto ) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            return CORE::seekdir( $self, $goto ) unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+            _real_file_access_hook( "seekdir", \@_ );
+            goto \&CORE::seekdir if _goto_is_available();
+            return CORE::seekdir( $fh, $goto );
         }
 
-        if ( !defined $self->{'files_in_readdir'} ) {
+        my $obj = $mocked_dir->{'obj'};
+
+        if ( !defined $obj->{'files_in_readdir'} ) {
             die("Did a seekdir on an empty dir. This shouldn't have been able to have been opened!");
         }
 
-        if ( !defined $self->{'tell'} ) {
+        if ( !defined $obj->{'tell'} ) {
             die("seekdir called on a closed dirhandle");
         }
 
-        return $self->{'tell'} = $goto;
+        return $obj->{'tell'} = $goto;
     };
 
     *CORE::GLOBAL::closedir = sub(*) {
-        my ($self) = @_;
+        my ($fh) = @_;
+        my $mocked_dir = _get_file_object($fh);
 
-        if ( _goto_is_available() ) {
-            goto \&CORE::closedir if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            goto \&CORE::closedir unless defined $files_being_mocked{ $self->{'dir'} };
-        }
-        else {
-            return CORE::closedir($self) if !ref $self || ref $self ne 'Test::MockFile::DirHandle';
-            return CORE::closedir($self) unless defined $files_being_mocked{ $self->{'dir'} };
+        if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+            _real_file_access_hook( "closedir", \@_ );
+            goto \&CORE::closedir if _goto_is_available();
+            return CORE::closedir($fh);
         }
 
-        if ( !defined $self->{'files_in_readdir'} ) {
-            die("Did a closedir on an empty dir. This shouldn't have been able to have been opened!");
-        }
+        delete $mocked_dir->{'obj'};
+        delete $mocked_dir->{'fh'};
 
-        # Already closed?
-        return if !defined $self->{'tell'};
-
-        delete $self->{'tell'};
         return 1;
     };
 
