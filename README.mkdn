@@ -2,7 +2,7 @@
 
 # NAME
 
-Test::MockFile - Lets tests validate code which interacts with files without the file system ever being touched. 
+Test::MockFile - Allows tests to validate code that can interact with files without touching the file system.
 
 # VERSION
 
@@ -57,7 +57,7 @@ For example:
 
     # This will not die.
     Test::MockFile->file("/bar", "...");
-    Test::MockFile->link("/foo", "/bar");
+    Test::MockFile->symlink("/foo", "/bar");
     -l "/foo" or print "ok\n";
     open(my $fh, ">", "/foo");
     
@@ -194,7 +194,7 @@ returns the size of the file based on its contents.
 
 ## exists
 
-returns true or false base on if the file exists right now.
+returns true or false based on if the file exists right now.
 
 ## blocks
 
@@ -266,8 +266,8 @@ Since 5.10, it has been possible to override function calls by defining them. li
     *CORE::GLOBAL::open = sub(*;$@) {...}
     
 
-Any code which is loaded **AFTER** this happens will use the alternate open. This means you can place your `use Test::MockFile` statement after statements you don't want mocked and
-there is no risk that that code will ever be altered by Test::MockModule.
+Any code which is loaded **AFTER** this happens will use the alternate open. This means you can place your `use Test::MockFile` statement after statements you don't want to be mocked and
+there is no risk that the code will ever be altered by Test::MockModule.
 
 We oveload the following statements and then return tied handles to enable the rest of the IO functions to work properly. Only **open** / **sysopen** are needed to address file operations.
 However **opendir** file handles were never setup for tie so we have to override all of **opendir**'s related functions.
