@@ -48,11 +48,11 @@ is( Test::MockFile::_find_file_or_fh('/abc'), '/abc', "_find_file_or_fh('/abc')"
 is( Test::MockFile::_find_file_or_fh( '/abc', 1 ), '/foo/bar', "_find_file_or_fh('/abc', 1) - follow" );
 
 push @mocked_files, Test::MockFile->symlink( '/not/a/file', '/broken_link' );
-is(Test::MockFile::_find_file_or_fh( '/broken_link', 1 ), undef, "_find_file_or_fh('/broken_link', 1) is undef when /broken_link is mocked.");
+is( Test::MockFile::_find_file_or_fh( '/broken_link', 1 ), Test::MockFile::BROKEN_SYMLINK(), "_find_file_or_fh('/broken_link', 1) is undef when /broken_link is mocked." );
 
 push @mocked_files, Test::MockFile->symlink( '/aaa', '/bbb' );
 push @mocked_files, Test::MockFile->symlink( '/bbb', '/aaa' );
-is( Test::MockFile::_find_file_or_fh( '/aaa', 1 ), [], "_find_file_or_fh('/aaaa', 1) - with circular links" );
+is( Test::MockFile::_find_file_or_fh( '/aaa', 1 ), Test::MockFile::CIRCULAR_SYMLINK(), "_find_file_or_fh('/aaaa', 1) - with circular links" );
 is( $! + 0, ELOOP, '$! is ELOOP' );
 
 note "_mock_stat";

@@ -15,6 +15,9 @@ use Fcntl;    # O_RDONLY, etc.
 
 use constant SUPPORTED_SYSOPEN_MODES => O_RDONLY | O_WRONLY | O_RDWR | O_APPEND | O_TRUNC | O_EXCL | O_CREAT | O_NOFOLLOW;
 
+use constant BROKEN_SYMLINK   => bless {}, "A::BROKEN::SYMLINK";
+use constant CIRCULAR_SYMLINK => bless {}, "A::CIRCULAR::SYMLINK";
+
 # we're going to use carp but the errors should come from outside of our package.
 use Carp ();
 $Carp::Internal{__PACKAGE__}++;
@@ -442,24 +445,23 @@ sub _mock_stat {
       : $type eq 'lstat' ? 0
       :                    die("Unexpected stat type '$type'");
 
+    # Overload::FileCheck should always send 2 args.
     if ( scalar @_ != 2 ) {
         _real_file_access_hook( $type, [$file_or_fh] );
         return FALLBACK_TO_REAL_OP();
     }
 
+    # Overload::FileCheck should always send something and be handling undef on its own??
     if ( !defined $file_or_fh || !length $file_or_fh ) {
         _real_file_access_hook( $type, [$file_or_fh] );
         return FALLBACK_TO_REAL_OP();
     }
 
+    # Find the path, following the symlink if required.
     my $file = _find_file_or_fh( $file_or_fh, $follow_link );
 
-    # If it's a broken link, we don't want to fall back, we want to return an empty array.
-    if ( $follow_link && !$file && _find_file_or_fh( $file_or_fh, 0 ) ) {
-        return [];
-    }
-
-    return $file if ref $file eq 'ARRAY';    # Allow an ELOOP to fall through here.
+    return [] if $file && $file eq BROKEN_SYMLINK;      # Allow an ELOOP to fall through here.
+    return [] if $file && $file eq CIRCULAR_SYMLINK;    # Allow an ELOOP to fall through here.
 
     if ( !defined $file or !length $file ) {
         _real_file_access_hook( $type, [$file_or_fh] );
@@ -487,36 +489,41 @@ sub _get_file_object {
     return $files_being_mocked{$file};
 }
 
+# This subroutine finds the absolute path to a file, returning the absolute path of what it ultimately points to.
+# If it is a broken link or what was passed in is undef or '', then we return undef.
+
 sub _find_file_or_fh {
-    my ( $file_or_fh, $follow_link, $depth, $parent ) = @_;
+    my ( $file_or_fh, $follow_link, $depth ) = @_;
 
-    my $file = _fh_to_file($file_or_fh);
-    $file_or_fh = $file if $file;
-    my $mock_object = $files_being_mocked{$file_or_fh};
+    # Find the file handle or fall back to just using the abs path of $file_or_fh
+    my $absolute_path_to_file = _fh_to_file($file_or_fh) // _abs_path_to_file($file_or_fh) // '';
 
-    if ( $parent and !$mock_object ) {
-        return;
-    }
+    # Get the pointer to the object.
+    my $mock_object = $files_being_mocked{$absolute_path_to_file};
 
-    return $file_or_fh unless $follow_link && $mock_object && $mock_object->is_link;
+    # If we're following a symlink and the path we came to is a dead end (broken symlink), then return BROKEN_SYMLINK up the stack.
+    return BROKEN_SYMLINK if $depth and !$mock_object;
 
-    if ( !$mock_object ) {
-        return [] if $depth;
-        return $file;
-    }
+    # If the link we followed isn't a symlink, then return it.
+    return $absolute_path_to_file unless $mock_object && $mock_object->is_link;
 
-    return $file unless $mock_object->is_link;
+    # ##############
+    # From here on down we're only dealing with symlinks.
+    # ##############
 
-    $depth ||= 0;
+    # If we weren't told to follow the symlink then SUCCESS!
+    return $absolute_path_to_file unless $follow_link;
+
+    # This is still a symlink keep going. Bump our depth counter.
     $depth++;
 
-    #Protect against circular loops.
+    #Protect against circular symlink loops.
     if ( $depth > FOLLOW_LINK_MAX_DEPTH ) {
         $! = ELOOP;
-        return [];
+        return CIRCULAR_SYMLINK;
     }
 
-    return _find_file_or_fh( $mock_object->readlink, 1, $depth, $file_or_fh );
+    return _find_file_or_fh( $mock_object->readlink, 1, $depth );
 }
 
 sub _fh_to_file {
@@ -1000,8 +1007,8 @@ sub _goto_is_available {
 
 BEGIN {
     *CORE::GLOBAL::open = sub(*;$@) {
-        my $abs_path = _abs_path_to_file( $_[2] );
 
+        # We're not supporting 2 arg or 1 arg opens yet.
         # open(my $fh, ">filehere"); # Just don't do this. It's bad.
         if ( scalar @_ != 3 ) {
             _real_file_access_hook( "open", \@_ );
@@ -1017,18 +1024,23 @@ BEGIN {
             }
         }
 
+        my $abs_path = _find_file_or_fh( $_[2], 1 );    # Follow the link.
+        die if ( !$abs_path );
+        die if $abs_path eq BROKEN_SYMLINK;
+        my $mock_file = _get_file_object($abs_path);
+
         my $mode = $_[1];
 
         # For now we're going to just strip off the binmode and hope for the best.
         $mode =~ s/(:.+$)//;
         my $encoding_mode = $1;
 
-        # TODO: We technically need to support this.
-        # open(my $fh, "-|", "/bin/hostname"); # Read from command
-        # open(my $fh, "|-", "/bin/passwd"); # Write to command
+        # TODO: We don't yet support |- or -|
+        # TODO: We don't yet support modes outside of > < >> +< +> +>>
+        # We just pass through to open if we're not mocking the file right now.
         if (   ( $mode eq '|-' || $mode eq '-|' )
             or !grep { $_ eq $mode } qw/> < >> +< +> +>>/
-            or !defined $files_being_mocked{$abs_path} ) {
+            or !defined $mock_file ) {
             _real_file_access_hook( "open", \@_ );
             goto \&CORE::open if _goto_is_available();
             if ( @_ == 1 ) {
@@ -1042,9 +1054,7 @@ BEGIN {
             }
         }
 
-        #
-        my $followed_link = _find_file_or_fh( $abs_path, 1 );    # Follow the link.
-        my $mock_file = _get_file_object($followed_link);
+        # At this point we're mocking the file. Let's do it!
 
         # If contents is undef, we act like the file isn't there.
         if ( !defined $mock_file->{'contents'} && grep { $mode eq $_ } qw/< +</ ) {
@@ -1057,7 +1067,7 @@ BEGIN {
         $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
 
         $_[0] = IO::File->new;
-        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $followed_link, $rw;
+        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
 
         # This is how we tell if the file is open by something.
 
@@ -1066,11 +1076,11 @@ BEGIN {
 
         # Fix tell based on open options.
         if ( $mode eq '>>' or $mode eq '+>>' ) {
-            $files_being_mocked{$abs_path}->{'contents'} //= '';
-            seek $_[0], length( $files_being_mocked{$abs_path}->{'contents'} ), 0;
+            $mock_file->{'contents'} //= '';
+            seek $_[0], length( $mock_file->{'contents'} ), 0;
         }
         elsif ( $mode eq '>' or $mode eq '+>' ) {
-            $files_being_mocked{$abs_path}->{'contents'} = '';
+            $mock_file->{'contents'} = '';
         }
 
         return 1;
