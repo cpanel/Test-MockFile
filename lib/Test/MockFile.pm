@@ -109,7 +109,7 @@ For example:
 
     # This will not die.
     Test::MockFile->file("/bar", "...");
-    Test::MockFile->link("/foo", "/bar");
+    Test::MockFile->symlink("/foo", "/bar");
     -l "/foo" or print "ok\n";
     open(my $fh, ">", "/foo");
     
