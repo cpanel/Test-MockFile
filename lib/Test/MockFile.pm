@@ -30,7 +30,7 @@ use Symbol;
 
 use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
-use Errno qw/EPERM ENOENT ELOOP EEXIST EISDIR ENOTDIR/;
+use Errno qw/EPERM ENOENT ELOOP EEXIST EISDIR ENOTDIR EINVAL/;
 
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
@@ -1347,6 +1347,28 @@ BEGIN {
 
         return $files_deleted;
 
+    };
+
+    *CORE::GLOBAL::readlink = sub(_) {
+        my ($file) = @_;
+
+        if ( !defined $file ) {
+            warn 'Use of uninitialized value in readlink';
+            $! = ENOENT;
+            return;
+        }
+
+        my $mock_object = $files_being_mocked{ _abs_path_to_file($file) };
+        if ( !$mock_object ) {
+            goto \&CORE::readlink if _goto_is_available();
+            return CORE::readlink($file);
+        }
+
+        if ( !$mock_object->is_link ) {
+            $! = EINVAL;
+            return;
+        }
+        return $mock_object->readlink;
     };
 
     # $file is always passed because of the prototype.
