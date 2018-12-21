@@ -1188,7 +1188,6 @@ BEGIN {
 
         if ( !$mock_dir ) {
             _real_file_access_hook( "opendir", \@_ );
-            print "Real open\n";
             goto \&CORE::opendir if _goto_is_available();
             return CORE::opendir( $_[0], $_[1] );
         }
@@ -1220,7 +1219,6 @@ BEGIN {
 
         if ( !$mocked_dir ) {
             _real_file_access_hook( "readdir", \@_ );
-            print "Real read\n";
             goto \&CORE::readdir if _goto_is_available();
             return CORE::readdir( $_[0] );
         }
