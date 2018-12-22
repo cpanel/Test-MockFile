@@ -22,7 +22,7 @@ no_index:
     - t
     - inc
 requires:
-  Overload::FileCheck: '0.006'
+  Overload::FileCheck: '0.007'
   perl: '5.006'
 resources:
   bugtracker: https://github.com/cpanelinc/Test-MockFile/issues

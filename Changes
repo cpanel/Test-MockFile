@@ -1,5 +1,8 @@
 Revision history for Test-MockFile
 
+0.016
+ - Bump Overload::FileCheck to 0.007 to address stack bug
+
 0.015   12/21/2018
  - Remove errant debug messages from open
  - Pass 3 to fix t/touch.t on BSD.
