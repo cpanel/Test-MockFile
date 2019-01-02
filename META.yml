@@ -4,7 +4,7 @@ author:
   - 'Todd Rinaldo <toddr@cpanel.net>'
 build_requires:
   File::Slurper: '0'
-  Test2::Bundle::Extended: '0'
+  Test2::Bundle::Extended: '0.000084'
   Test2::Plugin::NoWarnings: '0'
   Test2::Tools::Explain: '0'
   Test::More: '1.302133'

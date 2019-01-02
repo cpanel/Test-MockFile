@@ -16,7 +16,7 @@ WriteMakefile(
     },
     BUILD_REQUIRES => {
         'Test::More'                => '1.302133',
-        'Test2::Bundle::Extended'   => '0',
+        'Test2::Bundle::Extended'   => '0.000084', # Oldest version provided on CPAN isa_ok changed in 0.000035 and we need that.
         'Test2::Tools::Explain'     => '0',
         'Test2::Plugin::NoWarnings' => '0',
         'File::Slurper'             => 0,
