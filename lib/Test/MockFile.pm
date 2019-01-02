@@ -43,11 +43,11 @@ Test::MockFile - Allows tests to validate code that can interact with files with
 
 =head1 VERSION
 
-Version 0.015
+Version 0.016
 
 =cut
 
-our $VERSION = '0.015';
+our $VERSION = '0.016';
 
 our %files_being_mocked;
 
