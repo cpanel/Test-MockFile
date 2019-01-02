@@ -1,5 +1,8 @@
 Revision history for Test-MockFile
 
+0.017
+ - Require a newer Test2::Bundle::Extended (0.000084) to support named isa_ok
+
 0.016
  - Bump Overload::FileCheck to 0.007 to address stack bug
  - Try to get EISDIR handling for BSD working. Apparently something changed in perl 5.20?
