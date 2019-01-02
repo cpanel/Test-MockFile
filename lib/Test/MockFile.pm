@@ -622,7 +622,7 @@ sub unlink {
     }
 
     if ( $self->is_dir ) {
-        if ( $^O eq 'darwin' or $^O =~ m/bsd/i ) {
+        if ( $] < 5.019 && ( $^O eq 'darwin' or $^O =~ m/bsd/i ) ) {
             $! = EPERM;
         }
         else {
