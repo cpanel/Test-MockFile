@@ -1067,13 +1067,25 @@ BEGIN {
         $rw .= 'r' if grep { $_ eq $mode } qw/+< +> +>> </;
         $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
 
-        $_[0] = IO::File->new;
-        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
+        if ( !defined $_[0] ) {
+            $_[0] = Symbol::gensym;
+        }
+        elsif ( ref $_[0] ) {
+            no strict 'refs';
+            *{ $_[0] } = Symbol::geniosym;
+        }
+
+        if ( ref $_[0] ) {
+            tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
+        }
+        else {
+            tie $_[0], 'Test::MockFile::FileHandle', $abs_path, $rw;
+        }
 
         # This is how we tell if the file is open by something.
 
         $mock_file->{'fh'} = $_[0];
-        Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
+        Scalar::Util::weaken( $mock_file->{'fh'} ) if ref $_[0];    # Will this make it go out of scope?
 
         # Fix tell based on open options.
         if ( $mode eq '>>' or $mode eq '+>>' ) {
