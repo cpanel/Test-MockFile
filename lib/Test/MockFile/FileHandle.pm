@@ -75,6 +75,11 @@ sub TIEHANDLE {
     return $self;
 }
 
+*TIESCALAR = \&TIEHANDLE;
+sub FETCH {
+    die('FETCH Unimplemented');
+}
+
 =head2 PRINT
 
 This method will be triggered every time the tied handle is printed to with the print() or say() functions.
