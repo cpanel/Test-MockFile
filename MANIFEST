@@ -15,6 +15,7 @@ t/goto_is_available.t
 t/manifest.t
 t/mkdir.t
 t/mock_stat.t
+t/open-bare-filehandle.t
 t/open-noclose.t
 t/open.t
 t/opendir.t
