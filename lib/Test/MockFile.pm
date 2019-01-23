@@ -1166,12 +1166,24 @@ BEGIN {
 
         my $abs_path = $mock_file->{'file_name'};
 
-        $_[0] = IO::File->new;
-        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
+        if ( !defined $_[0] ) {
+            $_[0] = Symbol::gensym;
+        }
+        elsif ( ref $_[0] ) {
+            no strict 'refs';
+            *{ $_[0] } = Symbol::geniosym;
+        }
+
+        if ( ref $_[0] ) {
+            tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
+        }
+        else {
+            tie $_[0], 'Test::MockFile::FileHandle', $abs_path, $rw;
+        }
 
         # This is how we tell if the file is open by something.
         $files_being_mocked{$abs_path}->{'fh'} = $_[0];
-        Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
+        Scalar::Util::weaken( $files_being_mocked{$abs_path}->{'fh'} ) if ref $_[0];    # Will this make it go out of scope?
 
         # O_TRUNC
         if ( $sysopen_mode & O_TRUNC ) {

@@ -88,7 +88,7 @@ is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" ) or 
     note "-------------- MOCK MODE --------------";
     my $bar = Test::MockFile->file( $filename, $str_cap . $str );
     is( sysopen( my $fh, $filename, O_RDONLY | O_NOFOLLOW ), 1, "Sysopen for read" );
-    like( "$fh", qr/^IO::File=GLOB\(0x[0-9a-f]+\)$/, '$fh stringifies to a IO::File GLOB' );
+    like( "$fh", qr/^GLOB\(0x[0-9a-f]+\)$/, '$fh stringifies to a IO::File GLOB' );
 
     my $buf = "blah";
     is( sysread( $fh, $buf, 2, 4 ), 2, "Read 2 into buf at EOL" );
