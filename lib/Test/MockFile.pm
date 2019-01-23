@@ -1457,18 +1457,18 @@ BEGIN {
 
 =head1 CAVEATS
 
-=head2 Bareword File Handles
+=head2 open() calls using Bareword File Handles
 
-Currently bareword file handles are not supported. Attempting to test a mocked file that is done via a bareword file handle will result in an error.
+Currently bareword file handles are not supported with C<open()>. Attempting to test a mocked file that is C<open()>ed via a bareword file handle will result in an error.
 
-For example, at the time of this writing, L<Config::Tiny>’s C<read()> uses a bareword file handle. So if your code does this:
+For example, at the time of this writing, L<Config::Tiny>’s C<read()> uses a bareword file handle with C<open()>. So if your code does this:
 
     sub get_conf {
         my ($file) = @_;
         return Config::Tiny->read($file)
     }
 
-And you mock C<$file> in your test, your test will error out with something like:
+… and you mock C<$file> in your test, your test will error out with something like:
 
     Modification of a read-only value attempted at …/Test/MockFile.pm line 1070.
 
