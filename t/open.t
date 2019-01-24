@@ -37,9 +37,14 @@ is( <$fh_real>,   "efgh\n", " ... line 2" );
 is( <$fh_real>,   undef,    " ... EOF" );
 
 close $fh_real;
-my @exists = ( -e $filename );
+my @exists = (-e $filename);
 is( \@exists, [1], "Real file is there" );
+$bar->unlink;
+is( -e $filename, '', "Real file is there" );
+
 undef $bar;
+
+
 
 ok( !-e $filename, "Real file is not there" );
 
