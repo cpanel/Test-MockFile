@@ -1073,7 +1073,7 @@ BEGIN {
         # This is how we tell if the file is open by something.
 
         $mock_file->{'fh'} = $_[0];
-        Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
+        Scalar::Util::weaken( $mock_file->{'fh'} ) if ref $_[0];    # Will this make it go out of scope?
 
         # Fix tell based on open options.
         if ( $mode eq '>>' or $mode eq '+>>' ) {
@@ -1159,7 +1159,7 @@ BEGIN {
 
         # This is how we tell if the file is open by something.
         $files_being_mocked{$abs_path}->{'fh'} = $_[0];
-        Scalar::Util::weaken( $_[0] );    # Will this make it go out of scope?
+        Scalar::Util::weaken( $files_being_mocked{$abs_path}->{'fh'} ) if ref $_[0];    # Will this make it go out of scope?
 
         # O_TRUNC
         if ( $sysopen_mode & O_TRUNC ) {
