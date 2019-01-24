@@ -41,13 +41,13 @@ is( open( my $fh, '<', $filename ), 1, "Mocked temp file opens and returns true"
 
 isa_ok( $fh, ["IO::File"], '$fh is a IO::File' );
 like( "$fh", qr/^IO::File=GLOB\(0x[0-9a-f]+\)$/, '$fh stringifies to a IO::File GLOB' );
-is( <$fh>, "abc\n", '1st read on $fh is "abc\n"' );
+is( <$fh>, "abc\n", 'first read on $fh is "abc\n"' );
 
-is( <$fh>,          "def\n",           '2nd read on $fh is "def\n"' );
-is( readline($fh),  "ghi\n",           '3rd read on $fh via readline is "ghi\n"' );
-is( <$fh>,          undef,             '4th read on $fh undef at EOF' );
-is( <$fh>,          undef,             '5th read on $fh undef at EOF' );
-is( <$fh>,          undef,             '6th read on $fh undef at EOF' );
+is( <$fh>,          "def\n",           'second read on $fh is "def\n"' );
+is( readline($fh),  "ghi\n",           'third read on $fh via readline is "ghi\n"' );
+is( <$fh>,          undef,             'fourth read on $fh undef at EOF' );
+is( <$fh>,          undef,             'fifth read on $fh undef at EOF' );
+is( <$fh>,          undef,             'sixth read on $fh undef at EOF' );
 is( $bar->contents, "abc\ndef\nghi\n", '$foo->contents' );
 
 $bar->contents( join( "\n", qw/abc def jkl mno pqr/ ) );
@@ -119,9 +119,9 @@ sub slurp {
 {
     note "readline array.";
     my $baz = Test::MockFile->file( $filename, $multiline );
-    open( my $fh, '<', $filename );
+    open(my $fh, '<', $filename);
     my @read = <$fh>;
-    is( \@read, [ "abc\n", "def\n", "ghi\r\n", "dhdbhjdb\r" ], "readline reads in an array of stuff." );
+    is(\@read, ["abc\n", "def\n", "ghi\r\n", "dhdbhjdb\r"], "readline reads in an array of stuff.");
 }
 
 done_testing();

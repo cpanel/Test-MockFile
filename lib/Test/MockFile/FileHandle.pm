@@ -199,7 +199,7 @@ sub READLINE {
     if (wantarray) {
         my @all;
         my $line = _READLINE_ONE_LINE($self);
-        while ( length $line ) {
+        while ( defined $line ) {
             push @all, $line;
             $line = _READLINE_ONE_LINE($self);
         }
