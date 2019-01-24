@@ -470,7 +470,7 @@ sub _mock_stat {
 
     my $file_data = _get_file_object($file);
     if ( !$file_data ) {
-        _real_file_access_hook( $type, [$file_or_fh] );
+        _real_file_access_hook( $type, [$file_or_fh] ) unless ref $file_or_fh;
         return FALLBACK_TO_REAL_OP();
     }
 
