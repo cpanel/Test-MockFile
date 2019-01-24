@@ -3,7 +3,10 @@
 use strict;
 use warnings;
 
-use Test::More;
+use Test2::Bundle::Extended;
+use Test2::Tools::Explain;
+use Test2::Plugin::NoWarnings;
+
 use Errno qw/ENOENT/;
 
 use File::Temp qw/tempfile/;
@@ -34,7 +37,8 @@ is( <$fh_real>,   "efgh\n", " ... line 2" );
 is( <$fh_real>,   undef,    " ... EOF" );
 
 close $fh_real;
-ok( -e $filename, "Real file is there" );
+my @exists = ( -e $filename );
+is( \@exists, [1], "Real file is there" );
 undef $bar;
 
 ok( !-e $filename, "Real file is not there" );
