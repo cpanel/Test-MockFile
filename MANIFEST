@@ -11,6 +11,7 @@ README
 t/00-load.t
 t/file_access_hooks.t
 t/file_from_disk.t
+t/filename.t
 t/goto_is_available.t
 t/manifest.t
 t/mkdir.t

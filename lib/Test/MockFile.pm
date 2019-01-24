@@ -606,6 +606,19 @@ sub contents {
     return $self->{'contents'};
 }
 
+=head2 filename
+
+The name of the file this mock object is controlling.
+
+=cut
+
+sub filename {
+    my ($self) = @_;
+    $self or die("filename is a method");
+
+    return $self->{'file_name'};
+}
+
 =head2 unlink
 
 Makes the virtual file go away. NOTE: This also works for directories.
