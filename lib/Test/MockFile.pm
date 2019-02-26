@@ -1038,6 +1038,12 @@ BEGIN {
             }
         }
 
+        # Allows for scalar file handles.
+        if ( ref $_[2] && ref $_[2] eq 'SCALAR' ) {
+            goto \&CORE::open if _goto_is_available();
+            return CORE::open( $_[0], $_[1], $_[2] );
+        }
+
         my $abs_path = _find_file_or_fh( $_[2], 1 );    # Follow the link.
         die if ( !$abs_path );
         die if $abs_path eq BROKEN_SYMLINK;
