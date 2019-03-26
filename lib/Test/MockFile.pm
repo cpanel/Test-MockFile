@@ -357,7 +357,7 @@ When creating mocked files or directories, we default their stats to:
             'ctime'     => $now,     # stat[10]
             'blksize'   => 4096,     # stat[11]
             'fileno'    => undef,    # fileno()
-    });
+    } );
     
 You'll notice that mode, size, and blocks have been left out of this. Mode is set to 666 (for files) or 777 (for directories), xored against the current umask.
 Size and blocks are calculated based on the size of 'contents' a.k.a. the fake file.
