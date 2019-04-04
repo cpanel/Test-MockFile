@@ -76,6 +76,7 @@ A strict mode is even provided which can throw a die when files are accessed dur
 
     use Test::MockFile;
 
+    # Be sure to assign the output of mocks, they disappear when they go out of scope
     my $mock_file = Test::MockFile->file("/foo/bar", "contents\ngo\nhere");
     open(my $fh, "<", "/foo/bar") or die; # Does not actually open the file on disk.
     say "ok" if -e $fh;
@@ -111,8 +112,8 @@ For example:
     use Test::MockFile qw/strict/;
 
     # This will not die.
-    Test::MockFile->file("/bar", "...");
-    Test::MockFile->symlink("/foo", "/bar");
+    my $file = Test::MockFile->file("/bar", "...");
+    my $symlink = Test::MockFile->symlink("/foo", "/bar");
     -l "/foo" or print "ok\n";
     open(my $fh, ">", "/foo");
     
@@ -344,7 +345,7 @@ sub dir {
 
 When creating mocked files or directories, we default their stats to:
 
-    Test::MockFile->file( $file, $contents, {
+    my $mattrs = Test::MockFile->file( $file, $contents, {
             'dev'       => 0,        # stat[0]
             'inode'     => 0,        # stat[1]
             'mode'      => $mode,    # stat[2]
@@ -364,9 +365,9 @@ Size and blocks are calculated based on the size of 'contents' a.k.a. the fake f
 
 When you want to override one of the defaults, all you need to do is specify that when you declare the file or directory. The rest will continue to default.
 
-    Test::MockFile->file("/root/abc", "...", {inode => 65, uid => 123, mtime => int((2000-1970) * 365.25 * 24 * 60 * 60 }));
+    my $mfile = Test::MockFile->file("/root/abc", "...", {inode => 65, uid => 123, mtime => int((2000-1970) * 365.25 * 24 * 60 * 60 }));
 
-    Test::MockFile->dir("/sbin", "...", { mode => 0700 }));
+    my $mdir = Test::MockFile->dir("/sbin", "...", { mode => 0700 }));
 
 =head2 new
     
