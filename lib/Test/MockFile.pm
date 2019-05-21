@@ -1188,7 +1188,7 @@ BEGIN {
 
         # O_APPEND
         if ( $sysopen_mode & O_APPEND ) {
-            $_[0]->{'tell'} = length( $mock_file->{'contents'} );
+            seek $_[0], length $mock_file->{'contents'}, 0;
         }
 
         return 1;
