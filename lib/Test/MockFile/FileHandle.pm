@@ -383,7 +383,7 @@ sub SEEK {
 
     $self->{'tell'} = $pos;
 
-    return 1;
+    return $pos == 0 ? '0 but true' : $pos;
 }
 
 =head2 TELL
