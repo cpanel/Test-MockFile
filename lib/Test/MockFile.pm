@@ -402,8 +402,8 @@ sub new {
         'inode'     => 0,        # stat[1]
         'mode'      => 0,        # stat[2]
         'nlink'     => 0,        # stat[3]
-        'uid'       => 0,        # stat[4]
-        'gid'       => 0,        # stat[5]
+        'uid'       => int $>,   # stat[4]
+        'gid'       => int $),   # stat[5]
         'rdev'      => 0,        # stat[6]
                                  # 'size'     => undef,    # stat[7] -- Method call
         'atime'     => $now,     # stat[8]
