@@ -84,13 +84,13 @@ close $fh_real;
 }
 
 undef $fh;
-is( open( $fh, '<', $filename ), undef, qq{Can't open a missing file "$filename"} );
+is( open( $fh, '<', $filename."not-there" ), undef, qq{Can't open a missing file "$filename"} );
 is( $! + 0, ENOENT, 'What $! looks like when failing to open the missing file.' );
 
 {
     note "-------------- MOCK MODE --------------";
-    my $baz = Test::MockFile->file($filename);
-    is( open( my $fh, '<', $filename ), undef, qq{Can't open a missing file "$filename"} );
+    my $baz = Test::MockFile->file($filename . "not-there" );
+    is( open( my $fh, '<', $filename . "not-there" ), undef, qq{Can't open a missing file "$filename"} );
     is( $! + 0, ENOENT, 'What $! looks like when failing to open the missing file.' );
 }
 

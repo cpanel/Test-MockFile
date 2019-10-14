@@ -18,7 +18,9 @@ use Test::MockFile;    # Everything below this can have its open overridden.
 my ( undef, $filename ) = tempfile();
 unlink $filename;
 
-{
+subtest "realmode" => sub {
+    skip_all("TODO need to adjust the test for 5.18") if $] >= 5.018 && $] < 5.019;
+
     note "-------------- REAL MODE --------------";
     is( sysopen( my $fh, $filename, O_WRONLY | O_CREAT | O_EXCL | O_TRUNC ), 1, "Sysopen for write" );
     my $str = join( "", "a" .. "z" );
@@ -29,7 +31,7 @@ unlink $filename;
     is( close $fh, 1, "sysclose \$fh" );
     is( File::Slurper::read_binary($filename), $str . $str_cap, "file contents match what was written" );
     unlink $filename;
-}
+};
 
 {
     my $str     = join( "", "a" .. "z" );
