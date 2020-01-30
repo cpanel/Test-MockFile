@@ -1217,6 +1217,11 @@ BEGIN {
             return undef;
         }
 
+        if ( !( $mock_dir->{'mode'} & S_IFDIR ) ) {
+            $! = ENOTDIR;
+            return undef;
+        }
+
         if ( !defined $_[0] ) {
             $_[0] = Symbol::gensym;
         }
