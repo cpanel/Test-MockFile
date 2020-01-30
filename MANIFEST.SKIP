@@ -19,3 +19,4 @@
 ^Test-MockFile-\d\.\d+/
 ^cpanfile$
 ^.perltidyrc$
+^META\.
