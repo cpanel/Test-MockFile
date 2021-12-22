@@ -135,6 +135,38 @@ BEGIN {
     );
 }
 
+# If we're dealing with a bareword, it's actually a string
+# However, that string should be available as a typeglob with an IO
+# So, theoretically, we can fetch it and see if it works
+# (What happens if someone sends a string of a package glob?)
+sub _upgrade_barewords {
+    my @args = @_;
+
+    # Ignore unnecessary calls
+    @_ == 0
+        and return;
+
+    # Ignore handles
+    ref $args[0]
+        and return @args;
+
+    # Upgrade the handle
+    my $handle;
+    {
+        no strict 'refs';
+        $handle = *{ $args[0] };
+    }
+
+    # Check that the upgrading worked
+    ref \$handle eq 'GLOB'
+        or return @args;
+
+    # Override original handle variable/string
+    $args[0] = $handle;
+
+    return @args;
+}
+
 sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
@@ -1195,6 +1227,8 @@ BEGIN {
     };
 
     *CORE::GLOBAL::opendir = sub(*$) {
+        @_ = _upgrade_barewords(@_) if defined $_[0];
+
         my $mock_dir = _get_file_object( $_[1] );
 
         # 1 arg Opendir doesn't work??
@@ -1240,6 +1274,8 @@ BEGIN {
     };
 
     *CORE::GLOBAL::readdir = sub(*) {
+        @_ = _upgrade_barewords(@_) if defined $_[0];
+
         my $mocked_dir = _get_file_object( $_[0] );
 
         if ( !$mocked_dir ) {
@@ -1276,6 +1312,8 @@ BEGIN {
     };
 
     *CORE::GLOBAL::telldir = sub(*) {
+        @_ = _upgrade_barewords(@_) if defined $_[0];
+
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
 
@@ -1298,6 +1336,8 @@ BEGIN {
     };
 
     *CORE::GLOBAL::rewinddir = sub(*) {
+        @_ = _upgrade_barewords(@_) if defined $_[0];
+
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
 
@@ -1321,6 +1361,8 @@ BEGIN {
     };
 
     *CORE::GLOBAL::seekdir = sub(*$) {
+        @_ = _upgrade_barewords(@_) if defined $_[0];
+
         my ( $fh, $goto ) = @_;
         my $mocked_dir = _get_file_object($fh);
 
@@ -1343,6 +1385,8 @@ BEGIN {
     };
 
     *CORE::GLOBAL::closedir = sub(*) {
+        @_ = _upgrade_barewords(@_) if defined $_[0];
+
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
 
@@ -1479,6 +1523,34 @@ BEGIN {
         return 1;
     };
 }
+
+=head1 BAREWORD FILEHANDLE FAILURES
+
+There is a particular type of bareword filehandle failures that cannot be
+fixed.
+
+These errors occur because there's compile-time code that uses bareword
+filehandles in a function call that cannot be expressed by this module's
+prototypes for core functions.
+
+The only solution to these is loading `Test::MockFile` after the other code:
+
+This will fail:
+
+    # This will fail because Test2::V0 will eventually load Term::Table::Util
+    # which calls open() with a bareword filehandle that is misparsed by this module's
+    # opendir prototypes
+    use Test::MockFile ();
+    use Test2::V0;
+
+This will succeed:
+
+    # This will succeed because open() will be parsed by perl
+    # and only then we override those functions
+    use Test2::V0;
+    use Test::MockFile ();
+
+(Using strict-mode will not fix it, even though you should use it.)
 
 =head1 AUTHOR
 
