@@ -1,12 +1,10 @@
-[![Build Status](https://travis-ci.org/CpanelInc/Test-MockFile.png?branch=master)](https://travis-ci.org/CpanelInc/Test-MockFile)
-
 # NAME
 
 Test::MockFile - Allows tests to validate code that can interact with files without touching the file system.
 
 # VERSION
 
-Version 0.021
+Version 0.022
 
 # SYNOPSIS
 
@@ -21,6 +19,7 @@ A strict mode is even provided which can throw a die when files are accessed dur
 
     use Test::MockFile;
 
+    # Be sure to assign the output of mocks, they disappear when they go out of scope
     my $mock_file = Test::MockFile->file("/foo/bar", "contents\ngo\nhere");
     open(my $fh, "<", "/foo/bar") or die; # Does not actually open the file on disk.
     say "ok" if -e $fh;
@@ -56,8 +55,8 @@ For example:
     use Test::MockFile qw/strict/;
 
     # This will not die.
-    Test::MockFile->file("/bar", "...");
-    Test::MockFile->symlink("/foo", "/bar");
+    my $file = Test::MockFile->file("/bar", "...");
+    my $symlink = Test::MockFile->symlink("/foo", "/bar");
     -l "/foo" or print "ok\n";
     open(my $fh, ">", "/foo");
     
@@ -117,7 +116,7 @@ See ["Mock Stats"](#mock-stats) for what goes in this hash ref.
 
 When creating mocked files or directories, we default their stats to:
 
-    Test::MockFile->file( $file, $contents, {
+    my $mattrs = Test::MockFile->file( $file, $contents, {
             'dev'       => 0,        # stat[0]
             'inode'     => 0,        # stat[1]
             'mode'      => $mode,    # stat[2]
@@ -138,9 +137,9 @@ Size and blocks are calculated based on the size of 'contents' a.k.a. the fake f
 
 When you want to override one of the defaults, all you need to do is specify that when you declare the file or directory. The rest will continue to default.
 
-    Test::MockFile->file("/root/abc", "...", {inode => 65, uid => 123, mtime => int((2000-1970) * 365.25 * 24 * 60 * 60 }));
+    my $mfile = Test::MockFile->file("/root/abc", "...", {inode => 65, uid => 123, mtime => int((2000-1970) * 365.25 * 24 * 60 * 60 }));
 
-    Test::MockFile->dir("/sbin", "...", { mode => 0700 }));
+    my $mdir = Test::MockFile->dir("/sbin", "...", { mode => 0700 }));
 
 ## new
 
@@ -153,6 +152,10 @@ Optional Arg: $contents
 Reports or updates the current contents of the file.
 
 To update, pass an array ref of strings for a dir or a string for a file. Symlinks have no contents.
+
+## filename
+
+The name of the file this mock object is controlling.
 
 ## unlink
 
@@ -251,10 +254,10 @@ Calling this subroutine will clear everything that was passed to **add\_file\_ac
 
 Test::MockFile uses 2 methods to mock file access:
 
-### -X via [Overload::FileCheck](https://metacpan.org/pod/Overload::FileCheck)
+### -X via [Overload::FileCheck](https://metacpan.org/pod/Overload%3A%3AFileCheck)
 
 It is currently not possible in pure perl to override [stat](http://perldoc.perl.org/functions/stat.html), [lstat](http://perldoc.perl.org/functions/lstat.html) and [-X operators](http://perldoc.perl.org/functions/-X.html).
-In conjunction with this module, we've developed [Overload::FileCheck](https://metacpan.org/pod/Overload::FileCheck).
+In conjunction with this module, we've developed [Overload::FileCheck](https://metacpan.org/pod/Overload%3A%3AFileCheck).
 
 This enables us to intercept calls to stat, lstat and -X operators (like -e, -f, -d, -s, etc.) and pass them to our control. If the file is currently being mocked, we return the stat (or lstat) information on the file to be used to determine the answer to whatever check was made. This even works for things like `-e _`.
 If we do not control the file in question, we return `FALLBACK_TO_REAL_OP()` which then makes a normal check.
@@ -280,6 +283,34 @@ However **opendir** file handles were never setup for tie so we have to override
 - seekdir
 - rewinddir
 - closedir
+
+# BAREWORD FILEHANDLE FAILURES
+
+There is a particular type of bareword filehandle failures that cannot be
+fixed.
+
+These errors occur because there's compile-time code that uses bareword
+filehandles in a function call that cannot be expressed by this module's
+prototypes for core functions.
+
+The only solution to these is loading \`Test::MockFile\` after the other code:
+
+This will fail:
+
+    # This will fail because Test2::V0 will eventually load Term::Table::Util
+    # which calls open() with a bareword filehandle that is misparsed by this module's
+    # opendir prototypes
+    use Test::MockFile ();
+    use Test2::V0;
+
+This will succeed:
+
+    # This will succeed because open() will be parsed by perl
+    # and only then we override those functions
+    use Test2::V0;
+    use Test::MockFile ();
+
+(Using strict-mode will not fix it, even though you should use it.)
 
 # AUTHOR
 
@@ -307,7 +338,7 @@ You can also look for information at:
 
 # ACKNOWLEDGEMENTS
 
-Thanks to Nicolas R., `<atoomic at cpan.org>` for help with [Overload::FileCheck](https://metacpan.org/pod/Overload::FileCheck). This module could not have been completed without it.
+Thanks to Nicolas R., `<atoomic at cpan.org>` for help with [Overload::FileCheck](https://metacpan.org/pod/Overload%3A%3AFileCheck). This module could not have been completed without it.
 
 # LICENSE AND COPYRIGHT
 
