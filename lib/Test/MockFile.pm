@@ -89,10 +89,10 @@ A strict mode is even provided which can throw a die when files are accessed dur
     say "ok" if !-e "/foo/baz";
     
     open($baz_fh, ">", "/foo/baz") or die; # open for writing
-    print <$baz_fh> "replace contents\n";
+    print {$baz_fh} "replace contents\n";
     
     open($baz_fh, ">>", "/foo/baz") or die; # open for append.
-    print <$baz_fh> "second line";
+    print {ebaz_fh} "second line";
     close $baz_fh;
     
     say $baz->contents;
