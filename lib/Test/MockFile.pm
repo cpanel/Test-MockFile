@@ -124,6 +124,20 @@ For example:
     -e "/file";
     -l "/file"
 
+Relative paths are not supported:
+
+    use Test::MockFile;
+
+    # Checking relative vs absolute paths
+    $file = Test::MockFile->file( '/foo/../bar', '...' ); # not ok - relative path
+    $file = Test::MockFile->file( '/bar',        '...' ); # ok     - absolute path
+    $file = Test::MockFile->file( 'bar', '...' );         # ok     - current dir
+
+And if you have multiple forward slashes, it will croak as well:
+
+    use Test::MockFile;
+    $file = Test::MockFile->file( '//bar', '...' );
+
 =cut
 
 our %authorized_strict_mode_packages;
@@ -244,6 +258,8 @@ sub file {
     ( defined $file && length $file ) or die("No file provided to instantiate $class");
     _get_file_object($file) and die("It looks like $file is already being mocked. We don't support double mocking yet.");
 
+    _validate_path($file);
+
     my %stats;
     if ( scalar @stats == 1 ) {
         %stats = %{ $stats[0] };
@@ -328,11 +344,31 @@ sub symlink {
     );
 }
 
+sub _validate_path {
+    my $path = shift;
+
+    # Multiple forward slashes
+    if ( $path =~ m[/{2,}] ) {
+        die 'Repeated forward slashes in path';
+    }
+
+    # Reject the following:
+    # ./ ../ /. /.. /./ /../
+    if ( $path =~ m{ ( ^ | / ) \.{1,2} ( / | $ ) }xms ) {
+        die 'Relative paths are not supported';
+    }
+}
+
 =head2 dir
 
 Args: ($dir, \@contents, $stats)
 
 This will cause $dir to be mocked in all file checks, and opendir interactions.
+
+The directory name is normalized so any trailing slash is removed.
+
+    $dir = Test::MockFile->dir( 'mydir/', ... ); # ok
+    $dir->filename(); # mydir
 
 @contents should be provided in the sort order you expect to see the files from readdir.
 NOTE: Because "." and ".." will always be the first things readdir returns, These files are automatically inserted at the front of the array.
@@ -346,6 +382,11 @@ sub dir {
 
     ( defined $dir_name && length $dir_name ) or die("No directory name provided to instantiate $class");
     _get_file_object($dir_name) and die("It looks like $dir_name is already being mocked. We don't support double mocking yet.");
+
+    _validate_path($dir_name);
+
+    # Cleanup trailing forward slashes
+    $dir_name =~ s{[/\\]$}{}xmsg;
 
     # Because undef means it's a missing dir.
     if ( defined $contents ) {
