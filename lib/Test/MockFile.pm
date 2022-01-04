@@ -135,34 +135,44 @@ BEGIN {
     );
 }
 
-# If we're dealing with a bareword, it's actually a string
-# However, that string should be available as a typeglob with an IO
-# So, theoretically, we can fetch it and see if it works
-# (What happens if someone sends a string of a package glob?)
+# Perl understands barewords are filehandles during compilation and
+# parsing. If we override the functions, Perl will not show these as
+# filehandles, but as strings
+# We can try to convert it to the typeglob in the right namespace
 sub _upgrade_barewords {
-    my @args = @_;
+    my @args     = @_;
+    my $caller   = caller(1);
 
-    # Ignore unnecessary calls
-    @_ == 0
-        and return;
+    # Add bareword information to the args
+    # Default: no
+    unshift @args, 0;
 
-    # Ignore handles
-    ref $args[0]
+    # Ignore handle objects
+    ref $args[1]
         and return @args;
+
+    # Ignore variables
+    # Barewords are provided as strings, which means they're read-only
+    # (Of course, readonly scalars here will fool us...)
+    Internals::SvREADONLY( $_[0] )
+        or return @args;
 
     # Upgrade the handle
     my $handle;
     {
         no strict 'refs';
-        $handle = *{ $args[0] };
+        $handle = Symbol::qualify_to_ref( $args[1], caller(1) );
     }
 
     # Check that the upgrading worked
-    ref \$handle eq 'GLOB'
+    ref $handle eq 'GLOB'
         or return @args;
 
+    # Set to bareword
+    $args[0] = 1;
+
     # Override original handle variable/string
-    $args[0] = $handle;
+    $args[1] = $handle;
 
     return @args;
 }
@@ -1054,6 +1064,14 @@ sub _goto_is_available {
 
 BEGIN {
     *CORE::GLOBAL::open = sub(*;$@) {
+        my $likely_bareword;
+        my $arg0;
+        if ( defined $_[0] ) {
+            # We need to remember the first arg to override the typeglob for barewords
+            $arg0 = $_[0];
+            @_ = _upgrade_barewords(@_);
+            $likely_bareword = shift @_;
+        }
 
         # We're not supporting 2 arg or 1 arg opens yet.
         # open(my $fh, ">filehere"); # Just don't do this. It's bad.
@@ -1119,8 +1137,17 @@ BEGIN {
         $rw .= 'r' if grep { $_ eq $mode } qw/+< +> +>> </;
         $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
 
-        $_[0] = IO::File->new;
-        tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
+        my $filefh = IO::File->new;
+        tie *{$filefh}, 'Test::MockFile::FileHandle', $abs_path, $rw;
+
+        if ($likely_bareword) {
+            my $caller = caller();
+            no strict;
+            *{"${caller}::$arg0"} = $filefh;
+            @_ = ( $filefh, $_[1] ? @_[ 1 .. $#_ ] : () );
+        } else {
+            $_[0] = $filefh;
+        }
 
         # This is how we tell if the file is open by something.
 
@@ -1227,7 +1254,10 @@ BEGIN {
     };
 
     *CORE::GLOBAL::opendir = sub(*$) {
-        @_ = _upgrade_barewords(@_) if defined $_[0];
+        if ( defined $_[0] ) {
+            @_ = _upgrade_barewords(@_);
+            shift; # Remove bareword indicator
+        }
 
         my $mock_dir = _get_file_object( $_[1] );
 
@@ -1274,7 +1304,10 @@ BEGIN {
     };
 
     *CORE::GLOBAL::readdir = sub(*) {
-        @_ = _upgrade_barewords(@_) if defined $_[0];
+        if ( defined $_[0] ) {
+            @_ = _upgrade_barewords(@_);
+            shift; # Remove bareword indicator
+        }
 
         my $mocked_dir = _get_file_object( $_[0] );
 
@@ -1312,7 +1345,10 @@ BEGIN {
     };
 
     *CORE::GLOBAL::telldir = sub(*) {
-        @_ = _upgrade_barewords(@_) if defined $_[0];
+        if ( defined $_[0] ) {
+            @_ = _upgrade_barewords(@_);
+            shift; # Remove bareword indicator
+        }
 
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
@@ -1336,7 +1372,10 @@ BEGIN {
     };
 
     *CORE::GLOBAL::rewinddir = sub(*) {
-        @_ = _upgrade_barewords(@_) if defined $_[0];
+        if ( defined $_[0] ) {
+            @_ = _upgrade_barewords(@_);
+            shift; # Remove bareword indicator
+        }
 
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
@@ -1361,7 +1400,10 @@ BEGIN {
     };
 
     *CORE::GLOBAL::seekdir = sub(*$) {
-        @_ = _upgrade_barewords(@_) if defined $_[0];
+        if ( defined $_[0] ) {
+            @_ = _upgrade_barewords(@_);
+            shift; # Remove bareword indicator
+        }
 
         my ( $fh, $goto ) = @_;
         my $mocked_dir = _get_file_object($fh);
@@ -1385,7 +1427,10 @@ BEGIN {
     };
 
     *CORE::GLOBAL::closedir = sub(*) {
-        @_ = _upgrade_barewords(@_) if defined $_[0];
+        if ( defined $_[0] ) {
+            @_ = _upgrade_barewords(@_);
+            shift; # Remove bareword indicator
+        }
 
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
