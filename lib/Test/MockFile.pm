@@ -1196,7 +1196,7 @@ sub _goto_is_available {
 }
 
 BEGIN {
-    *CORE::GLOBAL::glob = sub (_;) {
+    my $_handle_glob = sub {
         my $spec = shift;
 
         # Text::Glob does not understand multiple patterns
@@ -1205,7 +1205,6 @@ BEGIN {
         # Text::Glob does not accept directories in globbing
         # But csh (and thus, Perl) does, so we need to add them
         my @mocked_files = grep $files_being_mocked{$_}->exists(), keys %files_being_mocked;
-
         @mocked_files = map /^(.+)\/[^\/]+$/xms ? ( $_, $1 ) : ($_), @mocked_files;
 
         # Might as well be consistent
@@ -1214,6 +1213,13 @@ BEGIN {
         my @results = map Text::Glob::match_glob( $_, @mocked_files ), @patterns;
         return @results;
     };
+
+    *CORE::GLOBAL::glob = !$^V || $^V lt 5.18.0
+      ? sub {
+        pop;
+        goto &$_handle_glob;
+      }
+      : sub (_;) { goto &$_handle_glob; };
 
     *CORE::GLOBAL::open = sub(*;$@) {
         my $likely_bareword;
