@@ -20,6 +20,7 @@ WriteMakefile(
         'Test2::Tools::Explain'     => '0',
         'Test2::Plugin::NoWarnings' => '0',
         'File::Slurper'             => 0,
+        'Text::Glob'                => 0,
     },
     PREREQ_PM => {
         'Overload::FileCheck' => '0.007',
