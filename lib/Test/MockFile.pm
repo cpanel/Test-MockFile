@@ -27,6 +27,7 @@ use Cwd                        ();
 use IO::File                   ();
 use Test::MockFile::FileHandle ();
 use Test::MockFile::DirHandle  ();
+use Text::Glob                 ();
 use Scalar::Util               ();
 
 use Symbol;
@@ -102,6 +103,10 @@ A strict mode is even provided which can throw a die when files are accessed dur
     
     # The file check will now happen on file system now the file is no longer mocked.
     say "ok" if !-e "/foo/baz";
+
+    my $quux    = Test::MockFile->file('/foo/bar/quux.txt');
+    my @matches = </foo/bar/*.txt>;       # ( 'quux.txt' )
+    my @matches = glob('/foo/bar/*.txt'); # same as above
 
 =head1 IMPORT
 
@@ -1053,6 +1058,24 @@ sub _goto_is_available {
 }
 
 BEGIN {
+    *CORE::GLOBAL::glob = sub (_;) {
+        my $spec = shift;
+
+        # Text::Glob does not understand multiple patterns
+        my @patterns = split /\s+/xms, $spec;
+
+        # Text::Glob does not accept directories in globbing
+        # But csh (and thus, Perl) does, so we need to add them
+        my @mocked_files = keys %files_being_mocked;
+        @mocked_files = map /^(.+)\/[^\/]+$/xms ? ( $_, $1 ) : ($_), @mocked_files;
+
+        # Might as well be consistent
+        @mocked_files = sort @mocked_files;
+
+        my @results = map Text::Glob::match_glob( $_, @mocked_files ), @patterns;
+        return @results;
+    };
+
     *CORE::GLOBAL::open = sub(*;$@) {
 
         # We're not supporting 2 arg or 1 arg opens yet.

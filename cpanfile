@@ -1,6 +1,10 @@
 # kind of duplicate of Makefile.PL
 #	but convenient for Continuous Integration
 
+on 'build' => sub {
+    requires 'Text::Glob' => 0;
+};
+
 on 'test' => sub {
     requires 'Test::More'      => 0;
     requires 'Test2::Bundle::Extended' => 0;
