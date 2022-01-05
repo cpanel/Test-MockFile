@@ -1058,7 +1058,7 @@ sub _goto_is_available {
 }
 
 BEGIN {
-    *CORE::GLOBAL::glob = sub (_;) {
+    my $_handle_glob = sub {
         my $spec = shift;
 
         # Text::Glob does not understand multiple patterns
@@ -1075,6 +1075,13 @@ BEGIN {
         my @results = map Text::Glob::match_glob( $_, @mocked_files ), @patterns;
         return @results;
     };
+
+    *CORE::GLOBAL::glob = !$^V || $^V lt 5.18.0
+      ? sub {
+        pop;
+        goto &$_handle_glob;
+      }
+      : sub (_;) { goto &$_handle_glob; };
 
     *CORE::GLOBAL::open = sub(*;$@) {
 
