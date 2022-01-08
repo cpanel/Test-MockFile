@@ -74,24 +74,25 @@ A strict mode is even provided which can throw a die when files are accessed dur
     # Loaded before Test::MockFile so uses the core perl functions without any hooks.
     use Module::I::Dont::Want::To::Alter;
 
-    use Test::MockFile;
+    # strict mode
+    use Test::MockFile qw< strict >;
 
     # Be sure to assign the output of mocks, they disappear when they go out of scope
     my $mock_file = Test::MockFile->file("/foo/bar", "contents\ngo\nhere");
-    open(my $fh, "<", "/foo/bar") or die; # Does not actually open the file on disk.
-    say "ok" if -e $fh;
+    open my $fh, '<', '/foo/bar' or die; # Does not actually open the file on disk
+    say 'ok' if -e $fh;
     close $fh;
-    say "ok" if (-f "/foo/bar");
-    say "/foo/bar is THIS BIG: " . -s "/foo/bar"
+    say 'ok' if -f '/foo/bar';
+    say '/foo/bar is THIS BIG: ' . -s '/foo/bar';
 
-    my $missing_mocked_file = Test::MockFile->file("/foo/baz"); # File starts out missing.
-    my $opened = open(my $baz_fh, "<", "/foo/baz"); # File reports as missing so fails.
-    say "ok" if !-e "/foo/baz";
+    my $missing_mocked_file = Test::MockFile->file('/foo/baz'); # File starts out missing
+    my $opened              = open my $baz_fh, '<', '/foo/baz'; # File reports as missing so fails
+    say 'ok' if !-e '/foo/baz';
     
-    open($baz_fh, ">", "/foo/baz") or die; # open for writing
+    open $baz_fh, '>', '/foo/baz' or die; # open for writing
     print {$baz_fh} "replace contents\n";
     
-    open($baz_fh, ">>", "/foo/baz") or die; # open for append.
+    open $baz_fh, '>>', '/foo/baz' or die; # open for append.
     print {$baz_fh} "second line";
     close $baz_fh;
     
@@ -101,7 +102,7 @@ A strict mode is even provided which can throw a die when files are accessed dur
     undef $missing_mocked_file;
     
     # The file check will now happen on file system now the file is no longer mocked.
-    say "ok" if !-e "/foo/baz";
+    say 'ok' if !-e '/foo/baz';
 
 =head1 IMPORT
 
@@ -109,20 +110,20 @@ If the module is loaded in strict mode, any file checks, open, sysopen, opendir,
 
 For example:
 
-    use Test::MockFile qw/strict/;
+    use Test::MockFile qw< strict >;
 
     # This will not die.
-    my $file = Test::MockFile->file("/bar", "...");
+    my $file    = Test::MockFile->file("/bar", "...");
     my $symlink = Test::MockFile->symlink("/foo", "/bar");
-    -l "/foo" or print "ok\n";
-    open(my $fh, ">", "/foo");
+    -l '/foo' or print "ok\n";
+    open my $fh, '>', '/foo';
     
     # All of these will die
-    open(my $fh, ">", "/unmocked/file"); # Dies
-    sysopen(my $fh, "/other/file", O_RDONLY);
-    opendir(my $fh, "/dir");
-    -e "/file";
-    -l "/file"
+    open my $fh, '>', '/unmocked/file'; # Dies
+    sysopen my $fh, '/other/file', O_RDONLY;
+    opendir my $fh, '/dir';
+    -e '/file';
+    -l '/file';
 
 Relative paths are not supported:
 
@@ -246,9 +247,18 @@ Args: ($file, $contents, $stats)
 
 This will make cause $file to be mocked in all file checks, opens, etc.
 
-undef contents means that the file should act like it's not there.
+C<undef> contents means that the file should act like it's not there. You can
+only set the stats if you provide content.
 
-See L<Mock Stats> for what goes in this hash ref.
+If you give file content, the directory inside it will be mocked as well.
+
+    my $f = Test::MockFile->file( '/foo/bar' );
+    -d '/foo' # not ok
+
+    my $f = Test::MockFile->file( '/foo/bar', 'some content' );
+    -d '/foo' # ok
+
+See L<Mock Stats> for what goes into the stats hashref.
 
 =cut
 
@@ -260,19 +270,32 @@ sub file {
 
     _validate_path($file);
 
+    if ( @stats > 1 ) {
+        die sprintf 'Unkownn arguments (%s) passed to file() as stats',
+          join ', ', @stats;
+    }
+
+    !defined $contents && @stats
+        and die "You cannot set stats for non-existent file '$file'";
+
     my %stats;
-    if ( scalar @stats == 1 ) {
+    if (@stats) {
+        ref $stats[0] eq 'HASH'
+            or die '->file( FILE_NAME, FILE_CONTENT, { STAT_INFORMATION } )';
+
         %stats = %{ $stats[0] };
-    }
-    elsif ( scalar @stats % 2 ) {
-        die sprintf( "Unknown args (%d) passed to file", scalar @_ );
-    }
-    else {
-        %stats = @stats;
     }
 
     my $perms = S_IFPERMS & ( defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666 );
     $stats{'mode'} = ( $perms ^ umask ) | S_IFREG;
+
+    # Check if directory for this file is an object we're mocking
+    # If so, mark it now as having content
+    # which is this file or - if this file is undef, . and ..
+    ( my $dirname = $file ) =~ s{ / [^/]+ $ }{}xms;
+    if ( defined $contents && $files_being_mocked{$dirname} ) {
+        $files_being_mocked{$dirname}{'has_content'} = 1;
+    }
 
     return $class->new(
         {
@@ -287,11 +310,11 @@ sub file {
 
 Args: C<($file_to_mock, $file_on_disk, $stats)>
 
-This will make cause $file to be mocked in all file checks, opens, etc.
+This will make cause C<$file> to be mocked in all file checks, opens, etc.
 
 If C<file_on_disk> isn't present, then this will die.
 
-See L<Mock Stats> for what goes in this hash ref.
+See L<Mock Stats> for what goes into the stats hashref.
 
 =cut
 
@@ -361,64 +384,86 @@ sub _validate_path {
 
 =head2 dir
 
-Args: ($dir, \@contents, $stats)
+Args: ($dir)
 
-This will cause $dir to be mocked in all file checks, and opendir interactions.
+This will cause $dir to be mocked in all file checks, and C<opendir> interactions.
 
 The directory name is normalized so any trailing slash is removed.
 
     $dir = Test::MockFile->dir( 'mydir/', ... ); # ok
-    $dir->filename(); # mydir
+    $dir->filename();                            # mydir
 
-@contents should be provided in the sort order you expect to see the files from readdir.
-NOTE: Because "." and ".." will always be the first things readdir returns, These files are automatically inserted at the front of the array.
+If there were previously mocked files (within the same scope), the directory will
+exist. Otherwise, the directory will be nonexistent.
 
-See L<Mock Stats> for what goes in this hash ref.
+    my $dir = Test::MockFile->dir('/etc');
+    -d $dir;          # not ok since directory wasn't created yet
+    $dir->contents(); # undef
+
+    # Now we can create an empty directory
+    mkdir '/etc';
+    $dir_etc->contents(); # . ..
+
+    # Alternatively, we can already create files with ->file()
+    $dir_log  = Test::MockFile->dir('/var');
+    $file_log = Test::MockFile->file( '/var/log/access_log', $some_content );
+    $dir_log->contents(); # . .. access_log
+
+    # If you create a nonexistent file but then give it content, it will create
+    # the directory for you
+    my $file = Test::MockFile->file('/foo/bar');
+    my $dir  = Test::MockFile->dir('/foo');
+    -d '/foo'                 # false
+    -e '/foo/bar';            # false
+    $dir->contents();         # undef
+
+    $file->contents('hello');
+    -e '/foo/bar';            # true
+    -d '/foo';                # true
+    $dir->contents();         # . .. bar
+
+NOTE: Because C<.> and C<..> will always be the first things C<readdir> returns,
+These files are automatically inserted at the front of the array. The order of
+files is sorted.
+
+If you want to affect the stat information of a directory, you need to use the
+available core Perl keywords. (We might introduce a special helper method for it
+in the future.)
+
+    $d = Test::MockFile->dir( '/foo', [], { 'mode' => 0755 } );    # dies
+    $d = Test::MockFile->dir( '/foo', undef, { 'mode' => 0755 } ); # dies
+
+    $d = Test::MockFile->dir('/foo');
+    mkdir $d, 0755;                   # ok
 
 =cut
 
 sub dir {
-    my ( $class, $dir_name, $contents, @stats ) = @_;
+    my ( $class, $dir_name ) = @_;
 
     ( defined $dir_name && length $dir_name ) or die("No directory name provided to instantiate $class");
-    _get_file_object($dir_name) and die("It looks like $dir_name is already being mocked. We don't support double mocking yet.");
+    _get_file_object($dir_name)
+        and die "It looks like $dir_name is already being mocked. We don't support double mocking yet.";
 
     _validate_path($dir_name);
 
     # Cleanup trailing forward slashes
     $dir_name =~ s{[/\\]$}{}xmsg;
 
-    # Because undef means it's a missing dir.
-    if ( defined $contents ) {
-        ref $contents eq 'ARRAY' or die("directory contents must be an array ref or undef if the directory is to be missing.");
+    @_ > 2
+        and die "You cannot set stats for nonexistent dir '$dir_name'";
 
-        # Push . and .. on if not listed in the dir.
-        if ( !grep { $_ eq '..' } @$contents ) {
-            unshift @$contents, '..';
-        }
-        if ( !grep { $_ eq '.' } @$contents ) {
-            unshift @$contents, '.';
-        }
-    }
+    my $perms = S_IFPERMS & 0777;
+    my %stats = ( 'mode' => ( $perms ^ umask ) | S_IFDIR );
 
-    my %stats;
-    if ( scalar @stats == 1 ) {
-        %stats = %{ $stats[0] };
-    }
-    elsif ( scalar @stats % 2 ) {
-        die sprintf( "Unknown args (%d) passed to file", scalar @_ );
-    }
-    else {
-        %stats = @stats;
-    }
+    # TODO: Add uid, gid, etc. for the user
 
-    my $perms = S_IFPERMS & ( defined $stats{'mode'} ? int( $stats{'mode'} ) : 0777 );
-    $stats{'mode'} = ( $perms ^ umask ) | S_IFDIR;
-
+    # FIXME: Quick and dirty: provide a helper method?
+    my $has_content = grep m{^\Q$dir_name/\E}xms, %files_being_mocked;
     return $class->new(
         {
-            'file_name' => $dir_name,
-            'contents'  => $contents,
+            'file_name'   => $dir_name,
+            'has_content' => $has_content,
             %stats
         }
     );
@@ -481,24 +526,25 @@ sub new {
     my $now = time;
 
     my $self = bless {
-        'dev'       => 0,         # stat[0]
-        'inode'     => 0,         # stat[1]
-        'mode'      => 0,         # stat[2]
-        'nlink'     => 0,         # stat[3]
-        'uid'       => int $>,    # stat[4]
-        'gid'       => int $),    # stat[5]
-        'rdev'      => 0,         # stat[6]
-                                  # 'size'     => undef,    # stat[7] -- Method call
-        'atime'     => $now,      # stat[8]
-        'mtime'     => $now,      # stat[9]
-        'ctime'     => $now,      # stat[10]
-        'blksize'   => 4096,      # stat[11]
-                                  # 'blocks'   => 0,        # stat[12] -- Method call
-        'fileno'    => undef,     # fileno()
-        'tty'       => 0,         # possibly this is already provided in mode?
-        'readlink'  => '',        # what the symlink points to.
-        'file_name' => undef,
-        'contents'  => undef,
+        'dev'         => 0,         # stat[0]
+        'inode'       => 0,         # stat[1]
+        'mode'        => 0,         # stat[2]
+        'nlink'       => 0,         # stat[3]
+        'uid'         => int $>,    # stat[4]
+        'gid'         => int $),    # stat[5]
+        'rdev'        => 0,         # stat[6]
+                                    # 'size'     => undef,    # stat[7] -- Method call
+        'atime'       => $now,      # stat[8]
+        'mtime'       => $now,      # stat[9]
+        'ctime'       => $now,      # stat[10]
+        'blksize'     => 4096,      # stat[11]
+                                    # 'blocks'   => 0,        # stat[12] -- Method call
+        'fileno'      => undef,     # fileno()
+        'tty'         => 0,         # possibly this is already provided in mode?
+        'readlink'    => '',        # what the symlink points to.
+        'file_name'   => undef,
+        'contents'    => undef,
+        'has_content' => undef,
     }, $class;
 
     foreach my $key ( keys %opts ) {
@@ -559,7 +605,7 @@ sub _mock_stat {
     }
 
     # File is not present so no stats for you!
-    return [] if !$file_data->is_link && !defined $file_data->{'contents'};
+    return [] if !$file_data->is_link && !defined $file_data->contents();
 
     # Make sure the file size is correct in the stats before returning its contents.
     return [ $file_data->stat ];
@@ -630,6 +676,16 @@ sub _fh_to_file {
     return;
 }
 
+sub _files_in_dir {
+    my $dirname      = shift;
+    my @files_in_dir = @files_being_mocked{
+        grep m{^\Q$dirname/\E},
+        keys %files_being_mocked
+    };
+
+    return @files_in_dir;
+}
+
 sub _abs_path_to_file {
     my ($path) = shift;
 
@@ -662,9 +718,12 @@ sub DESTROY {
 
 Optional Arg: $contents
 
-Reports or updates the current contents of the file.
+Retrieves or updates the current contents of the file.
 
-To update, pass an array ref of strings for a dir or a string for a file. Symlinks have no contents.
+Only retrieves the content of the directory (as an arrayref).  You can set
+directory contents with calling the C<file()> method described above.
+
+Symlinks have no contents.
 
 =cut
 
@@ -672,22 +731,42 @@ sub contents {
     my ( $self, $new_contents ) = @_;
     $self or die;
 
-    Carp::confess("checking or setting contents on a symlink is not supported") if $self->is_link;
+    $self->is_link
+        and Carp::confess("checking or setting contents on a symlink is not supported");
 
-    # If 2nd arg was passed.
-    if ( scalar @_ == 2 ) {
-        if ( defined $new_contents ) {    # undef is legal everywhere.
-            if ( $self->is_file && ref $new_contents ) {
-                die("File contents should be a simple string");
-            }
-            elsif ( $self->is_dir && ref $new_contents ne 'ARRAY' ) {
-                die("Directory contents should be an array ref of strings corresponding to what you want readdir to return.");
-            }
-        }
-        return $self->{'contents'} = $_[1];
+    # handle directories
+    if ( $self->is_dir() ) {
+        $new_contents
+            and die 'To change the contents of the dir, you must work on its files';
+
+        $self->{'has_content'}
+            or return;
+
+        # TODO: Quick and dirty, but works (maybe provide a ->basename()?)
+        # Retrieve the files in this directory and removes prefix
+        my $dirname        = $self->filename();
+        my @existing_files = sort map {
+            ( my $basename = $_->filename() ) =~ s{^\Q$dirname/\E}{}xms;
+            defined $_->{'contents'} ? ($basename) : ();
+        } _files_in_dir($dirname);
+
+        return [ '.', '..', @existing_files ];
     }
 
-    return $self->{'contents'};
+    # handle files
+    if ( $self->is_file() ) {
+        if ( defined $new_contents ) {
+            ref $new_contents
+                and die 'File contents must be a simple string';
+
+            # XXX Why use $_[1] directly?
+            $self->{'contents'} = $_[1];
+        }
+
+        return $self->{'contents'};
+    }
+
+    Carp::croak('This seems to be neither a file nor a dir - what is it?');
 }
 
 =head2 filename
@@ -732,7 +811,8 @@ sub unlink {
         $self->{'readlink'} = undef;
     }
     else {
-        $self->contents(undef);
+        $self->{'has_content'} = undef;
+        $self->{'contents'}    = undef;
     }
     return 1;
 }
@@ -888,9 +968,16 @@ returns true or false based on if the file exists right now.
 sub exists {
     my ($self) = @_;
 
-    my $exists_field = $self->is_link ? 'readlink' : 'contents';
+    $self->is_link()
+        and return defined $self->{'readlink'} ? 1 : 0;
 
-    return defined $self->{$exists_field} ? 1 : 0;
+    $self->is_file()
+        and return defined $self->{'contents'} ? 1 : 0;
+
+    $self->is_dir()
+        and return $self->{'has_content'} ? 1 : 0;
+
+    return 0;
 }
 
 =head2 blocks
@@ -1168,7 +1255,7 @@ BEGIN {
         # At this point we're mocking the file. Let's do it!
 
         # If contents is undef, we act like the file isn't there.
-        if ( !defined $mock_file->{'contents'} && grep { $mode eq $_ } qw/< +</ ) {
+        if ( !defined $mock_file->contents() && grep { $mode eq $_ } qw/< +</ ) {
             $! = ENOENT;
             return;
         }
@@ -1314,7 +1401,7 @@ BEGIN {
             return CORE::opendir( $_[0], $_[1] );
         }
 
-        if ( !defined $mock_dir->{'contents'} ) {
+        if ( !defined $mock_dir->contents ) {
             $! = ENOENT;
             return undef;
         }
@@ -1334,7 +1421,7 @@ BEGIN {
 
         # This is how we tell if the file is open by something.
         my $abs_path = $mock_dir->{'file_name'};
-        $mock_dir->{'obj'} = Test::MockFile::DirHandle->new( $abs_path, $mock_dir->{'contents'} );
+        $mock_dir->{'obj'} = Test::MockFile::DirHandle->new( $abs_path, $mock_dir->contents() );
         $mock_dir->{'fh'}  = "$_[0]";
 
         return 1;
@@ -1538,9 +1625,8 @@ BEGIN {
             return CORE::mkdir(@_);
         }
 
-        # Because we've mocked this to be a file and it doesn't exist we are going to die here.
-        # The tester needs to fix this presumably.
-        if ( !$mock->is_dir && $mock->exists ) {
+        # File or directory, this exists and should fail
+        if ( $mock->exists ) {
             $! = EEXIST;
             return 0;
         }
@@ -1549,7 +1635,8 @@ BEGIN {
         $mock->{'mode'} = ( $perms ^ umask ) | S_IFDIR;
         delete $mock->{'readlink'};
 
-        $mock->contents( [qw/. ../] );
+        # This should now start returning content
+        $mock->{'has_content'} = 1;
 
         return 1;
     };
@@ -1592,7 +1679,7 @@ BEGIN {
             return 0;
         }
 
-        $mock->contents(undef);
+        $mock->{'has_content'} = undef;
         return 1;
     };
 }
