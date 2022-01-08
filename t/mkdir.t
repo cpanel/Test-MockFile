@@ -103,10 +103,12 @@ subtest "mkdir when symlink exists" => sub {
     is( mkdir($file_path), 0, "A mock mkdir when the dir is already a symlink." );
     is( $! + 0, EEXIST, ' - $! is EEXIST.' ) or diag "\$\! = $!";
 
-    $mock->unlink;
+    # Stop mocking this and start over
+    undef $mock;
+    $mock = Test::MockFile->dir($file_path);
+
     is( mkdir($file_path), 1, "A mock mkdir when the path is a mocked symlink but not on disk turns the mock object into a dir." );
     is( $mock->is_dir,     1, '$mock is now a directory' );
-
 };
 
 subtest "mkdir with file perms" => sub {

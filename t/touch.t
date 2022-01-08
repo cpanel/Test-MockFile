@@ -27,8 +27,12 @@ use Test::MockFile ();
 note "-------------- MOCK MODE --------------";
 my @mock;
 my $file = Test::MockFile->file( '/file', "" );
-my $dir  = Test::MockFile->dir( '/dir', [] );
+my $dir  = Test::MockFile->dir( '/dir' );
 my $link = Test::MockFile->symlink( '/link', '/tonowhere' );
+
+ok( !-d '/dir', 'Directory does not exist yet' );
+ok( mkdir('/dir'), 'Successfully created /dir' );
+ok( -d '/dir', 'Directory now exists' );
 
 is( $link->unlink, 1, "unlink /link works." );
 is( $link->exists, 0, "/link is now gone" );

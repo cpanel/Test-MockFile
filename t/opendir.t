@@ -42,7 +42,9 @@ my ( $real_fh, $f3 ) = tempfile( DIR => $temp_dir );
 like( warning { readdir($real_fh) }, qr/^readdir\(\) attempted on invalid dirhandle \$fh/, "We only warn if the file handle or glob is invalid." );
 
 note "-------------- MOCK MODE --------------";
-my $bar = Test::MockFile->dir( $temp_dir, [qw/. .. abc def/] );
+my $abc = Test::MockFile->file( "$temp_dir/abc", 'hello' );
+my $def = Test::MockFile->file( "$temp_dir/def", 'hello' );
+my $bar = Test::MockFile->dir($temp_dir);
 my $baz = Test::MockFile->file( $temp_notdir, '' );
 
 is( opendir( $dir_fh, $temp_dir ), 1,     "Mocked temp dir opens and returns true" );

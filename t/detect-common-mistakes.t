@@ -12,7 +12,7 @@ use Test::MockFile qw< strict >;
 subtest( 'Removing trailing forward slash for directories' => sub {
     my $dir0;
     ok(
-        lives( sub { $dir0 = Test::MockFile->dir( '/foo/', [] ); } ),
+        lives( sub { $dir0 = Test::MockFile->dir('/foo/'); } ),
         'Create /foo/',
     );
 
@@ -22,19 +22,19 @@ subtest( 'Removing trailing forward slash for directories' => sub {
 
 subtest( 'Checking for multiple forward slash in paths' => sub {
     like(
-        dies( sub { Test::MockFile->dir( '/bar//', [] ); } ),
+        dies( sub { Test::MockFile->dir('/bar//'); } ),
         qr/\QRepeated forward slashes in path\E/xms,
         'Double trailing forward slash',
     );
 
     like(
-        dies( sub { Test::MockFile->dir( '/bar///', [] ); } ),
+        dies( sub { Test::MockFile->dir('/bar///'); } ),
         qr/\QRepeated forward slashes in path\E/xms,
         'Multiple trailing forward slash',
     );
 
     like(
-        dies( sub { Test::MockFile->dir( '//bar/', [] ); } ),
+        dies( sub { Test::MockFile->dir('//bar/'); } ),
         qr/\QRepeated forward slashes in path\E/xms,
         'Double leading forward slash for dir',
     );
@@ -46,7 +46,7 @@ subtest( 'Checking for multiple forward slash in paths' => sub {
     );
 
     like(
-        dies( sub { Test::MockFile->dir( '/foo//bar/', [] ); } ),
+        dies( sub { Test::MockFile->dir('/foo//bar/'); } ),
         qr/\QRepeated forward slashes in path\E/xms,
         'Double forward slash in the middle for dir',
     );
@@ -60,7 +60,7 @@ subtest( 'Checking for multiple forward slash in paths' => sub {
 
 subtest( 'Relative paths' => sub {
     like(
-        dies( sub { Test::MockFile->dir( './bar/', [] ); } ),
+        dies( sub { Test::MockFile->dir('./bar/'); } ),
         qr/\QRelative paths are not supported\E/xms,
         'Failure with ./ for dir',
     );
@@ -72,7 +72,7 @@ subtest( 'Relative paths' => sub {
     );
 
     like(
-        dies( sub { Test::MockFile->dir( '../bar/', [] ); } ),
+        dies( sub { Test::MockFile->dir('../bar/'); } ),
         qr/\QRelative paths are not supported\E/xms,
         'Failure with ../ for dir',
     );
@@ -84,7 +84,7 @@ subtest( 'Relative paths' => sub {
     );
 
     like(
-        dies( sub { Test::MockFile->dir( '/foo/../bar/', [] ); } ),
+        dies( sub { Test::MockFile->dir('/foo/../bar/'); } ),
         qr/\QRelative paths are not supported\E/xms,
         'Failure with /../ for dir',
     );
@@ -108,7 +108,7 @@ subtest( 'Relative paths' => sub {
     );
 
     like(
-        dies( sub { Test::MockFile->dir( '/foo/./bar/', [] ); } ),
+        dies( sub { Test::MockFile->dir('/foo/./bar/'); } ),
         qr/\QRelative paths are not supported\E/xms,
         'Failure with /./ for dir',
     );
@@ -126,7 +126,7 @@ subtest( 'Relative paths' => sub {
     );
 
     is(
-        lives( sub { Test::MockFile->dir( 'foo/', [] ); } ),
+        lives( sub { Test::MockFile->dir('foo/'); } ),
         1,
         'No problem with current directory paths (dir with trailing forward slash)',
     );
