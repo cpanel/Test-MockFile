@@ -89,19 +89,19 @@ A strict mode is even provided which can throw a die when files are accessed dur
     my $missing_mocked_file = Test::MockFile->file('/foo/baz'); # File starts out missing
     my $opened              = open my $baz_fh, '<', '/foo/baz'; # File reports as missing so fails
     say 'ok' if !-e '/foo/baz';
-    
+
     open $baz_fh, '>', '/foo/baz' or die; # open for writing
     print {$baz_fh} "replace contents\n";
-    
+
     open $baz_fh, '>>', '/foo/baz' or die; # open for append.
     print {$baz_fh} "second line";
     close $baz_fh;
-    
+
     say $baz->contents;
-    
+
     # Unmock your file.
     undef $missing_mocked_file;
-    
+
     # The file check will now happen on file system now the file is no longer mocked.
     say 'ok' if !-e '/foo/baz';
 
@@ -122,7 +122,7 @@ For example:
     my $symlink = Test::MockFile->symlink("/foo", "/bar");
     -l '/foo' or print "ok\n";
     open my $fh, '>', '/foo';
-    
+
     # All of these will die
     open my $fh, '>', '/unmocked/file'; # Dies
     sysopen my $fh, '/other/file', O_RDONLY;
@@ -461,7 +461,7 @@ sub dir {
     my $perms = S_IFPERMS & 0777;
     my %stats = ( 'mode' => ( $perms ^ umask ) | S_IFDIR );
 
-    # TODO: Add uid, gid, etc. for the user
+    # TODO: Add stat information
 
     # FIXME: Quick and dirty: provide a helper method?
     my $has_content = grep m{^\Q$dir_name/\E}xms, %files_being_mocked;
@@ -478,13 +478,13 @@ sub dir {
 
 When creating mocked files or directories, we default their stats to:
 
-    my $mattrs = Test::MockFile->file( $file, $contents, {
+    my $attrs = Test::MockFile->file( $file, $contents, {
             'dev'       => 0,        # stat[0]
             'inode'     => 0,        # stat[1]
             'mode'      => $mode,    # stat[2]
             'nlink'     => 0,        # stat[3]
-            'uid'       => 0,        # stat[4]
-            'gid'       => 0,        # stat[5]
+            'uid'       => int $>,   # stat[4]
+            'gid'       => int $),   # stat[5]
             'rdev'      => 0,        # stat[6]
             'atime'     => $now,     # stat[8]
             'mtime'     => $now,     # stat[9]
@@ -492,7 +492,7 @@ When creating mocked files or directories, we default their stats to:
             'blksize'   => 4096,     # stat[11]
             'fileno'    => undef,    # fileno()
     } );
-    
+
 You'll notice that mode, size, and blocks have been left out of this. Mode is set to 666 (for files) or 777 (for directories), xored against the current umask.
 Size and blocks are calculated based on the size of 'contents' a.k.a. the fake file.
 
@@ -503,7 +503,7 @@ When you want to override one of the defaults, all you need to do is specify tha
     my $mdir = Test::MockFile->dir("/sbin", "...", { mode => 0700 }));
 
 =head2 new
-    
+
 This class method is called by file/symlink/dir. There is no good reason to call this directly.
 
 =cut
@@ -1154,7 +1154,7 @@ If we do not control the file in question, we return C<FALLBACK_TO_REAL_OP()> wh
 Since 5.10, it has been possible to override function calls by defining them. like:
 
     *CORE::GLOBAL::open = sub(*;$@) {...}
-    
+
 Any code which is loaded B<AFTER> this happens will use the alternate open. This means you can place your C<use Test::MockFile> statement after statements you don't want to be mocked and
 there is no risk that the code will ever be altered by Test::MockFile.
 
@@ -1748,7 +1748,7 @@ Todd Rinaldo, C<< <toddr at cpan.org> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to L<https://github.com/CpanelInc/Test-MockFile>. 
+Please report any bugs or feature requests to L<https://github.com/CpanelInc/Test-MockFile>.
 
 =head1 SUPPORT
 
