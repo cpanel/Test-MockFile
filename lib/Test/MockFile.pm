@@ -461,7 +461,7 @@ sub dir {
     my $perms = S_IFPERMS & 0777;
     my %stats = ( 'mode' => ( $perms ^ umask ) | S_IFDIR );
 
-    # TODO: Add uid, gid, etc. for the user
+    # TODO: Add stat information
 
     # FIXME: Quick and dirty: provide a helper method?
     my $has_content = grep m{^\Q$dir_name/\E}xms, %files_being_mocked;
@@ -478,13 +478,13 @@ sub dir {
 
 When creating mocked files or directories, we default their stats to:
 
-    my $mattrs = Test::MockFile->file( $file, $contents, {
+    my $attrs = Test::MockFile->file( $file, $contents, {
             'dev'       => 0,        # stat[0]
             'inode'     => 0,        # stat[1]
             'mode'      => $mode,    # stat[2]
             'nlink'     => 0,        # stat[3]
-            'uid'       => 0,        # stat[4]
-            'gid'       => 0,        # stat[5]
+            'uid'       => int $>,   # stat[4]
+            'gid'       => int $),   # stat[5]
             'rdev'      => 0,        # stat[6]
             'atime'     => $now,     # stat[8]
             'mtime'     => $now,     # stat[9]
