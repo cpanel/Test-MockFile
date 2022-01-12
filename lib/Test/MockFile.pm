@@ -206,6 +206,8 @@ sub _strict_mode_violation {
       : $command eq 'opendir' ? 1
       : $command eq 'stat'    ? 0
       : $command eq 'lstat'   ? 0
+      : $command eq 'chown'   ? 2
+      : $command eq 'chmod'   ? 2
       :                         Carp::croak("Unknown strict mode violation for $command");
 
     my @stack;
@@ -1711,6 +1713,125 @@ BEGIN {
 
         $mock->{'has_content'} = undef;
         return 1;
+    };
+
+    *CORE::GLOBAL::chown = sub(@) {
+        my ( $uid, $gid, @files ) = @_;
+
+        $^O eq 'MSWin32'
+            and return 0; # does nothing on Windows
+
+        # Not an error, report we changed zero files
+        @files
+            or return 0;
+
+        my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
+        my @unmocked_files = grep !$mocked_files{$_}, @files;
+        my @mocked_files   = map ref $_ ? $_->{'file_name'} : (), values %mocked_files;
+
+        # The idea is that if some are mocked and some are not,
+        # it's probably a mistake
+        if ( @mocked_files != @files ) {
+            Carp::croak(
+                sprintf 'You called chown() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
+                ( join ', ', @mocked_files   ),
+                ( join ', ', @unmocked_files ),
+            );
+        }
+
+        $! = 0;
+
+        # -1 means "keep as is"
+        $uid == -1 and $uid = $>;
+        $gid == -1 and $gid = $);
+
+        # Check if $gid is within "$)"
+        # If so, it will be an error no matter what
+        # so there's no point in even looking at files or even sending to CORE::chown
+        if ( $> != $uid || !grep /(^ | \s ) \Q$gid\E ( \s | $ )/xms, $) ) {
+            $! = EPERM;
+
+            # Forget going over files, this is over
+            @files = ();
+        }
+
+        my $num_changed = 0;
+        foreach my $file (@files){
+            my $mock = $mocked_files{$file};
+
+            if ( !$mock ) {
+                _real_file_access_hook( 'chown', \@_ );
+                goto \&CORE::chown if _goto_is_available();
+                return CORE::chown(@files);
+            }
+
+            if ( !$mock->exists() ) {
+                $! ||= ENOENT;
+                next;
+            }
+
+            $mock->{'uid'} = $uid;
+            $mock->{'gid'} = $gid;
+
+            $num_changed++;
+        }
+
+        return $num_changed;
+    };
+
+    *CORE::GLOBAL::chmod = sub(@) {
+        my ( $mode, @files ) = @_;
+
+        # Not an error, report we changed zero files
+        @files
+            or return 0;
+
+        # Grab numbers - nothing means "0" (which is the behavior of CORE::chmod)
+        # (This will issue a warning, that's also the expected behavior)
+        {
+            no warnings;
+            $mode =~ /^[0-9]+/xms
+                or warn "Argument \"$mode\" isn't numeric in chmod";
+            $mode = int $mode;
+        }
+
+        my %mocked_files = map +( $_ => _get_file_object($_) ), @files;
+        my @unmocked_files = grep !$mocked_files{$_}, @files;
+        my @mocked_files   = map ref $_ ? $_->{'file_name'} : (), values %mocked_files;
+
+        # The idea is that if some are mocked and some are not,
+        # it's probably a mistake
+        if ( @mocked_files != @files ) {
+            Carp::croak(
+                sprintf 'You called chmod() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
+                ( join ', ', @mocked_files   ),
+                ( join ', ', @unmocked_files ),
+            );
+        }
+
+        my $num_changed = 0;
+        foreach my $file (@files){
+            my $mock = $mocked_files{$file};
+
+            if ( !$mock ) {
+                _real_file_access_hook( 'chmod', \@_ );
+                goto \&CORE::chown if _goto_is_available();
+                return CORE::chown(@files);
+            }
+
+            # chmod is less specific in such errors
+            # chmod $mode, '/foo/' still yields ENOENT
+            if ( !$mock->exists() ) {
+                $! = ENOENT;
+                next;
+            }
+
+            $mock->{'mode'} = ( $mock->{'mode'} & S_IFMT ) + $mode;
+
+            $num_changed++;
+        }
+
+        return $num_changed;
     };
 }
 
