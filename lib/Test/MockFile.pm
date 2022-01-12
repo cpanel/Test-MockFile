@@ -160,8 +160,8 @@ BEGIN {
 # filehandles, but as strings
 # We can try to convert it to the typeglob in the right namespace
 sub _upgrade_barewords {
-    my @args     = @_;
-    my $caller   = caller(1);
+    my @args   = @_;
+    my $caller = caller(1);
 
     # Add bareword information to the args
     # Default: no
@@ -169,13 +169,13 @@ sub _upgrade_barewords {
 
     # Ignore handle objects
     ref $args[1]
-        and return @args;
+      and return @args;
 
     # Ignore variables
     # Barewords are provided as strings, which means they're read-only
     # (Of course, readonly scalars here will fool us...)
     Internals::SvREADONLY( $_[0] )
-        or return @args;
+      or return @args;
 
     # Upgrade the handle
     my $handle;
@@ -186,7 +186,7 @@ sub _upgrade_barewords {
 
     # Check that the upgrading worked
     ref $handle eq 'GLOB'
-        or return @args;
+      or return @args;
 
     # Set to bareword
     $args[0] = 1;
@@ -281,12 +281,12 @@ sub file {
     }
 
     !defined $contents && @stats
-        and die "You cannot set stats for non-existent file '$file'";
+      and die "You cannot set stats for non-existent file '$file'";
 
     my %stats;
     if (@stats) {
         ref $stats[0] eq 'HASH'
-            or die '->file( FILE_NAME, FILE_CONTENT, { STAT_INFORMATION } )';
+          or die '->file( FILE_NAME, FILE_CONTENT, { STAT_INFORMATION } )';
 
         %stats = %{ $stats[0] };
     }
@@ -357,7 +357,7 @@ Stats are not able to be specified on instantiation but can in theory be altered
 sub symlink {
     my ( $class, $readlink, $file ) = @_;
 
-    ( defined $file && length $file ) or die("No file provided to instantiate $class");
+    ( defined $file && length $file )          or die("No file provided to instantiate $class");
     ( !defined $readlink || length $readlink ) or die("No file provided for $file to point to in $class");
 
     _get_file_object($file) and die("It looks like $file is already being mocked. We don't support double mocking yet.");
@@ -448,7 +448,7 @@ sub dir {
 
     ( defined $dir_name && length $dir_name ) or die("No directory name provided to instantiate $class");
     _get_file_object($dir_name)
-        and die "It looks like $dir_name is already being mocked. We don't support double mocking yet.";
+      and die "It looks like $dir_name is already being mocked. We don't support double mocking yet.";
 
     _validate_path($dir_name);
 
@@ -456,7 +456,7 @@ sub dir {
     $dir_name =~ s{[/\\]$}{}xmsg;
 
     @_ > 2
-        and die "You cannot set stats for nonexistent dir '$dir_name'";
+      and die "You cannot set stats for nonexistent dir '$dir_name'";
 
     my $perms = S_IFPERMS & 0777;
     my %stats = ( 'mode' => ( $perms ^ umask ) | S_IFDIR );
@@ -737,15 +737,15 @@ sub contents {
     $self or die;
 
     $self->is_link
-        and Carp::confess("checking or setting contents on a symlink is not supported");
+      and Carp::confess("checking or setting contents on a symlink is not supported");
 
     # handle directories
     if ( $self->is_dir() ) {
         $new_contents
-            and die 'To change the contents of the dir, you must work on its files';
+          and die 'To change the contents of the dir, you must work on its files';
 
         $self->{'has_content'}
-            or return;
+          or return;
 
         # TODO: Quick and dirty, but works (maybe provide a ->basename()?)
         # Retrieve the files in this directory and removes prefix
@@ -762,7 +762,7 @@ sub contents {
     if ( $self->is_file() ) {
         if ( defined $new_contents ) {
             ref $new_contents
-                and die 'File contents must be a simple string';
+              and die 'File contents must be a simple string';
 
             # XXX Why use $_[1] directly?
             $self->{'contents'} = $_[1];
@@ -974,13 +974,13 @@ sub exists {
     my ($self) = @_;
 
     $self->is_link()
-        and return defined $self->{'readlink'} ? 1 : 0;
+      and return defined $self->{'readlink'} ? 1 : 0;
 
     $self->is_file()
-        and return defined $self->{'contents'} ? 1 : 0;
+      and return defined $self->{'contents'} ? 1 : 0;
 
     $self->is_dir()
-        and return $self->{'has_content'} ? 1 : 0;
+      and return $self->{'has_content'} ? 1 : 0;
 
     return 0;
 }
@@ -1225,6 +1225,7 @@ BEGIN {
         my $likely_bareword;
         my $arg0;
         if ( defined $_[0] ) {
+
             # We need to remember the first arg to override the typeglob for barewords
             $arg0 = $_[0];
             ( $likely_bareword, @_ ) = _upgrade_barewords(@_);
@@ -1302,7 +1303,8 @@ BEGIN {
             no strict;
             *{"${caller}::$arg0"} = $filefh;
             @_ = ( $filefh, $_[1] ? @_[ 1 .. $#_ ] : () );
-        } else {
+        }
+        else {
             $_[0] = $filefh;
         }
 
@@ -1411,6 +1413,7 @@ BEGIN {
     };
 
     *CORE::GLOBAL::opendir = sub(*$) {
+
         # Upgrade but ignore bareword indicator
         ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
 
@@ -1459,6 +1462,7 @@ BEGIN {
     };
 
     *CORE::GLOBAL::readdir = sub(*) {
+
         # Upgrade but ignore bareword indicator
         ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
 
@@ -1498,6 +1502,7 @@ BEGIN {
     };
 
     *CORE::GLOBAL::telldir = sub(*) {
+
         # Upgrade but ignore bareword indicator
         ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
 
@@ -1523,6 +1528,7 @@ BEGIN {
     };
 
     *CORE::GLOBAL::rewinddir = sub(*) {
+
         # Upgrade but ignore bareword indicator
         ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
 
@@ -1549,6 +1555,7 @@ BEGIN {
     };
 
     *CORE::GLOBAL::seekdir = sub(*$) {
+
         # Upgrade but ignore bareword indicator
         ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
 
@@ -1574,6 +1581,7 @@ BEGIN {
     };
 
     *CORE::GLOBAL::closedir = sub(*) {
+
         # Upgrade but ignore bareword indicator
         ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
 

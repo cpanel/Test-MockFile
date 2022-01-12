@@ -37,7 +37,7 @@ is(
 );
 
 is(
-    [ </*.txt> ],
+    [</*.txt>],
     [],
     '<' . $tests[0][1] . '>',
 );
@@ -56,7 +56,7 @@ is(
 );
 
 is(
-    [ </*.txt> ],
+    [</*.txt>],
     $tests[0][0],
     '<' . $tests[0][1] . '>',
 );
@@ -68,25 +68,25 @@ is(
 );
 
 is(
-    [ </*.{txt,jp{g}}> ],
+    [</*.{txt,jp{g}}>],
     $tests[1][0],
     '<' . $tests[1][1] . '>',
 );
 
 is(
-    [ </*.txt /*.jpg> ], # / (fix syntax highlighting on vim)
+    [</*.txt /*.jpg>],    # / (fix syntax highlighting on vim)
     $tests[2][0],
     '<' . $tests[2][1] . '>',
 );
 
 is(
-    [ glob( '/*.txt /*.jpg') ],
+    [ glob('/*.txt /*.jpg') ],
     $tests[2][0],
     'glob(' . $tests[2][1] . ')',
 );
 
 is(
-    [ </*/*> ], # / (fix syntax highlighting on vim)
+    [</*/*>],             # / (fix syntax highlighting on vim)
     $tests[3][0],
     '<' . $tests[3][1] . '>',
 );
@@ -94,12 +94,12 @@ is(
 my $top_dir3 = Test::MockFile->dir('/dir3');
 ok( -d '/dir3', 'Directory now exists' );
 
-ok( !-d '/dir3/dir5', 'Directory does not exist' );
+ok( !-d '/dir3/dir5',    'Directory does not exist' );
 ok( mkdir('/dir3/dir5'), 'Created directory successfully' );
-ok( -d '/dir3/dir5', 'Directory now exists' );
+ok( -d '/dir3/dir5',     'Directory now exists' );
 
 is(
-    [ </*/*> ], # / (fix syntax highlighting on vim)
+    [</*/*>],    # / (fix syntax highlighting on vim)
     $tests[4][0],
     '<' . $tests[4][1] . '>',
 );
