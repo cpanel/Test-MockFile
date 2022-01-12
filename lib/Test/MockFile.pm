@@ -206,6 +206,8 @@ sub _strict_mode_violation {
       : $command eq 'opendir' ? 1
       : $command eq 'stat'    ? 0
       : $command eq 'lstat'   ? 0
+      : $command eq 'chown'   ? 2
+      : $command eq 'chmod'   ? 2
       :                         Carp::croak("Unknown strict mode violation for $command");
 
     my @stack;
@@ -1711,6 +1713,120 @@ BEGIN {
 
         $mock->{'has_content'} = undef;
         return 1;
+    };
+
+    *CORE::GLOBAL::chown = sub(@) {
+        my ( $uid, $gid, @files ) = @_;
+
+        $^O eq 'MSWin32'
+            and return 0; # does nothing on Windows
+
+        # Not an error, report we changed zero files
+        @files
+            or return 0;
+
+        my %mocked_files = map +( $_ => _get_file_object($_) ), @files;
+
+        # The idea is that if some are mocked and some are not,
+        # it's probably a mistake
+        my $mocked_count = grep ref, values %mocked_files;
+        if ( $mocked_count && $mocked_count != @files ) {
+            die "You called chown() on a mix of mocked and unmocked files - this is very likely a bug on your side";
+        }
+
+        my $num_changed = 0;
+        foreach my $file (@files){
+            my $mock = $mocked_files{$file};
+
+            if ( !$mock ) {
+                _real_file_access_hook( 'chown', \@_ );
+                goto \&CORE::chown if _goto_is_available();
+                return CORE::chown(@files);
+            }
+
+            if ( !$mock->exists() ) {
+                if ( $mock->is_file() ) {
+                    $! = ENOENT;
+                }
+
+                if ( $mock->is_dir() ) {
+                    $! = ENOTDIR;
+                }
+
+                if ( $mock->is_link() ) {
+                    $! = ENOTDIR;
+                }
+
+                next;
+            }
+
+            # -1 means "keep as is"
+            $uid == -1 and $uid = $>;
+            $gid == -1 and $gid = $);
+
+            # Check if $gid is within "$)"
+            if ( $> != $uid || !grep /(^ | \s ) \Q$gid\E ( \s | $ )/xms, $) ) {
+                $! = EPERM;
+                next;
+            }
+
+            $mock->{'uid'} = $uid;
+            $mock->{'gid'} = $gid;
+
+            $num_changed++;
+        }
+
+        return $num_changed;
+    };
+
+    *CORE::GLOBAL::chmod = sub(@) {
+        my ( $mode, @files ) = @_;
+
+        # Not an error, report we changed zero files
+        @files
+            or return 0;
+
+        # Grab numbers - nothing means "0" (which is the behavior of CORE::chmod)
+        # (This will issue a warning, that's also the expected behavior)
+        {
+            no warnings;
+            $mode =~ /^[0-9]+/xms
+                or warn "Argument \"$mode\" isn't numeric in chmod";
+            $mode = int $mode;
+        }
+
+        my %mocked_files = map +( $_ => _get_file_object($_) ), @files;
+
+        # The idea is that if some are mocked and some are not,
+        # it's probably a mistake
+        my $mocked_count = grep ref, values %mocked_files;
+        if ( $mocked_count && $mocked_count != @files ) {
+            die "You called chmod() on a mix of mocked and unmocked files - this is very likely a bug on your side";
+        }
+
+        my $num_changed = 0;
+        foreach my $file (@files){
+            my $mock = $mocked_files{$file};
+
+            if ( !$mock ) {
+                _real_file_access_hook( 'chmod', \@_ );
+                goto \&CORE::chown if _goto_is_available();
+                return CORE::chown(@files);
+            }
+
+            # chmod is less specific in such errors
+            # chmod $mode, '/foo/' still yields ENOENT
+            if ( !$mock->exists() ) {
+                $! = ENOENT;
+                next;
+            }
+
+            $mock->{'mode'} = ( $mock->{'mode'} & S_IFMT ) + $mode;
+
+            $num_changed++;
+        }
+
+        return $num_changed;
     };
 }
 
