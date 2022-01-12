@@ -14,12 +14,16 @@ use Test::MockFile (); # specifically not "strict" to trigger the issue
 use File::Find ();
 
 ok(
-    lives( sub {
-        File::Find::find(
-            { 'wanted' => sub { 1 } },
-            '.',
-        );
-    }),
+    lives(
+        sub {
+            File::Find::find(
+                {
+                    'wanted' => sub {1}
+                },
+                '.',
+            );
+        }
+    ),
     'Successfully handled bareword filehandles during runtime',
 );
 

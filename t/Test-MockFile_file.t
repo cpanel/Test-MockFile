@@ -11,9 +11,9 @@ use Fcntl;
 
 #use Errno qw/ENOENT EBADF/;
 
-use Test::MockFile qw/strict/;    # Everything below this can have its open overridden.
+use Test::MockFile qw/strict/
+    ; # Everything below this can have its open overridden.
 
 pass("Todo");
-
 
 done_testing();

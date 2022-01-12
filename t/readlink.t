@@ -26,34 +26,44 @@ use Test::MockFile ();
 
 note "-------------- REAL MODE --------------";
 $! = 0;
-is( CORE::readlink("$temp_dir_name/missing_file"), undef,  "readlink on missing file " );
-is( $! + 0,                                        ENOENT, '$! is ENOENT for a missing file readlink.' );
+is( CORE::readlink("$temp_dir_name/missing_file"),
+    undef, "readlink on missing file " );
+is( $! + 0, ENOENT, '$! is ENOENT for a missing file readlink.' );
 
 $! = 0;
 is( CORE::readlink($symlink), 'a', "readlink on a working symlink works." );
 is( $! + 0,                   0,   '$! is 0 for a missing file readlink.' );
 
 $! = 0;
-is( CORE::readlink($bad_symlink), 'notafile', "readlink on a broken symlink still works." );
-is( $! + 0,                       0,          '$! is 0 for a missing file readlink.' );
+is( CORE::readlink($bad_symlink),
+    'notafile', "readlink on a broken symlink still works." );
+is( $! + 0, 0, '$! is 0 for a missing file readlink.' );
 
 $! = 0;
 is( CORE::readlink($file), undef,  "readlink on a file is undef." );
 is( $! + 0,                EINVAL, '$! is EINVAL for a readlink on a file.' );
 
 $! = 0;
-is( CORE::readlink($temp_dir_name), undef,  "readlink on a dir is undef." );
-is( $! + 0,                         EINVAL, '$! is EINVAL for a readlink on a dir.' );
+is( CORE::readlink($temp_dir_name), undef, "readlink on a dir is undef." );
+is( $! + 0, EINVAL, '$! is EINVAL for a readlink on a dir.' );
 
 $! = 0;
 my $got = 'abc';
-like( warning { $got = CORE::readlink(undef) }, qr/^Use of uninitialized value in readlink at /, "Got expected warning for passing no value to readlink" );
+like(
+    warning { $got = CORE::readlink(undef) },
+    qr/^Use of uninitialized value in readlink at /,
+    "Got expected warning for passing no value to readlink"
+);
 is( $got,   undef,  "readlink without args is undef." );
 is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
 
 $!   = 0;
 $got = 'abc';
-like( warning { $got = CORE::readlink() }, qr/^Use of uninitialized value \$_ in readlink at /, "Got expected warning for passing no value to readlink" );
+like(
+    warning { $got = CORE::readlink() },
+    qr/^Use of uninitialized value \$_ in readlink at /,
+    "Got expected warning for passing no value to readlink"
+);
 is( $got,   undef,  "readlink without args is undef." );
 is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
 
@@ -69,40 +79,52 @@ $bad_symlink   = "$temp_dir_name/c";
 my @mocks;
 push @mocks, Test::MockFile->file($file);
 push @mocks, Test::MockFile->dir($temp_dir_name);
-push @mocks, Test::MockFile->symlink( "a", $symlink );
+push @mocks, Test::MockFile->symlink( "a",        $symlink );
 push @mocks, Test::MockFile->symlink( "notafile", $bad_symlink );
 
 $! = 0;
-is( readlink("$temp_dir_name/missing_file"), undef,  "readlink on missing file " );
-is( $! + 0,                                  ENOENT, '$! is ENOENT for a missing file readlink.' );
+is( readlink("$temp_dir_name/missing_file"),
+    undef, "readlink on missing file " );
+is( $! + 0, ENOENT, '$! is ENOENT for a missing file readlink.' );
 
 $! = 0;
 is( readlink($symlink), 'a', "readlink on a working symlink works." );
 is( $! + 0,             0,   '$! is 0 for a missing file readlink.' );
 
 $! = 0;
-is( readlink($bad_symlink), 'notafile', "readlink on a broken symlink still works." );
-is( $! + 0,                 0,          '$! is 0 for a missing file readlink.' );
+is( readlink($bad_symlink), 'notafile',
+    "readlink on a broken symlink still works." );
+is( $! + 0, 0, '$! is 0 for a missing file readlink.' );
 
 $! = 0;
 is( readlink($file), undef,  "readlink on a file is undef." );
 is( $! + 0,          EINVAL, '$! is EINVAL for a readlink on a file.' );
 
 $! = 0;
-is( readlink($temp_dir_name), undef,  "readlink on a dir is undef." );
-is( $! + 0,                   EINVAL, '$! is EINVAL for a readlink on a dir.' );
+is( readlink($temp_dir_name), undef, "readlink on a dir is undef." );
+is( $! + 0, EINVAL, '$! is EINVAL for a readlink on a dir.' );
 
 $!   = 0;
 $got = 'abc';
-like( warning { $got = readlink(undef) }, qr/^Use of uninitialized value in readlink at /, "Got expected warning for passing no value to readlink" );
+like(
+    warning { $got = readlink(undef) },
+    qr/^Use of uninitialized value in readlink at /,
+    "Got expected warning for passing no value to readlink"
+);
 is( $got,   undef,  "readlink without args is undef." );
 is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
 
 $!   = 0;
 $got = 'abc';
-todo "Something's wrong with readlink's prototype and the warning is incorrect no matter what we do in the code." => sub {
-    like( warning { $got = readlink() }, qr/^Use of uninitialized value \$_ in readlink at /, "Got expected warning for passing no value to readlink" );
-};
+todo
+    "Something's wrong with readlink's prototype and the warning is incorrect no matter what we do in the code."
+    => sub {
+    like(
+        warning { $got = readlink() },
+        qr/^Use of uninitialized value \$_ in readlink at /,
+        "Got expected warning for passing no value to readlink"
+    );
+    };
 is( $got,   undef,  "readlink without args is undef." );
 is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
 

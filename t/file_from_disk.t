@@ -8,7 +8,7 @@ use Test::More;
 use File::Temp qw/tempfile/;
 use File::Slurper ();
 
-use Test::MockFile;    # Everything below this can have its open overridden.
+use Test::MockFile; # Everything below this can have its open overridden.
 
 my $fake_file_contents = "abc\n" . ( "x" x 20 ) . "\n";
 
@@ -21,8 +21,8 @@ unlink $fake_file_name;
 
 my $mock = Test::MockFile->file_from_disk( $fake_file_name, $file_on_disk );
 is( open( my $fh, "<", $fake_file_name ), 1, "open fake file for read" );
-is( <$fh>, "abc\n", "Read line 1." );
-is( <$fh>, ( "x" x 20 ) . "\n", "Read line 2." );
+is( <$fh>, "abc\n",                          "Read line 1." );
+is( <$fh>, ( "x" x 20 ) . "\n",              "Read line 2." );
 close $fh;
 undef $fh;
 
@@ -33,7 +33,8 @@ undef $fh;
 is( $mock->contents, "def", "file is written to" );
 undef $mock;
 
-is( File::Slurper::read_binary($file_on_disk), $fake_file_contents, "The original file was unmodified" );
+is( File::Slurper::read_binary($file_on_disk),
+    $fake_file_contents, "The original file was unmodified" );
 
 done_testing();
 

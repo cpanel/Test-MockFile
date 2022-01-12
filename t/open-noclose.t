@@ -18,11 +18,7 @@ use Test::MockFile;
 
     my $path      = q[/tmp/somewhere];
     my $mock_file = Test::MockFile->file($path);
-    like(
-        dies { myread($path) },
-        qr/Failed to open file/,
-        'missing file'
-    );
+    like( dies { myread($path) }, qr/Failed to open file/, 'missing file' );
 
     $mock_file->touch;
 
@@ -39,8 +35,9 @@ EOS
     ok $mock_file->contents;
 
     my $out = myread($path);
-    is $out, [ split( /\n/, $mock_file->contents ) ], "$path file should not be empty (on second read)"
-      or diag explain $out;
+    is $out, [ split( /\n/, $mock_file->contents ) ],
+        "$path file should not be empty (on second read)"
+        or diag explain $out;
 
 }
 

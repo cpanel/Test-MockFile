@@ -18,8 +18,10 @@ $! = 0;
 is( unlink($temp_dir), 0, "unlink on a dir fails" );
 my $unlink_dir_errorno = $! + 0;
 SKIP: {
-    skip q{This docker container doesn't emit $! failures reliably.}, 1 if on_broken_docker();
-    ok( $unlink_dir_errorno, "unlink /dir is non-zero ($unlink_dir_errorno)" );
+    skip q{This docker container doesn't emit $! failures reliably.}, 1
+        if on_broken_docker();
+    ok( $unlink_dir_errorno,
+        "unlink /dir is non-zero ($unlink_dir_errorno)" );
 }
 
 use Test::MockFile ();
@@ -27,24 +29,33 @@ use Test::MockFile ();
 note "-------------- MOCK MODE --------------";
 my @mock;
 my $file = Test::MockFile->file( '/file', "" );
-my $dir  = Test::MockFile->dir( '/dir' );
+my $dir  = Test::MockFile->dir('/dir');
 my $link = Test::MockFile->symlink( '/link', '/tonowhere' );
 
-ok( !-d '/dir', 'Directory does not exist yet' );
+ok( !-d '/dir',    'Directory does not exist yet' );
 ok( mkdir('/dir'), 'Successfully created /dir' );
-ok( -d '/dir', 'Directory now exists' );
+ok( -d '/dir',     'Directory now exists' );
 
 is( $link->unlink, 1, "unlink /link works." );
 is( $link->exists, 0, "/link is now gone" );
 SKIP: {
-    skip q{This docker container doesn't emit $! failures reliably.}, 2 if on_broken_docker();
+    skip q{This docker container doesn't emit $! failures reliably.}, 2
+        if on_broken_docker();
     local $!;
-    is( $dir->unlink, 0, "unlink /dir doesn't work." );
-    is( $! + 0, $unlink_dir_errorno, "   ... and throws a \$\!" );
+    is( $dir->unlink, 0,                   "unlink /dir doesn't work." );
+    is( $! + 0,       $unlink_dir_errorno, "   ... and throws a \$\!" );
 }
 
-like( dies { $dir->touch },  qr/^touch only supports files at \S/, "touch /dir doesn't work." );
-like( dies { $link->touch }, qr/^touch only supports files at \S/, "touch /link doesn't work." );
+like(
+    dies { $dir->touch },
+    qr/^touch only supports files at \S/,
+    "touch /dir doesn't work."
+);
+like(
+    dies { $link->touch },
+    qr/^touch only supports files at \S/,
+    "touch /link doesn't work."
+);
 
 is( $file->mtime(5), 5, "Set mtime to 1970" );
 is( $file->ctime(5), 5, "Set ctime to 1970" );
