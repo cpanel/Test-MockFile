@@ -1,5 +1,8 @@
 Revision history for Test-MockFile
 
+0.24
+ - GH #?: Get Solaris testers passing.
+
 0.023   1/14/2022
  - GH #58: Fix synopsis typos
  - GH #65: Fix typos in the typo fixes.
