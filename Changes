@@ -1,7 +1,8 @@
 Revision history for Test-MockFile
 
-0.24
- - GH #?: Get Solaris testers passing.
+0.024_01
+ - GH #83: Get Solaris testers passing.
+ - Remove all use of "$!" in tests as this has tranlation problems.
 
 0.023   1/14/2022
  - GH #58: Fix synopsis typos
