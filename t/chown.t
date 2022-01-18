@@ -131,7 +131,6 @@ subtest(
             'Using bareword treats it as string',
         );
 
-        is( "$!",   'No such file or directory', 'Correct error string' );
         is( $! + 0, 2,                           'Correct ENOENT error' );
     }
 );
