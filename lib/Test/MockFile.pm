@@ -1739,7 +1739,7 @@ BEGIN {
 
         # The idea is that if some are mocked and some are not,
         # it's probably a mistake
-        if ( @mocked_files != @files ) {
+        if ( @mocked_files && @mocked_files != @files ) {
             croak(
                 sprintf 'You called chown() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
                 ( join ', ', @mocked_files   ),
@@ -1809,7 +1809,7 @@ BEGIN {
 
         # The idea is that if some are mocked and some are not,
         # it's probably a mistake
-        if ( @mocked_files != @files ) {
+        if ( @mocked_files && @mocked_files != @files ) {
             croak(
                 sprintf 'You called chmod() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
                 ( join ', ', @mocked_files   ),
