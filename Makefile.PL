@@ -23,7 +23,7 @@ WriteMakefile(
         'Text::Glob'                => 0,
     },
     PREREQ_PM => {
-        'Overload::FileCheck' => '0.007',
+        'Overload::FileCheck' => '0.012',
     },
     dist       => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean      => { FILES    => 'Test-MockFile-*' },
