@@ -11,7 +11,7 @@ on 'test' => sub {
     requires 'Test2::Tools::Explain'  => 0;
     requires 'Test2::Plugin::NoWarnings'  => 0;
     requires 'File::Slurper'  => 0;
-    requires 'Overload::FileCheck' => '0.007';
+    requires 'Overload::FileCheck' => '0.012';
     requires 'Test::Pod::Coverage' => 0;
     requires 'Test::Pod' => 0;
 };
