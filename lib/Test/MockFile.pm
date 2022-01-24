@@ -19,7 +19,7 @@ use constant BROKEN_SYMLINK   => bless {}, "A::BROKEN::SYMLINK";
 use constant CIRCULAR_SYMLINK => bless {}, "A::CIRCULAR::SYMLINK";
 
 # we're going to use carp but the errors should come from outside of our package.
-use Carp qw(carp croak confess);
+use Carp qw(carp confess);
 $Carp::Internal{__PACKAGE__}++;
 $Carp::Internal{'Overload::FileCheck'}++;
 
@@ -139,7 +139,7 @@ Relative paths are not supported:
     $file = Test::MockFile->file( '/bar',        '...' ); # ok     - absolute path
     $file = Test::MockFile->file( 'bar', '...' );         # ok     - current dir
 
-And if you have multiple forward slashes, it will croak as well:
+And if you have multiple forward slashes, it will confess as well:
 
     use Test::MockFile;
     $file = Test::MockFile->file( '//bar', '...' );
@@ -208,7 +208,7 @@ sub _strict_mode_violation {
       : $command eq 'lstat'   ? 0
       : $command eq 'chown'   ? 2
       : $command eq 'chmod'   ? 2
-      :                         croak("Unknown strict mode violation for $command");
+      :                         confess("Unknown strict mode violation for $command");
 
     my @stack;
     foreach my $stack_level ( 1 .. 100 ) {
@@ -368,10 +368,10 @@ sub symlink {
 
     return $class->new(
         {
-            'path'      => $file,
-            'contents'  => undef,
-            'readlink'  => $readlink,
-            'mode'      => 07777 | S_IFLNK,
+            'path'     => $file,
+            'contents' => undef,
+            'readlink' => $readlink,
+            'mode'     => 07777 | S_IFLNK,
         }
     );
 }
@@ -775,7 +775,7 @@ sub contents {
         return $self->{'contents'};
     }
 
-    croak('This seems to be neither a file nor a dir - what is it?');
+    confess('This seems to be neither a file nor a dir - what is it?');
 }
 
 =head2 filename
@@ -1759,7 +1759,7 @@ BEGIN {
         # The idea is that if some are mocked and some are not,
         # it's probably a mistake
         if ( @mocked_files && @mocked_files != @files ) {
-            croak(
+            confess(
                 sprintf 'You called chown() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
                 ( join ', ', @mocked_files ),
                 ( join ', ', @unmocked_files ),
@@ -1791,9 +1791,10 @@ BEGIN {
 
             # Even if you're root, nonexistent file is nonexistent
             if ( !$mock->exists() ) {
+
                 # Only set the error once
                 $set_error
-                    or $! = ENOENT;
+                  or $! = ENOENT;
 
                 next;
             }
@@ -1803,7 +1804,7 @@ BEGIN {
             if ( !$is_root ) {
                 if ( $> != $uid || !$is_in_group ) {
                     $set_error
-                        or $! = EPERM;
+                      or $! = EPERM;
 
                     last;
                 }
@@ -1841,7 +1842,7 @@ BEGIN {
         # The idea is that if some are mocked and some are not,
         # it's probably a mistake
         if ( @mocked_files && @mocked_files != @files ) {
-            croak(
+            confess(
                 sprintf 'You called chmod() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
                 ( join ', ', @mocked_files ),
                 ( join ', ', @unmocked_files ),
