@@ -208,7 +208,7 @@ sub _strict_mode_violation {
       : $command eq 'lstat'   ? 0
       : $command eq 'chown'   ? 2
       : $command eq 'chmod'   ? 2
-      : croak("Unknown strict mode violation for $command");
+      :                         croak("Unknown strict mode violation for $command");
 
     my @stack;
     foreach my $stack_level ( 1 .. 100 ) {
@@ -278,8 +278,10 @@ sub file {
     _validate_path($file);
 
     if ( @stats > 1 ) {
-        confess( sprintf 'Unkownn arguments (%s) passed to file() as stats',
-          join ', ', @stats );
+        confess(
+            sprintf 'Unkownn arguments (%s) passed to file() as stats',
+            join ', ', @stats
+        );
     }
 
     !defined $contents && @stats
@@ -379,13 +381,13 @@ sub _validate_path {
 
     # Multiple forward slashes
     if ( $path =~ m[/{2,}] ) {
-        confess( 'Repeated forward slashes in path' );
+        confess('Repeated forward slashes in path');
     }
 
     # Reject the following:
     # ./ ../ /. /.. /./ /../
     if ( $path =~ m{ ( ^ | / ) \.{1,2} ( / | $ ) }xms ) {
-        confess( 'Relative paths are not supported' );
+        confess('Relative paths are not supported');
     }
 }
 
@@ -458,7 +460,7 @@ sub dir {
     $dir_name =~ s{[/\\]$}{}xmsg;
 
     @_ > 2
-      and confess( "You cannot set stats for nonexistent dir '$dir_name'" );
+      and confess("You cannot set stats for nonexistent dir '$dir_name'");
 
     my $perms = S_IFPERMS & 0777;
     my %stats = ( 'mode' => ( $perms ^ umask ) | S_IFDIR );
@@ -744,7 +746,7 @@ sub contents {
     # handle directories
     if ( $self->is_dir() ) {
         $new_contents
-          and confess( 'To change the contents of the dir, you must work on its files' );
+          and confess('To change the contents of the dir, you must work on its files');
 
         $self->{'has_content'}
           or return;
@@ -1727,11 +1729,11 @@ BEGIN {
         my ( $uid, $gid, @files ) = @_;
 
         $^O eq 'MSWin32'
-            and return 0; # does nothing on Windows
+          and return 0;    # does nothing on Windows
 
         # Not an error, report we changed zero files
         @files
-            or return 0;
+          or return 0;
 
         my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
         my @unmocked_files = grep !$mocked_files{$_}, @files;
@@ -1742,7 +1744,7 @@ BEGIN {
         if ( @mocked_files && @mocked_files != @files ) {
             croak(
                 sprintf 'You called chown() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
-                ( join ', ', @mocked_files   ),
+                ( join ', ', @mocked_files ),
                 ( join ', ', @unmocked_files ),
             );
         }
@@ -1764,7 +1766,7 @@ BEGIN {
         }
 
         my $num_changed = 0;
-        foreach my $file (@files){
+        foreach my $file (@files) {
             my $mock = $mocked_files{$file};
 
             if ( !$mock ) {
@@ -1792,18 +1794,18 @@ BEGIN {
 
         # Not an error, report we changed zero files
         @files
-            or return 0;
+          or return 0;
 
         # Grab numbers - nothing means "0" (which is the behavior of CORE::chmod)
         # (This will issue a warning, that's also the expected behavior)
         {
             no warnings;
             $mode =~ /^[0-9]+/xms
-                or warn "Argument \"$mode\" isn't numeric in chmod";
+              or warn "Argument \"$mode\" isn't numeric in chmod";
             $mode = int $mode;
         }
 
-        my %mocked_files = map +( $_ => _get_file_object($_) ), @files;
+        my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
         my @unmocked_files = grep !$mocked_files{$_}, @files;
         my @mocked_files   = map ref $_ ? $_->{'file_name'} : (), values %mocked_files;
 
@@ -1812,13 +1814,13 @@ BEGIN {
         if ( @mocked_files && @mocked_files != @files ) {
             croak(
                 sprintf 'You called chmod() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
-                ( join ', ', @mocked_files   ),
+                ( join ', ', @mocked_files ),
                 ( join ', ', @unmocked_files ),
             );
         }
 
         my $num_changed = 0;
-        foreach my $file (@files){
+        foreach my $file (@files) {
             my $mock = $mocked_files{$file};
 
             if ( !$mock ) {

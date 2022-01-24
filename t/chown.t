@@ -131,7 +131,7 @@ subtest(
             'Using bareword treats it as string',
         );
 
-        is( $! + 0, 2,                           'Correct ENOENT error' );
+        is( $! + 0, 2, 'Correct ENOENT error' );
     }
 );
 
