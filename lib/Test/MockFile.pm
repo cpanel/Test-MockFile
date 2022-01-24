@@ -1749,35 +1749,47 @@ BEGIN {
             );
         }
 
-        $! = 0;
-
         # -1 means "keep as is"
         $uid == -1 and $uid = $>;
         $gid == -1 and $gid = $);
 
-        # Check if $gid is within "$)"
-        # If so, it will be an error no matter what
-        # so there's no point in even looking at files or even sending to CORE::chown
-        if ( $> != $uid || !grep /(^ | \s ) \Q$gid\E ( \s | $ )/xms, $) ) {
-            $! = EPERM;
+        my $is_root     = $> == 0 || $) =~ /( ^ | \s ) 0 ( \s | $)/xms;
+        my $is_in_group = grep /(^ | \s ) \Q$gid\E ( \s | $ )/xms, $);
 
-            # Forget going over files, this is over
-            @files = ();
-        }
+        # TODO: Perl has an odd behavior that -1, -1 on a file that isn't owned by you still works
+        # Not sure how to write a test for it though...
 
+        my $set_error;
         my $num_changed = 0;
         foreach my $file (@files) {
             my $mock = $mocked_files{$file};
 
+            # If this file is not mocked, none of the files are
+            # which means we can send them all and let the CORE function handle it
             if ( !$mock ) {
                 _real_file_access_hook( 'chown', \@_ );
                 goto \&CORE::chown if _goto_is_available();
                 return CORE::chown(@files);
             }
 
+            # Even if you're root, nonexistent file is nonexistent
             if ( !$mock->exists() ) {
-                $! ||= ENOENT;
+                # Only set the error once
+                $set_error
+                    or $! = ENOENT;
+
                 next;
+            }
+
+            # root can do anything, but you can't
+            # and if we are here, no point in keep trying
+            if ( !$is_root ) {
+                if ( $> != $uid || !$is_in_group ) {
+                    $set_error
+                        or $! = EPERM;
+
+                    last;
+                }
             }
 
             $mock->{'uid'} = $uid;
