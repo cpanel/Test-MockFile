@@ -1733,6 +1733,11 @@ BEGIN {
             return 0;
         }
 
+        if ( _files_in_dir($file) ) {
+            $! = 39;
+            return 0;
+        }
+
         $mock->{'has_content'} = undef;
         return 1;
     };
