@@ -113,7 +113,6 @@ subtest( 'rmdir non-empty directory fails' => sub {
     is( $! + 0, 0, 'No errors yet' );
     ok( !rmdir('/foo'), 'rmdir failed because directory has files' );
     is( $! + 0, 39, '$! is set to correct perror (39)' );
-    is( "$!", 'Directory not empty', 'Correct error string' );
 });
 
 done_testing();
