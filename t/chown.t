@@ -66,12 +66,13 @@ subtest(
 
             if ($is_root) {
                 ok( chown( @{$args} ), $message );
-                is( $! + 0, 0, 'chown succeeded' );
-                is( "$!", '', 'No failure' );
-            } else {
+                is( $! + 0, 0,  'chown succeeded' );
+                is( "$!",   '', 'No failure' );
+            }
+            else {
                 ok( !chown( @{$args} ), $message );
-                is( $! + 0, 1, "chown failed (EPERM): \$>:$>, \$):$)" );
-                is( "$!", 'Operation not permitted', 'Correct error string' );
+                is( $! + 0, 1,                         "chown failed (EPERM): \$>:$>, \$):$)" );
+                is( "$!",   'Operation not permitted', 'Correct error string' );
             }
         };
 
@@ -165,48 +166,53 @@ subtest(
     }
 );
 
-subtest( 'chown on typeglob / filehandle' => sub {
-    my $filename = '/tmp/not-a-file';
-    my $file     = Test::MockFile->file($filename);
+subtest(
+    'chown on typeglob / filehandle' => sub {
+        my $filename = '/tmp/not-a-file';
+        my $file     = Test::MockFile->file($filename);
 
-    open my $fh, '>', $filename
-        or die;
+        open my $fh, '>', $filename
+          or die;
 
-    print {$fh} "whatevs\n"
-        or die;
+        print {$fh} "whatevs\n"
+          or die;
 
-    my ( $exp_euid, $exp_egid ) = $is_root ? ( $euid + 9999, $egid + 9999 ) : ( $euid, $egid );
+        my ( $exp_euid, $exp_egid ) = $is_root ? ( $euid + 9999, $egid + 9999 ) : ( $euid, $egid );
 
-    if ($is_root) {
-        is( $! + 0, 0, '$! starts clean' );
-        is( chown( $exp_euid, $exp_egid, $fh ), 1, 'root chown on a file handle works' );
-        is( $! + 0, 0, '$! stays clean' );
-    } else {
-        is( $! + 0, 0, '$! starts clean' );
-        is( chown( $exp_euid, $exp_egid, $fh ), 1, 'Non-root chown on a file handle works' );
-        is( $! + 0, 0, '$! stays clean' );
+        if ($is_root) {
+            is( $! + 0,                             0, '$! starts clean' );
+            is( chown( $exp_euid, $exp_egid, $fh ), 1, 'root chown on a file handle works' );
+            is( $! + 0,                             0, '$! stays clean' );
+        }
+        else {
+            is( $! + 0,                             0, '$! starts clean' );
+            is( chown( $exp_euid, $exp_egid, $fh ), 1, 'Non-root chown on a file handle works' );
+            is( $! + 0,                             0, '$! stays clean' );
+        }
+
+        close $fh
+          or die;
+
+        my (
+            $dev,   $ino,   $mode,  $nlink,   $uid, $gid, $rdev, $size,
+            $atime, $mtime, $ctime, $blksize, $blocks
+        ) = stat($filename);
+
+        is( $uid, $exp_euid, "Owner of the file is now there" );
+        is( $gid, $exp_egid, "Group of the file is now there" );
     }
+);
 
-    close $fh
-        or die;
+subtest(
+    'chown does not reset $!' => sub {
+        my $file = Test::MockFile->file( '/foo' => 'bar' );
 
-    my (
-        $dev,   $ino,   $mode,  $nlink,   $uid, $gid, $rdev, $size,
-        $atime, $mtime, $ctime, $blksize, $blocks
-    ) = stat($filename);
-
-    is( $uid, $exp_euid, "Owner of the file is now there" );
-    is( $gid, $exp_egid, "Group of the file is now there" );
-});
-
-subtest( 'chown does not reset $!' => sub {
-    my $file = Test::MockFile->file( '/foo' => 'bar' );
-
-    $! = 3;
-    is( $! + 0, 3, '$! is set to 3 for our test' );
-    ok( chown( -1, -1, '/foo' ), 'Successfully run chown' );
-    is( $! + 0, 3, '$! is still 3 (not reset by chown)' );
-});
+        $! = 3;
+        is( $! + 0, 3, '$! is set to 3 for our test' );
+        ok( chown( -1, -1, '/foo' ), 'Successfully run chown' );
+        is( $! + 0, 3, '$! is still 3 (not reset by chown)' );
+    }
+);
 
 done_testing();
 exit;
