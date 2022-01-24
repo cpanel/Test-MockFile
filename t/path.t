@@ -12,12 +12,12 @@ use Test::MockFile ();
 my $path = '/some/nonexistant/path';
 my $mock = Test::MockFile->file($path);
 
-is( $mock->filename, $path, "$path is set when the file isn't there." );
+is( $mock->path(), $path, "$path is set when the file isn't there." );
 
 open( my $fh, '>', $path ) or die;
 print $fh "abc";
 close $fh;
 
-is( $mock->filename, $path, "$path is set when the file is there." );
+is( $mock->path(), $path, "$path is set when the file is there." );
 
 done_testing();

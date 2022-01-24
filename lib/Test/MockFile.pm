@@ -308,8 +308,8 @@ sub file {
 
     return $class->new(
         {
-            'file_name' => $file,
-            'contents'  => $contents,
+            'path'     => $file,
+            'contents' => $contents,
             %stats
         }
     );
@@ -368,7 +368,7 @@ sub symlink {
 
     return $class->new(
         {
-            'file_name' => $file,
+            'path'      => $file,
             'contents'  => undef,
             'readlink'  => $readlink,
             'mode'      => 07777 | S_IFLNK,
@@ -400,7 +400,7 @@ This will cause $dir to be mocked in all file checks, and C<opendir> interaction
 The directory name is normalized so any trailing slash is removed.
 
     $dir = Test::MockFile->dir( 'mydir/', ... ); # ok
-    $dir->filename();                            # mydir
+    $dir->path();                                # mydir
 
 If there were previously mocked files (within the same scope), the directory will
 exist. Otherwise, the directory will be nonexistent.
@@ -471,7 +471,7 @@ sub dir {
     my $has_content = grep m{^\Q$dir_name/\E}xms, %files_being_mocked;
     return $class->new(
         {
-            'file_name'   => $dir_name,
+            'path'        => $dir_name,
             'has_content' => $has_content,
             %stats
         }
@@ -526,10 +526,10 @@ sub new {
         %opts = @_;
     }
 
-    my $file_name = $opts{'file_name'} or confess("Mock file created without a file name!");
+    my $path = $opts{'path'} or confess("Mock file created without a path (filename or dirname)!");
 
-    if ( $file_name !~ m{^/} ) {
-        $file_name = $opts{'file_name'} = _abs_path_to_file($file_name);
+    if ( $path !~ m{^/} ) {
+        $path = $opts{'path'} = _abs_path_to_file($path);
     }
 
     my $now = time;
@@ -551,7 +551,7 @@ sub new {
         'fileno'      => undef,     # fileno()
         'tty'         => 0,         # possibly this is already provided in mode?
         'readlink'    => '',        # what the symlink points to.
-        'file_name'   => undef,
+        'path'        => undef,
         'contents'    => undef,
         'has_content' => undef,
     }, $class;
@@ -567,8 +567,8 @@ sub new {
 
     $self->{'fileno'} //= _unused_fileno();
 
-    $files_being_mocked{$file_name} = $self;
-    Scalar::Util::weaken( $files_being_mocked{$file_name} );
+    $files_being_mocked{$path} = $self;
+    Scalar::Util::weaken( $files_being_mocked{$path} );
 
     return $self;
 }
@@ -673,13 +673,13 @@ sub _fh_to_file {
     return unless defined $fh && length $fh;
 
     # See if $fh is a file handle. It might be a path.
-    foreach my $file_name ( sort keys %files_being_mocked ) {
-        my $mock_fh = $files_being_mocked{$file_name}->{'fh'};
+    foreach my $path ( sort keys %files_being_mocked ) {
+        my $mock_fh = $files_being_mocked{$path}->{'fh'};
 
         next unless $mock_fh;               # File isn't open.
         next unless "$mock_fh" eq "$fh";    # This mock doesn't have this file handle open.
 
-        return $file_name;
+        return $path;
     }
 
     return;
@@ -709,18 +709,18 @@ sub DESTROY {
     ref $self or return;
 
     # This is just a safety. It doesn't make much sense if we get here but
-    # $self doesn't have a file_name. Either way we can't delete it.
-    my $file_name = $self->{'file_name'};
-    defined $file_name or return;
+    # $self doesn't have a path. Either way we can't delete it.
+    my $path = $self->{'path'};
+    defined $path or return;
 
     # If the object survives into global destruction, the object which is
-    # the value of $files_being_mocked{$file_name} might destroy early.
+    # the value of $files_being_mocked{$path} might destroy early.
     # As a result, don't worry about the self == check just delete the key.
-    if ( defined $files_being_mocked{$file_name} ) {
-        $self == $files_being_mocked{$file_name} or confess("Tried to destroy object for $file_name ($self) but something else is mocking it?");
+    if ( defined $files_being_mocked{$path} ) {
+        $self == $files_being_mocked{$path} or confess("Tried to destroy object for $path ($self) but something else is mocking it?");
     }
 
-    delete $files_being_mocked{$file_name};
+    delete $files_being_mocked{$path};
 }
 
 =head2 contents
@@ -753,9 +753,9 @@ sub contents {
 
         # TODO: Quick and dirty, but works (maybe provide a ->basename()?)
         # Retrieve the files in this directory and removes prefix
-        my $dirname        = $self->filename();
+        my $dirname        = $self->path();
         my @existing_files = sort map {
-            ( my $basename = $_->filename() ) =~ s{^\Q$dirname/\E}{}xms;
+            ( my $basename = $_->path() ) =~ s{^\Q$dirname/\E}{}xms;
             defined $_->{'contents'} ? ($basename) : ();
         } _files_in_dir($dirname);
 
@@ -780,15 +780,27 @@ sub contents {
 
 =head2 filename
 
-The name of the file this mock object is controlling.
+Deprecated. Same as C<path>.
 
 =cut
 
 sub filename {
-    my ($self) = @_;
-    $self or confess("filename is a method");
+    warn 'filename() is deprecated, use path() instead';
+    goto &path;
+}
 
-    return $self->{'file_name'};
+=head2 path
+
+The path (filename or dirname) of the file or directory this mock object is
+controlling.
+
+=cut
+
+sub path {
+    my ($self) = @_;
+    $self or confess("path is a method");
+
+    return $self->{'path'};
 }
 
 =head2 unlink
@@ -1394,7 +1406,7 @@ BEGIN {
             return;
         }
 
-        my $abs_path = $mock_file->{'file_name'};
+        my $abs_path = $mock_file->{'path'};
 
         $_[0] = IO::File->new;
         tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
@@ -1457,7 +1469,7 @@ BEGIN {
         }
 
         # This is how we tell if the file is open by something.
-        my $abs_path = $mock_dir->{'file_name'};
+        my $abs_path = $mock_dir->{'path'};
         $mock_dir->{'obj'} = Test::MockFile::DirHandle->new( $abs_path, $mock_dir->contents() );
         $mock_dir->{'fh'}  = "$_[0]";
 
@@ -1737,7 +1749,7 @@ BEGIN {
 
         my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
         my @unmocked_files = grep !$mocked_files{$_}, @files;
-        my @mocked_files   = map ref $_ ? $_->{'file_name'} : (), values %mocked_files;
+        my @mocked_files   = map ref $_ ? $_->{'path'} : (), values %mocked_files;
 
         # The idea is that if some are mocked and some are not,
         # it's probably a mistake
@@ -1819,7 +1831,7 @@ BEGIN {
 
         my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
         my @unmocked_files = grep !$mocked_files{$_}, @files;
-        my @mocked_files   = map ref $_ ? $_->{'file_name'} : (), values %mocked_files;
+        my @mocked_files   = map ref $_ ? $_->{'path'} : (), values %mocked_files;
 
         # The idea is that if some are mocked and some are not,
         # it's probably a mistake
