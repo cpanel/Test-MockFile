@@ -1,5 +1,13 @@
 Revision history for Test-MockFile
 
+0.24    1/24/2022
+- Prefer Carp::confess to die
+- Do not use "$!" in tests as it's not consistent across platforms
+- GH #78: Do not allow rmdir on a populated directory.
+- GH #73: Prefer the term ->path to ->filename as it is more clear between file/dir
+- chown $fh now works.
+- Only warn about mixed files when using mocked files
+
 0.024_01
  - GH #83: Get Solaris testers passing.
  - Remove all use of "$!" in tests as this has tranlation problems.
