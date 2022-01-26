@@ -457,7 +457,8 @@ sub dir {
     _validate_path($dir_name);
 
     # Cleanup trailing forward slashes
-    $dir_name =~ s{[/\\]$}{}xmsg;
+    $dir_name ne '/'
+        and $dir_name =~ s{[/\\]$}{}xmsg;
 
     @_ > 2
       and confess("You cannot set stats for nonexistent dir '$dir_name'");
