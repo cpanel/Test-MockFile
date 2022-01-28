@@ -70,5 +70,19 @@ closedir($dir_fh);
 is( opendir( my $still_notdir_fh, $temp_notdir ), undef,   "opendir on a mocked file returns false" );
 is( $! + 0,                                       ENOTDIR, '$! numeric is right.' );
 
+# Check symlinks appear in readdir
+my $dir_for_symlink = Test::MockFile->dir('/foo');
+my $symlink_dest    = Test::MockFile->file( '/foo/dest', '' );
+my $symlink         = Test::MockFile->symlink( '/foo/dest', '/foo/source' );
+
+opendir my $sdh, '/foo' or die $!;
+my @contents = readdir $sdh;
+closedir $sdh or die $!;
+is(
+    \@contents,
+    [ qw< . .. dest source > ],
+    'Symlink appears in directory content'
+);
+
 done_testing();
 exit;
