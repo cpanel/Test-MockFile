@@ -366,6 +366,14 @@ sub symlink {
 
     _get_file_object($file) and confess("It looks like $file is already being mocked. We don't support double mocking yet.");
 
+    # Check if directory for this file is an object we're mocking
+    # If so, mark it now as having content
+    # which is this file or - if this file is undef, . and ..
+    ( my $dirname = $file ) =~ s{ / [^/]+ $ }{}xms;
+    if ( $files_being_mocked{$dirname} ) {
+        $files_being_mocked{$dirname}{'has_content'} = 1;
+    }
+
     return $class->new(
         {
             'path'     => $file,
