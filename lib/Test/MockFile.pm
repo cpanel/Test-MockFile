@@ -647,6 +647,8 @@ sub _find_file_or_fh {
 
     # Find the file handle or fall back to just using the abs path of $file_or_fh
     my $absolute_path_to_file = _fh_to_file($file_or_fh) // _abs_path_to_file($file_or_fh) // '';
+    $absolute_path_to_file ne '/'
+        and $absolute_path_to_file =~ s{[/\\]$}{}xmsg;
 
     # Get the pointer to the object.
     my $mock_object = $files_being_mocked{$absolute_path_to_file};
