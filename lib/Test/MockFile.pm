@@ -765,7 +765,7 @@ sub contents {
         my $dirname        = $self->path();
         my @existing_files = sort map {
             ( my $basename = $_->path() ) =~ s{^\Q$dirname/\E}{}xms;
-            defined $_->{'contents'} || $_->is_link() ? ($basename) : ();
+            defined $_->{'contents'} || $_->is_link() || $_->is_dir() ? ($basename) : ();
         } _files_in_dir($dirname);
 
         return [ '.', '..', @existing_files ];
