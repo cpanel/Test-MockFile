@@ -72,6 +72,7 @@ is( $! + 0,                                       ENOTDIR, '$! numeric is right.
 
 # Check symlinks appear in readdir
 my $dir_for_symlink = Test::MockFile->dir('/foo');
+my $dir_in_dir      = Test::MockFile->dir('/foo/infoo');
 my $symlink_dest    = Test::MockFile->file( '/foo/dest', '' );
 my $symlink         = Test::MockFile->symlink( '/foo/dest', '/foo/source' );
 
@@ -79,9 +80,9 @@ opendir my $sdh, '/foo' or die $!;
 my @contents = readdir $sdh;
 closedir $sdh or die $!;
 is(
-    \@contents,
-    [ qw< . .. dest source > ],
-    'Symlink appears in directory content'
+    [ sort @contents ],
+    [ qw< . .. dest infoo source > ],
+    'Symlink and directories appears in directory content'
 );
 
 done_testing();
