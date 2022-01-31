@@ -275,7 +275,8 @@ sub file {
     ( defined $file && length $file ) or confess("No file provided to instantiate $class");
     _get_file_object($file) and confess("It looks like $file is already being mocked. We don't support double mocking yet.");
 
-    _validate_path($file);
+    my $path = _abs_path_to_file($file);
+    _validate_path($path);
 
     if ( @stats > 1 ) {
         confess(
@@ -285,7 +286,7 @@ sub file {
     }
 
     !defined $contents && @stats
-      and confess("You cannot set stats for non-existent file '$file'");
+      and confess("You cannot set stats for non-existent file '$path'");
 
     my %stats;
     if (@stats) {
@@ -301,14 +302,14 @@ sub file {
     # Check if directory for this file is an object we're mocking
     # If so, mark it now as having content
     # which is this file or - if this file is undef, . and ..
-    ( my $dirname = $file ) =~ s{ / [^/]+ $ }{}xms;
+    ( my $dirname = $path ) =~ s{ / [^/]+ $ }{}xms;
     if ( defined $contents && $files_being_mocked{$dirname} ) {
         $files_being_mocked{$dirname}{'has_content'} = 1;
     }
 
     return $class->new(
         {
-            'path'     => $file,
+            'path'     => $path,
             'contents' => $contents,
             %stats
         }
@@ -394,7 +395,7 @@ sub _validate_path {
 
     # Reject the following:
     # ./ ../ /. /.. /./ /../
-    if ( $path =~ m{ ( ^ | / ) \.{1,2} ( / | $ ) }xms ) {
+    if ( $path =~ m{ ( ^ | / ) \.{2} ( / | $ ) }xms ) {
         confess('Relative paths are not supported');
     }
 }
@@ -456,20 +457,21 @@ in the future.)
 =cut
 
 sub dir {
-    my ( $class, $dir_name ) = @_;
+    my ( $class, $dirname ) = @_;
 
-    ( defined $dir_name && length $dir_name ) or confess("No directory name provided to instantiate $class");
-    _get_file_object($dir_name)
-      and confess("It looks like $dir_name is already being mocked. We don't support double mocking yet.");
+    ( defined $dirname && length $dirname ) or confess("No directory name provided to instantiate $class");
+    _get_file_object($dirname)
+      and confess("It looks like $dirname is already being mocked. We don't support double mocking yet.");
 
-    _validate_path($dir_name);
+    my $path = _abs_path_to_file($dirname);
+    _validate_path($path);
 
     # Cleanup trailing forward slashes
-    $dir_name ne '/'
-        and $dir_name =~ s{[/\\]$}{}xmsg;
+    $path ne '/'
+        and $path =~ s{[/\\]$}{}xmsg;
 
     @_ > 2
-      and confess("You cannot set stats for nonexistent dir '$dir_name'");
+      and confess("You cannot set stats for nonexistent dir '$path'");
 
     my $perms = S_IFPERMS & 0777;
     my %stats = ( 'mode' => ( $perms ^ umask ) | S_IFDIR );
@@ -477,10 +479,10 @@ sub dir {
     # TODO: Add stat information
 
     # FIXME: Quick and dirty: provide a helper method?
-    my $has_content = grep m{^\Q$dir_name/\E}xms, %files_being_mocked;
+    my $has_content = grep m{^\Q$path/\E}xms, %files_being_mocked;
     return $class->new(
         {
-            'path'        => $dir_name,
+            'path'        => $path,
             'has_content' => $has_content,
             %stats
         }
