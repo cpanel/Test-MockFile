@@ -768,11 +768,18 @@ sub contents {
         # Retrieve the files in this directory and removes prefix
         my $dirname        = $self->path();
         my @existing_files = sort map {
+            # strip directory from the path
             ( my $basename = $_->path() ) =~ s{^\Q$dirname/\E}{}xms;
+
+            # Is this content within another directory? strip that out
+            $basename =~ s{^( [^/]+ ) / .*}{$1}xms;
+
             defined $_->{'contents'} || $_->is_link() || $_->is_dir() ? ($basename) : ();
         } _files_in_dir($dirname);
 
-        return [ '.', '..', @existing_files ];
+        my %uniq;
+        $uniq{$_}++ for @existing_files;
+        return [ '.', '..', sort keys %uniq ];
     }
 
     # handle files

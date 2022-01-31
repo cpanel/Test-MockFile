@@ -85,5 +85,19 @@ is(
     'Symlink and directories appears in directory content'
 );
 
+{
+    my $d1 = Test::MockFile->dir('/foo2/bar');
+    my $d2 = Test::MockFile->dir('/foo2');
+    mkdir $d1->path();
+    mkdir $d2->path();
+
+    my $f = Test::MockFile->file( '/foo2/bar/baz', '' );
+
+    opendir my $dh, '/foo2' or die $!;
+    my @content = readdir $dh;
+    closedir $dh or die $!;
+    is( \@content, [ qw< . .. bar > ], 'Did not get confused by internal files' );
+}
+
 done_testing();
 exit;
