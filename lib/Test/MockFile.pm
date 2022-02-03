@@ -167,10 +167,6 @@ sub _upgrade_barewords {
     # Default: no
     unshift @args, 0;
 
-    # Ignore handle objects
-    ref $args[1]
-      and return @args;
-
     # Ignore variables
     # Barewords are provided as strings, which means they're read-only
     # (Of course, readonly scalars here will fool us...)
@@ -1260,7 +1256,7 @@ BEGIN {
     *CORE::GLOBAL::open = sub(*;$@) {
         my $likely_bareword;
         my $arg0;
-        if ( defined $_[0] ) {
+        if ( defined $_[0] && !ref $_[0] ) {
 
             # We need to remember the first arg to override the typeglob for barewords
             $arg0 = $_[0];
@@ -1451,7 +1447,7 @@ BEGIN {
     *CORE::GLOBAL::opendir = sub(*$) {
 
         # Upgrade but ignore bareword indicator
-        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
+        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
 
         my $mock_dir = _get_file_object( $_[1] );
 
@@ -1500,7 +1496,7 @@ BEGIN {
     *CORE::GLOBAL::readdir = sub(*) {
 
         # Upgrade but ignore bareword indicator
-        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
+        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
 
         my $mocked_dir = _get_file_object( $_[0] );
 
@@ -1540,7 +1536,7 @@ BEGIN {
     *CORE::GLOBAL::telldir = sub(*) {
 
         # Upgrade but ignore bareword indicator
-        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
+        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
 
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
@@ -1566,7 +1562,7 @@ BEGIN {
     *CORE::GLOBAL::rewinddir = sub(*) {
 
         # Upgrade but ignore bareword indicator
-        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
+        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
 
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
@@ -1593,7 +1589,7 @@ BEGIN {
     *CORE::GLOBAL::seekdir = sub(*$) {
 
         # Upgrade but ignore bareword indicator
-        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
+        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
 
         my ( $fh, $goto ) = @_;
         my $mocked_dir = _get_file_object($fh);
@@ -1619,7 +1615,7 @@ BEGIN {
     *CORE::GLOBAL::closedir = sub(*) {
 
         # Upgrade but ignore bareword indicator
-        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0];
+        ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
 
         my ($fh) = @_;
         my $mocked_dir = _get_file_object($fh);
