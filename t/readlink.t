@@ -22,7 +22,7 @@ my $bad_symlink = "$temp_dir_name/c";
 CORE::symlink( "a",        $symlink );
 CORE::symlink( "notafile", $bad_symlink );
 
-use Test::MockFile ();
+use Test::MockFile qw< nostrict >;
 
 note "-------------- REAL MODE --------------";
 $! = 0;
