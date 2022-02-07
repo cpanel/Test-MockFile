@@ -72,7 +72,6 @@ subtest(
             else {
                 ok( !chown( @{$args} ), $message );
                 is( $! + 0, 1,                         "chown failed (EPERM): \$>:$>, \$):$)" );
-                is( "$!",   'Operation not permitted', 'Correct error string' );
             }
         };
 
