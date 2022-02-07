@@ -139,11 +139,6 @@ Relative paths are not supported:
     $file = Test::MockFile->file( '/bar',        '...' ); # ok     - absolute path
     $file = Test::MockFile->file( 'bar', '...' );         # ok     - current dir
 
-And if you have multiple forward slashes, it will confess as well:
-
-    use Test::MockFile;
-    $file = Test::MockFile->file( '//bar', '...' );
-
 =cut
 
 our %authorized_strict_mode_packages;
@@ -383,11 +378,6 @@ sub symlink {
 
 sub _validate_path {
     my $path = shift;
-
-    # Multiple forward slashes
-    if ( $path =~ m[/{2,}] ) {
-        confess('Repeated forward slashes in path');
-    }
 
     # Reject the following:
     # ./ ../ /. /.. /./ /../
@@ -708,6 +698,10 @@ sub _abs_path_to_file {
     my ($path) = shift;
 
     defined $path or return;
+
+    # cleanup multiple slashes
+    $path =~ s{//+}{/}xmsg;
+
     return $path if $path =~ m{^/};
 
     return Cwd::getcwd() . "/$path";

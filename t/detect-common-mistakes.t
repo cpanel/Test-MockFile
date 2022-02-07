@@ -24,39 +24,76 @@ subtest(
 
 subtest(
     'Checking for multiple forward slash in paths' => sub {
-        like(
-            dies( sub { Test::MockFile->dir('/bar//'); } ),
-            qr/\QRepeated forward slashes in path\E/xms,
+        my $x = '';
+        ok(
+            lives( sub { $x = Test::MockFile->dir('/bar//')->path(); } ),
+            'dir() successful',
+        );
+
+        is(
+            $x,
+            '/bar',
             'Double trailing forward slash',
         );
 
-        like(
-            dies( sub { Test::MockFile->dir('/bar///'); } ),
-            qr/\QRepeated forward slashes in path\E/xms,
+        $x = '';
+        ok(
+            lives( sub { $x = Test::MockFile->dir('/bar///')->path(); } ),
+
+            'dir() succesful',
+        );
+
+        is(
+            $x,
+            '/bar',
             'Multiple trailing forward slash',
         );
 
-        like(
-            dies( sub { Test::MockFile->dir('//bar/'); } ),
-            qr/\QRepeated forward slashes in path\E/xms,
+        $x = '';
+        ok(
+            lives( sub { $x = Test::MockFile->dir('//bar/')->path(); } ),
+            'dir() succesful',
+        );
+
+        is(
+            $x,
+            '/bar',
             'Double leading forward slash for dir',
         );
 
-        like(
-            dies( sub { Test::MockFile->file( '//bar', [] ); } ),
-            qr/\QRepeated forward slashes in path\E/xms,
+        $x = '';
+        ok(
+            lives( sub { $x = Test::MockFile->file( '//bar', '' )->path(); } ),
+            'dir() succesful',
+        );
+
+        is(
+            $x,
+            '/bar',
             'Double leading forward slash for file',
         );
 
-        like(
-            dies( sub { Test::MockFile->dir('/foo//bar/'); } ),
-            qr/\QRepeated forward slashes in path\E/xms,
+        $x = '';
+        ok(
+            lives( sub { $x = Test::MockFile->dir('/foo//bar/')->path(); } ),
+            'dir() succesful',
+        );
+
+        is(
+            $x,
+            '/foo/bar',
             'Double forward slash in the middle for dir',
         );
 
-        like(
-            dies( sub { Test::MockFile->file( '/foo//bar', [] ); } ),
-            qr/\QRepeated forward slashes in path\E/xms,
+        $x = '';
+        ok(
+            lives( sub { $x = Test::MockFile->file( '/foo//bar', '' )->path(); } ),
+            'dir() succesful',
+        );
+
+        is(
+            $x,
+            '/foo/bar',
             'Double forward slash in the middle for file',
         );
     }
