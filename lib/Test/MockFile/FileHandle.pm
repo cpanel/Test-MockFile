@@ -357,7 +357,7 @@ No L<perldoc documentation|http://perldoc.perl.org/perltie.html#Tying-FileHandle
 
 sub FILENO {
     my ($self) = @_;
-    die('Unimplemented');
+    die 'fileno is purposefully unsupported';
 }
 
 =head2 SEEK

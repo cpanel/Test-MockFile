@@ -1891,7 +1891,22 @@ BEGIN {
     };
 }
 
-=head1 BAREWORD FILEHANDLE FAILURES
+=head1 CAEATS AND LIMITATIONS
+
+=head2 FILENO IS UNSUPPORTED
+
+Filehandles can provide the file descriptor (in number) using the C<fileno>
+keyword but this is purposefully unsupported in L<Test::MockFile>.
+
+The reaosn is that by mocking a file, we're creating an alternative file
+system. Returning a C<fileno> (file descriptor number) would require creating
+file descriptor numbers that would possibly conflict with the file desciptors
+you receive from the real filesystem.
+
+In short, this is a recipe for buggy tests or worse - truly destructive
+behavior. If you have a need for a real file, we suggest L<File::Temp>.
+
+=head2 BAREWORD FILEHANDLE FAILURES
 
 There is a particular type of bareword filehandle failures that cannot be
 fixed.
