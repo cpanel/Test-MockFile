@@ -12,7 +12,7 @@ use File::Basename;
 
 use Errno qw/ENOENT EBADF ENOTDIR/;
 
-use Test::MockFile;    # Everything below this can have its open overridden.
+use Test::MockFile qw< nostrict >;    # Everything below this can have its open overridden.
 
 my $temp_dir = tempdir( CLEANUP => 1 );
 my ( undef, $filename )    = tempfile( DIR => $temp_dir );

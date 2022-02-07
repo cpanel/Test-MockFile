@@ -70,13 +70,16 @@ Intercepts file system calls for specific files so unit testing can take place w
 
 This is useful for L<small tests|https://en.wikipedia.org/wiki/Google_Test#Small_Tests_(Unit_Tests)> where file interaction is discouraged.
 
-A strict mode is even provided which can throw a die when files are accessed during your tests!
+A strict mode is even provided (and turned on by default) which can throw a die when files are accessed during your tests!
 
     # Loaded before Test::MockFile so uses the core perl functions without any hooks.
     use Module::I::Dont::Want::To::Alter;
 
-    # strict mode
-    use Test::MockFile qw< strict >;
+    # strict mode by default
+    use Test::MockFile;
+
+    # non-strict mode
+    use Test::MockFile qw< nostrict >;
 
     # Be sure to assign the output of mocks, they disappear when they go out of scope
     my $mock_file = Test::MockFile->file("/foo/bar", "contents\ngo\nhere");
@@ -111,11 +114,12 @@ A strict mode is even provided which can throw a die when files are accessed dur
 
 =head1 IMPORT
 
-If the module is loaded in strict mode, any file checks, open, sysopen, opendir, stat, or lstat will throw a die.
+When the module is loaded with no parameters, strict mode is turned on. Any file checks,
+C<open>, C<sysopen>, C<opendir>, C<stat>, or C<lstat> will throw a die.
 
 For example:
 
-    use Test::MockFile qw< strict >;
+    use Test::MockFile;
 
     # This will not die.
     my $file    = Test::MockFile->file("/bar", "...");
@@ -129,6 +133,10 @@ For example:
     opendir my $fh, '/dir';
     -e '/file';
     -l '/file';
+
+If we want to load the module without strict mode:
+
+    use Test::MockFile qw< nostrict >;
 
 Relative paths are not supported:
 
@@ -237,9 +245,8 @@ sub _strict_mode_violation {
 sub import {
     my ( $class, @args ) = @_;
 
-    if ( grep { $_ =~ m/strict/i } @args ) {
-        add_file_access_hook( \&_strict_mode_violation );
-    }
+    grep { $_ eq 'nostrict' } @args
+        and clear_file_access_hooks();
 }
 
 =head1 SUBROUTINES/METHODS
@@ -1134,7 +1141,7 @@ One use might be:
 
 =cut
 
-my @file_access_hooks;
+my @file_access_hooks = ( \&_strict_mode_violation );
 
 sub add_file_access_hook {
     my ($code_ref) = @_;

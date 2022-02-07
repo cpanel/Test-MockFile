@@ -7,7 +7,7 @@ use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 use Test2::Tools::Exception qw< lives >;
 use Test2::Plugin::NoWarnings;
-use Test::MockFile qw< strict >;
+use Test::MockFile;
 use IO::Handle;
 
 my $handle = IO::Handle->new();

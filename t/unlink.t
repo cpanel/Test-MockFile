@@ -19,7 +19,7 @@ my ( $fh, $existing_file_name ) = tempfile();
 print $fh "This is the real file\n";
 close $fh;
 
-use Test::MockFile ();
+use Test::MockFile qw< nostrict >;
 
 subtest 'unlink on a missing file' => sub {
     $! = 0;

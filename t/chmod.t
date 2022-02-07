@@ -8,7 +8,7 @@ use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 use Test2::Tools::Exception qw< lives dies >;
 use Test2::Tools::Warnings qw< warning >;
-use Test::MockFile;
+use Test::MockFile qw< nostrict >;
 
 my $filename = __FILE__;
 my $file     = Test::MockFile->file( $filename, 'whatevs' );
