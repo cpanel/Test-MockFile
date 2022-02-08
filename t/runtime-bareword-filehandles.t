@@ -27,4 +27,6 @@ ok(
     'Successfully handled bareword filehandles during runtime',
 );
 
+is( "$@", '', 'No observed error' );
+
 done_testing();
