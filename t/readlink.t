@@ -49,13 +49,21 @@ $! = 0;
 my $got = 'abc';
 like( warning { $got = CORE::readlink(undef) }, qr/^Use of uninitialized value in readlink at /, "Got expected warning for passing no value to readlink" );
 is( $got,   undef,  "readlink without args is undef." );
-is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
+if ( $^O eq 'freebsd' ) {
+    is( $! + 0, EINVAL, '$! is EINVAL for a readlink(undef)' );
+} else {
+    is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
+}
 
 $!   = 0;
 $got = 'abc';
 like( warning { $got = CORE::readlink() }, qr/^Use of uninitialized value \$_ in readlink at /, "Got expected warning for passing no value to readlink" );
 is( $got,   undef,  "readlink without args is undef." );
-is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
+if ( $^O eq 'freebsd' ) {
+    is( $! + 0, EINVAL, '$! is EINVAL for a readlink(undef)' );
+} else {
+    is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
+}
 
 note "Cleaning up...";
 CORE::unlink( $symlink, $bad_symlink, $file );

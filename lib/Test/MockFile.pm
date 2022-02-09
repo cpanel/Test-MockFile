@@ -1657,7 +1657,11 @@ BEGIN {
 
         if ( !defined $file ) {
             warn 'Use of uninitialized value in readlink';
-            $! = ENOENT;
+            if ( $^O eq 'freebsd' ) {
+                $! = EINVAL;
+            } else {
+                $! = ENOENT;
+            }
             return;
         }
 
