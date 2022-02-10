@@ -1894,6 +1894,19 @@ BEGIN {
 
 =head1 CAEATS AND LIMITATIONS
 
+=head2 DEBUGGER UNDER STRICT MODE
+
+If you want to use the Perl debugger (L<perldebug>) on any code that uses
+L<Test::MockFile> in strict mode, you will need to load L<Term::ReadLine>
+beforehand, because it loads a file. Under the debugger, the debugger will
+load the module after L<Test::MockFile> and get mad.
+
+    # Load it from the command line
+    perl -MTerm::ReadLine -d code.pl
+
+    # Or alternatively, add this to the top of your code:
+    use Term::ReadLine
+
 =head2 FILENO IS UNSUPPORTED
 
 Filehandles can provide the file descriptor (in number) using the C<fileno>
