@@ -1,5 +1,16 @@
 Revision history for Test-MockFile
 
+0.027   2/10/2022
+- GH #75 - Strict mode is now on by default
+- GH #45 - Provide a helpful error message and document fileno unsupported.
+- GH #90 - Normalize forward slashes.
+- GH #126 - Document using debugger under strict mode.
+- Do not hard-code values of $!
+- Try to get more data when t/runtime-bareword-filehandles.t fails on cpan testers.
+- GH #64 -  Do not overwrite the error code when checking for Docker
+- GH #63 -  FreeBSD's readlink() returns EINVAL for readlink(undef):
+- Add more data for debugging test failures on OpenBSD
+
 0.026   2/3/2022
 - Fix support for mocking the top-level directory.
 - Symlinks should appear in readdir

@@ -24,7 +24,7 @@ Test::MockFile::FileHandle - Provides a class for L<Test::MockFile> to tie to on
 
 =head1 VERSION
 
-Version 0.026
+Version 0.027
 
 =cut
 
