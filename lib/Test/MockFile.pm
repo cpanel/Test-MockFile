@@ -1579,6 +1579,7 @@ BEGIN {
         my $mocked_dir = _get_file_object( $_[0] );
 
         if ( !$mocked_dir ) {
+            _real_file_access_hook( 'readdir', [ \@_ ] );
             goto \&CORE::readdir if _goto_is_available();
             return CORE::readdir( $_[0] );
         }
@@ -1620,6 +1621,7 @@ BEGIN {
         my $mocked_dir = _get_file_object($fh);
 
         if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+            _real_file_access_hook( 'telldir', [ \@_ ] );
             goto \&CORE::telldir if _goto_is_available();
             return CORE::telldir($fh);
         }
@@ -1646,6 +1648,7 @@ BEGIN {
         my $mocked_dir = _get_file_object($fh);
 
         if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+            _real_file_access_hook( 'rewinddir', [ \@_ ] );
             goto \&CORE::rewinddir if _goto_is_available();
             return CORE::rewinddir( $_[0] );
         }
@@ -1673,6 +1676,7 @@ BEGIN {
         my $mocked_dir = _get_file_object($fh);
 
         if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+            _real_file_access_hook( 'seekdir', [ \@_ ] );
             goto \&CORE::seekdir if _goto_is_available();
             return CORE::seekdir( $fh, $goto );
         }
@@ -1699,6 +1703,7 @@ BEGIN {
         my $mocked_dir = _get_file_object($fh);
 
         if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+            _real_file_access_hook( 'closedir', [ \@_ ] );
             goto \&CORE::closedir if _goto_is_available();
             return CORE::closedir($fh);
         }
@@ -1745,6 +1750,7 @@ BEGIN {
 
         my $mock_object = _get_file_object($file);
         if ( !$mock_object ) {
+            _real_file_access_hook( 'readlink', [ \@_ ] );
             goto \&CORE::readlink if _goto_is_available();
             return CORE::readlink($file);
         }
@@ -1773,8 +1779,8 @@ BEGIN {
         my $mock = _get_file_object($file);
 
         if ( !$mock ) {
+            _real_file_access_hook( 'mkdir', [ \@_ ] );
             goto \&CORE::mkdir if _goto_is_available();
-
             return CORE::mkdir(@_);
         }
 
@@ -1809,6 +1815,7 @@ BEGIN {
         my $mock = _get_file_object($file);
 
         if ( !$mock ) {
+            _real_file_access_hook( 'rmdir', [ \@_ ] );
             goto \&CORE::rmdir if _goto_is_available();
             return CORE::rmdir($file);
         }
