@@ -1311,9 +1311,41 @@ BEGIN {
             ( $likely_bareword, @_ ) = _upgrade_barewords(@_);
         }
 
-        # We're not supporting 2 arg or 1 arg opens yet.
-        # open(my $fh, ">filehere"); # Just don't do this. It's bad.
-        if ( scalar @_ != 3 ) {
+        # We need to take out the mode and file
+        # but we must keep using $_[0] for the file-handle to update the caller
+        my ( undef, $mode, $file ) = @_;
+        my $arg_count = @_;
+
+        # Normalize two-arg to three-arg
+        if ( $arg_count == 2 ) {
+
+            # The order here matters, so '>>' won't turn into '>'
+            if ( $_[1] =~ /^ ( >> | [+]?> | [+]?< ) (.+) $/xms ) {
+                $mode = $1;
+                $file = $2;
+            }
+            elsif ( $_[1] =~ /^[\.\/\\\w\d\-]+$/xms ) {
+                $mode = '<';
+                $file = $_[1];
+            }
+            elsif ( $_[1] =~ /^\|/xms ) {
+                $mode = '|-';
+                $file = $_[1];
+            }
+            elsif ( $_[1] =~ /\|$/xms ) {
+                $mode = '-|';
+                $file = $_[1];
+            }
+            else {
+                die "Unsupported two-way open: $_[1]\n";
+            }
+
+            # We have all args
+            $arg_count++;
+        }
+
+        # We're not supporting 1 arg opens yet
+        if ( $arg_count != 3 ) {
             _real_file_access_hook( "open", \@_ );
             goto \&CORE::open if _goto_is_available();
             if ( @_ == 1 ) {
@@ -1328,17 +1360,15 @@ BEGIN {
         }
 
         # Allows for scalar file handles.
-        if ( ref $_[2] && ref $_[2] eq 'SCALAR' ) {
+        if ( ref $file && ref $file eq 'SCALAR' ) {
             goto \&CORE::open if _goto_is_available();
-            return CORE::open( $_[0], $_[1], $_[2] );
+            return CORE::open( $_[0], $mode, $file );
         }
 
-        my $abs_path = _find_file_or_fh( $_[2], 1 );    # Follow the link.
-        confess() if !$abs_path;
+        my $abs_path = _find_file_or_fh( $file, 1 );    # Follow the link.
+        confess() if !$abs_path && $mode ne '|-' && $mode ne '-|';
         confess() if $abs_path eq BROKEN_SYMLINK;
         my $mock_file = _get_file_object($abs_path);
-
-        my $mode = $_[1];
 
         # For now we're going to just strip off the binmode and hope for the best.
         $mode =~ s/(:.+$)//;
