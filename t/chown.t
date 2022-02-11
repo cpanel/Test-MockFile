@@ -71,7 +71,7 @@ subtest(
             }
             else {
                 ok( !chown( @{$args} ), $message );
-                is( $! + 0, 1,                         "chown failed (EPERM): \$>:$>, \$):$)" );
+                is( $! + 0, 1, "chown failed (EPERM): \$>:$>, \$):$)" );
             }
         };
 

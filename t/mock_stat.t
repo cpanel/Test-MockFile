@@ -124,8 +124,8 @@ is( Test::MockFile::_mock_stat( 'stat',  '/broken_link' ), [],                  
     # make sure directories with trailing slash are not ignored by stat by accident
     my $dir = Test::MockFile->dir('/quux');
     mkdir $dir->path();
-    ok( -d( $dir->path() ), 'Directory /quux exists' );
-    ok( -d( $dir->path() . '/' ), 'Directory /quux/ also exists' );
+    ok( -d ( $dir->path() ),       'Directory /quux exists' );
+    ok( -d ( $dir->path() . '/' ), 'Directory /quux/ also exists' );
 }
 
 done_testing();
