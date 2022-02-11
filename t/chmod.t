@@ -34,7 +34,6 @@ subtest(
         my $perms_after_1 = sprintf '%04o', ( Test::MockFile::S_IFPERMS() & 0666 ) ^ umask;
         my $perms_after_2 = sprintf '%04o', ( ( Test::MockFile::S_IFPERMS() & 0666 ) ^ umask ) | Test::MockFile::S_IFREG();
 
-
         my $file_def_perm = sprintf '%04o', 0666 - umask;
         is(
             sprintf( '%04o', ( stat '/foo/bar' )[2] & 07777 ),

@@ -11,10 +11,10 @@ use Test::MockFile;
 
 my $dir  = Test::MockFile->dir('/foo');
 my $file = Test::MockFile->file('/bar');
-ok( !-d('/foo'), 'Directory does not exist yet' );
+ok( !-d ('/foo'), 'Directory does not exist yet' );
 
 my $symlink = Test::MockFile->symlink( '/bar', '/foo/baz' );
-ok( -d('/foo'), 'Directory now exists' );
+ok( -d ('/foo'), 'Directory now exists' );
 
 {
     opendir my $dh, '/foo' or die $!;
@@ -22,7 +22,7 @@ ok( -d('/foo'), 'Directory now exists' );
     closedir $dh or die $!;
     is(
         \@content,
-        [ qw< . .. baz > ],
+        [qw< . .. baz >],
         'Directory with symlink content are correct',
     );
 }
@@ -35,7 +35,7 @@ undef $symlink;
     closedir $dh or die $!;
     is(
         \@content,
-        [ qw< . .. > ],
+        [qw< . .. >],
         'Directory no longer has symlink',
     );
 }

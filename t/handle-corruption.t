@@ -16,15 +16,15 @@ isa_ok( $handle, 'IO::Handle' );
 my $file = Test::MockFile->file( '/foo', '' );
 $! = 0;
 ok( open( $handle, '<', '/foo' ), 'Succesfully opened file' );
-is( "$!", '', 'No error (string)' );
-is( $!+0, 0, 'No error (code)' );
+is( "$!",   '', 'No error (string)' );
+is( $! + 0, 0,  'No error (code)' );
 
 isa_ok( $handle, 'IO::File' );
 
 $! = 0;
 ok( close($handle), 'Successfully closed handle' );
-is( "$!", '', 'No error (string)' );
-is( $!+0, 0, 'No error (code)' );
+is( "$!",   '', 'No error (string)' );
+is( $! + 0, 0,  'No error (code)' );
 
 done_testing();
 exit;
