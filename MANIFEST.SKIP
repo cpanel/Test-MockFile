@@ -19,4 +19,5 @@
 ^Test-MockFile-\d\.\d+/
 ^cpanfile$
 ^.perltidyrc$
+^.podtidy-opts$
 ^META\.
