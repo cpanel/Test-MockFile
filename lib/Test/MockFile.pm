@@ -40,7 +40,8 @@ use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
 =head1 NAME
 
-Test::MockFile - Allows tests to validate code that can interact with files without touching the file system.
+Test::MockFile - Allows tests to validate code that can interact with
+files without touching the file system.
 
 =head1 VERSION
 
@@ -66,11 +67,15 @@ use constant S_IFIFO  => 0010000;     # FIFO
 
 =head1 SYNOPSIS
 
-Intercepts file system calls for specific files so unit testing can take place without any files being altered on disk.
+Intercepts file system calls for specific files so unit testing can
+take place without any files being altered on disk.
 
-This is useful for L<small tests|https://en.wikipedia.org/wiki/Google_Test#Small_Tests_(Unit_Tests)> where file interaction is discouraged.
+This is useful for L<small
+tests|https://en.wikipedia.org/wiki/Google_Test#Small_Tests_(Unit_Tests)>
+where file interaction is discouraged.
 
-A strict mode is even provided (and turned on by default) which can throw a die when files are accessed during your tests!
+A strict mode is even provided (and turned on by default) which can
+throw a die when files are accessed during your tests!
 
     # Loaded before Test::MockFile so uses the core perl functions without any hooks.
     use Module::I::Dont::Want::To::Alter;
@@ -114,8 +119,9 @@ A strict mode is even provided (and turned on by default) which can throw a die 
 
 =head1 IMPORT
 
-When the module is loaded with no parameters, strict mode is turned on. Any file checks,
-C<open>, C<sysopen>, C<opendir>, C<stat>, or C<lstat> will throw a die.
+When the module is loaded with no parameters, strict mode is turned on.
+Any file checks, C<open>, C<sysopen>, C<opendir>, C<stat>, or C<lstat>
+will throw a die.
 
 For example:
 
@@ -241,7 +247,7 @@ sub import {
     my ( $class, @args ) = @_;
 
     grep { $_ eq 'nostrict' } @args
-        and clear_file_access_hooks();
+      and clear_file_access_hooks();
 }
 
 =head1 SUBROUTINES/METHODS
@@ -252,10 +258,11 @@ Args: ($file, $contents, $stats)
 
 This will make cause $file to be mocked in all file checks, opens, etc.
 
-C<undef> contents means that the file should act like it's not there. You can
-only set the stats if you provide content.
+C<undef> contents means that the file should act like it's not there.
+You can only set the stats if you provide content.
 
-If you give file content, the directory inside it will be mocked as well.
+If you give file content, the directory inside it will be mocked as
+well.
 
     my $f = Test::MockFile->file( '/foo/bar' );
     -d '/foo' # not ok
@@ -318,7 +325,8 @@ sub file {
 
 Args: C<($file_to_mock, $file_on_disk, $stats)>
 
-This will make cause C<$file> to be mocked in all file checks, opens, etc.
+This will make cause C<$file> to be mocked in all file checks, opens,
+etc.
 
 If C<file_on_disk> isn't present, then this will die.
 
@@ -349,11 +357,16 @@ Args: ($readlink, $file )
 
 This will cause $file to be mocked in all file checks, opens, etc.
 
-C<$readlink> indicates what "fake" file it points to. If the file C<$readlink> points to is not mocked, it will act like a broken link, regardless of what's on disk.
+C<$readlink> indicates what "fake" file it points to. If the file
+C<$readlink> points to is not mocked, it will act like a broken link,
+regardless of what's on disk.
 
-If C<$readlink> is undef, then the symlink is mocked but not present.(lstat $file is empty.)
+If C<$readlink> is undef, then the symlink is mocked but not
+present.(lstat $file is empty.)
 
-Stats are not able to be specified on instantiation but can in theory be altered after the object is created. People don't normally mess with the permissions on a symlink.
+Stats are not able to be specified on instantiation but can in theory
+be altered after the object is created. People don't normally mess with
+the permissions on a symlink.
 
 =cut
 
@@ -397,15 +410,16 @@ sub _validate_path {
 
 Args: ($dir)
 
-This will cause $dir to be mocked in all file checks, and C<opendir> interactions.
+This will cause $dir to be mocked in all file checks, and C<opendir>
+interactions.
 
 The directory name is normalized so any trailing slash is removed.
 
     $dir = Test::MockFile->dir( 'mydir/', ... ); # ok
     $dir->path();                                # mydir
 
-If there were previously mocked files (within the same scope), the directory will
-exist. Otherwise, the directory will be nonexistent.
+If there were previously mocked files (within the same scope), the
+directory will exist. Otherwise, the directory will be nonexistent.
 
     my $dir = Test::MockFile->dir('/etc');
     -d $dir;          # not ok since directory wasn't created yet
@@ -433,13 +447,13 @@ exist. Otherwise, the directory will be nonexistent.
     -d '/foo';                # true
     $dir->contents();         # . .. bar
 
-NOTE: Because C<.> and C<..> will always be the first things C<readdir> returns,
-These files are automatically inserted at the front of the array. The order of
-files is sorted.
+NOTE: Because C<.> and C<..> will always be the first things C<readdir>
+returns, These files are automatically inserted at the front of the
+array. The order of files is sorted.
 
-If you want to affect the stat information of a directory, you need to use the
-available core Perl keywords. (We might introduce a special helper method for it
-in the future.)
+If you want to affect the stat information of a directory, you need to
+use the available core Perl keywords. (We might introduce a special
+helper method for it in the future.)
 
     $d = Test::MockFile->dir( '/foo', [], { 'mode' => 0755 } );    # dies
     $d = Test::MockFile->dir( '/foo', undef, { 'mode' => 0755 } ); # dies
@@ -461,7 +475,7 @@ sub dir {
 
     # Cleanup trailing forward slashes
     $path ne '/'
-        and $path =~ s{[/\\]$}{}xmsg;
+      and $path =~ s{[/\\]$}{}xmsg;
 
     @_ > 2
       and confess("You cannot set stats for nonexistent dir '$path'");
@@ -501,10 +515,14 @@ When creating mocked files or directories, we default their stats to:
             'fileno'    => undef,    # fileno()
     } );
 
-You'll notice that mode, size, and blocks have been left out of this. Mode is set to 666 (for files) or 777 (for directories), xored against the current umask.
-Size and blocks are calculated based on the size of 'contents' a.k.a. the fake file.
+You'll notice that mode, size, and blocks have been left out of this.
+Mode is set to 666 (for files) or 777 (for directories), xored against
+the current umask. Size and blocks are calculated based on the size of
+'contents' a.k.a. the fake file.
 
-When you want to override one of the defaults, all you need to do is specify that when you declare the file or directory. The rest will continue to default.
+When you want to override one of the defaults, all you need to do is
+specify that when you declare the file or directory. The rest will
+continue to default.
 
     my $mfile = Test::MockFile->file("/root/abc", "...", {inode => 65, uid => 123, mtime => int((2000-1970) * 365.25 * 24 * 60 * 60 }));
 
@@ -512,7 +530,8 @@ When you want to override one of the defaults, all you need to do is specify tha
 
 =head2 new
 
-This class method is called by file/symlink/dir. There is no good reason to call this directly.
+This class method is called by file/symlink/dir. There is no good
+reason to call this directly.
 
 =cut
 
@@ -641,7 +660,7 @@ sub _find_file_or_fh {
     # Find the file handle or fall back to just using the abs path of $file_or_fh
     my $absolute_path_to_file = _fh_to_file($file_or_fh) // _abs_path_to_file($file_or_fh) // '';
     $absolute_path_to_file ne '/'
-        and $absolute_path_to_file =~ s{[/\\]$}{}xmsg;
+      and $absolute_path_to_file =~ s{[/\\]$}{}xmsg;
 
     # Get the pointer to the object.
     my $mock_object = $files_being_mocked{$absolute_path_to_file};
@@ -739,8 +758,9 @@ Optional Arg: $contents
 
 Retrieves or updates the current contents of the file.
 
-Only retrieves the content of the directory (as an arrayref).  You can set
-directory contents with calling the C<file()> method described above.
+Only retrieves the content of the directory (as an arrayref).  You can
+set directory contents with calling the C<file()> method described
+above.
 
 Symlinks have no contents.
 
@@ -765,6 +785,7 @@ sub contents {
         # Retrieve the files in this directory and removes prefix
         my $dirname        = $self->path();
         my @existing_files = sort map {
+
             # strip directory from the path
             ( my $basename = $_->path() ) =~ s{^\Q$dirname/\E}{}xms;
 
@@ -808,8 +829,8 @@ sub filename {
 
 =head2 path
 
-The path (filename or dirname) of the file or directory this mock object is
-controlling.
+The path (filename or dirname) of the file or directory this mock
+object is controlling.
 
 =cut
 
@@ -859,9 +880,11 @@ sub unlink {
 
 Optional Args: ($epoch_time)
 
-This function acts like the UNIX utility touch. It sets atime, mtime, ctime to $epoch_time.
+This function acts like the UNIX utility touch. It sets atime, mtime,
+ctime to $epoch_time.
 
-If no arguments are passed, $epoch_time is set to time(). If the file does not exist, contents are set to an empty string.
+If no arguments are passed, $epoch_time is set to time(). If the file
+does not exist, contents are set to an empty string.
 
 =cut
 
@@ -921,7 +944,8 @@ sub _unused_fileno {
 
 Optional Arg: $readlink
 
-Returns the stat of a mocked file (does not follow symlinks.) You can also use this to change what your symlink is pointing to.
+Returns the stat of a mocked file (does not follow symlinks.) You can
+also use this to change what your symlink is pointing to.
 
 =cut
 
@@ -1038,8 +1062,9 @@ sub blocks {
 
 Optional Arg: $perms
 
-Allows you to alter the permissions of a file. This only allows you to change the C<07777> bits of the file permissions.
-The number passed should be the octal C<0755> form, not the alphabetic C<"755"> form
+Allows you to alter the permissions of a file. This only allows you to
+change the C<07777> bits of the file permissions. The number passed
+should be the octal C<0755> form, not the alphabetic C<"755"> form
 
 =cut
 
@@ -1069,7 +1094,8 @@ sub permissions {
 
 Optional Arg: $new_epoch_time
 
-Returns and optionally sets the mtime of the file if passed as an integer.
+Returns and optionally sets the mtime of the file if passed as an
+integer.
 
 =cut
 
@@ -1087,7 +1113,8 @@ sub mtime {
 
 Optional Arg: $new_epoch_time
 
-Returns and optionally sets the ctime of the file if passed as an integer.
+Returns and optionally sets the ctime of the file if passed as an
+integer.
 
 =cut
 
@@ -1105,7 +1132,8 @@ sub ctime {
 
 Optional Arg: $new_epoch_time
 
-Returns and optionally sets the atime of the file if passed as an integer.
+Returns and optionally sets the atime of the file if passed as an
+integer.
 
 =cut
 
@@ -1123,11 +1151,15 @@ sub atime {
 
 Args: ( $code_ref )
 
-You can use B<add_file_access_hook> to add a code ref that gets called every time a real file (not mocked) operation happens.
-We use this for strict mode to die if we detect your program is unexpectedly accessing files. You are welcome to use it for whatever you like.
+You can use B<add_file_access_hook> to add a code ref that gets called
+every time a real file (not mocked) operation happens. We use this for
+strict mode to die if we detect your program is unexpectedly accessing
+files. You are welcome to use it for whatever you like.
 
-Whenever the code ref is called, we pass 2 arguments: C<$code-E<gt>($access_type, $at_under_ref)>. Be aware that altering the variables in
-C<$at_under_ref> will affect the variables passed to open / sysopen, etc.
+Whenever the code ref is called, we pass 2 arguments:
+C<$code-E<gt>($access_type, $at_under_ref)>. Be aware that altering the
+variables in C<$at_under_ref> will affect the variables passed to open
+/ sysopen, etc.
 
 One use might be:
 
@@ -1148,7 +1180,8 @@ sub add_file_access_hook {
 
 =head2 clear_file_access_hooks
 
-Calling this subroutine will clear everything that was passed to B<add_file_access_hook>
+Calling this subroutine will clear everything that was passed to
+B<add_file_access_hook>
 
 =cut
 
@@ -1176,23 +1209,37 @@ Test::MockFile uses 2 methods to mock file access:
 
 =head3 -X via L<Overload::FileCheck>
 
-It is currently not possible in pure perl to override L<stat|http://perldoc.perl.org/functions/stat.html>, L<lstat|http://perldoc.perl.org/functions/lstat.html> and L<-X operators|http://perldoc.perl.org/functions/-X.html>.
-In conjunction with this module, we've developed L<Overload::FileCheck>.
+It is currently not possible in pure perl to override
+L<stat|http://perldoc.perl.org/functions/stat.html>,
+L<lstat|http://perldoc.perl.org/functions/lstat.html> and L<-X
+operators|http://perldoc.perl.org/functions/-X.html>. In conjunction
+with this module, we've developed L<Overload::FileCheck>.
 
-This enables us to intercept calls to stat, lstat and -X operators (like -e, -f, -d, -s, etc.) and pass them to our control. If the file is currently being mocked, we return the stat (or lstat) information on the file to be used to determine the answer to whatever check was made. This even works for things like C<-e _>.
-If we do not control the file in question, we return C<FALLBACK_TO_REAL_OP()> which then makes a normal check.
+This enables us to intercept calls to stat, lstat and -X operators
+(like -e, -f, -d, -s, etc.) and pass them to our control. If the file
+is currently being mocked, we return the stat (or lstat) information on
+the file to be used to determine the answer to whatever check was made.
+This even works for things like C<-e _>. If we do not control the file
+in question, we return C<FALLBACK_TO_REAL_OP()> which then makes a
+normal check.
 
 =head3 CORE::GLOBAL:: overrides
 
-Since 5.10, it has been possible to override function calls by defining them. like:
+Since 5.10, it has been possible to override function calls by defining
+them. like:
 
     *CORE::GLOBAL::open = sub(*;$@) {...}
 
-Any code which is loaded B<AFTER> this happens will use the alternate open. This means you can place your C<use Test::MockFile> statement after statements you don't want to be mocked and
-there is no risk that the code will ever be altered by Test::MockFile.
+Any code which is loaded B<AFTER> this happens will use the alternate
+open. This means you can place your C<use Test::MockFile> statement
+after statements you don't want to be mocked and there is no risk that
+the code will ever be altered by Test::MockFile.
 
-We oveload the following statements and then return tied handles to enable the rest of the IO functions to work properly. Only B<open> / B<sysopen> are needed to address file operations.
-However B<opendir> file handles were never setup for tie so we have to override all of B<opendir>'s related functions.
+We oveload the following statements and then return tied handles to
+enable the rest of the IO functions to work properly. Only B<open> /
+B<sysopen> are needed to address file operations. However B<opendir>
+file handles were never setup for tie so we have to override all of
+B<opendir>'s related functions.
 
 =over
 
@@ -1659,7 +1706,8 @@ BEGIN {
             warn 'Use of uninitialized value in readlink';
             if ( $^O eq 'freebsd' ) {
                 $! = EINVAL;
-            } else {
+            }
+            else {
                 $! = ENOENT;
             }
             return;
@@ -1900,10 +1948,11 @@ BEGIN {
 
 =head2 DEBUGGER UNDER STRICT MODE
 
-If you want to use the Perl debugger (L<perldebug>) on any code that uses
-L<Test::MockFile> in strict mode, you will need to load L<Term::ReadLine>
-beforehand, because it loads a file. Under the debugger, the debugger will
-load the module after L<Test::MockFile> and get mad.
+If you want to use the Perl debugger (L<perldebug>) on any code that
+uses L<Test::MockFile> in strict mode, you will need to load
+L<Term::ReadLine> beforehand, because it loads a file. Under the
+debugger, the debugger will load the module after L<Test::MockFile> and
+get mad.
 
     # Load it from the command line
     perl -MTerm::ReadLine -d code.pl
@@ -1913,27 +1962,29 @@ load the module after L<Test::MockFile> and get mad.
 
 =head2 FILENO IS UNSUPPORTED
 
-Filehandles can provide the file descriptor (in number) using the C<fileno>
-keyword but this is purposefully unsupported in L<Test::MockFile>.
+Filehandles can provide the file descriptor (in number) using the
+C<fileno> keyword but this is purposefully unsupported in
+L<Test::MockFile>.
 
-The reaosn is that by mocking a file, we're creating an alternative file
-system. Returning a C<fileno> (file descriptor number) would require creating
-file descriptor numbers that would possibly conflict with the file desciptors
-you receive from the real filesystem.
+The reaosn is that by mocking a file, we're creating an alternative
+file system. Returning a C<fileno> (file descriptor number) would
+require creating file descriptor numbers that would possibly conflict
+with the file desciptors you receive from the real filesystem.
 
 In short, this is a recipe for buggy tests or worse - truly destructive
 behavior. If you have a need for a real file, we suggest L<File::Temp>.
 
 =head2 BAREWORD FILEHANDLE FAILURES
 
-There is a particular type of bareword filehandle failures that cannot be
-fixed.
+There is a particular type of bareword filehandle failures that cannot
+be fixed.
 
 These errors occur because there's compile-time code that uses bareword
-filehandles in a function call that cannot be expressed by this module's
-prototypes for core functions.
+filehandles in a function call that cannot be expressed by this
+module's prototypes for core functions.
 
-The only solution to these is loading `Test::MockFile` after the other code:
+The only solution to these is loading `Test::MockFile` after the other
+code:
 
 This will fail:
 
@@ -1958,7 +2009,8 @@ Todd Rinaldo, C<< <toddr at cpan.org> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to L<https://github.com/CpanelInc/Test-MockFile>.
+Please report any bugs or feature requests to
+L<https://github.com/CpanelInc/Test-MockFile>.
 
 =head1 SUPPORT
 
@@ -1983,7 +2035,9 @@ L<https://metacpan.org/release/Test-MockFile>
 
 =head1 ACKNOWLEDGEMENTS
 
-Thanks to Nicolas R., C<< <atoomic at cpan.org> >> for help with L<Overload::FileCheck>. This module could not have been completed without it.
+Thanks to Nicolas R., C<< <atoomic at cpan.org> >> for help with
+L<Overload::FileCheck>. This module could not have been completed
+without it.
 
 =head1 LICENSE AND COPYRIGHT
 
@@ -1993,8 +2047,8 @@ All rights reserved.
 
 L<http://cpanel.net>
 
-This is free software; you can redistribute it and/or modify it under the
-same terms as Perl itself. See L<perlartistic>.
+This is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself. See L<perlartistic>.
 
 =cut
 
