@@ -186,11 +186,12 @@ sub _upgrade_barewords {
     my $handle;
     {
         no strict 'refs';
-        $handle = Symbol::qualify_to_ref( $args[1], caller(1) );
+        my $caller_pkg = caller(1);
+        $handle = *{"$caller_pkg\::$args[1]"};
     }
 
     # Check that the upgrading worked
-    ref $handle eq 'GLOB'
+    ref \$handle eq 'GLOB'
       or return @args;
 
     # Set to bareword
