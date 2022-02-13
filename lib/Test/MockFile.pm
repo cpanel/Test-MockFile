@@ -70,8 +70,7 @@ use constant S_IFIFO  => 0010000;     # FIFO
 Intercepts file system calls for specific files so unit testing can
 take place without any files being altered on disk.
 
-This is useful for L<small
-tests|https://en.wikipedia.org/wiki/Google_Test#Small_Tests_(Unit_Tests)>
+This is useful for L<small tests|https://testing.googleblog.com/2010/12/test-sizes.html>
 where file interaction is discouraged.
 
 A strict mode is even provided (and turned on by default) which can
