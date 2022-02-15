@@ -823,7 +823,7 @@ Deprecated. Same as C<path>.
 =cut
 
 sub filename {
-    warn 'filename() is deprecated, use path() instead';
+    carp( 'filename() is deprecated, use path() instead' );
     goto &path;
 }
 
@@ -1738,7 +1738,7 @@ BEGIN {
         my ($file) = @_;
 
         if ( !defined $file ) {
-            warn 'Use of uninitialized value in readlink';
+            carp( 'Use of uninitialized value in readlink' );
             if ( $^O eq 'freebsd' ) {
                 $! = EINVAL;
             }
