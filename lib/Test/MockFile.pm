@@ -20,7 +20,7 @@ use constant CIRCULAR_SYMLINK => bless {}, "A::CIRCULAR::SYMLINK";
 
 # we're going to use carp but the errors should come from outside of our package.
 use Carp qw(carp confess);
-$Carp::Internal{__PACKAGE__}++;
+$Carp::Internal{(__PACKAGE__)}++;
 $Carp::Internal{'Overload::FileCheck'}++;
 
 use Cwd                        ();
