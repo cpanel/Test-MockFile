@@ -15,7 +15,6 @@
 # See utility 'perltidyrc_dump.pl' for nicer formatting.
 --add-newlines
 --add-semicolons
---add-terminal-newline
 --add-whitespace
 --backup-and-modify-in-place
 --backup-file-extension="bak"
@@ -49,7 +48,6 @@
 --closing-side-comment-maximum-text=20
 --closing-side-comments-balanced
 --closing-square-bracket-indentation=0
---code-skipping
 --comma-arrow-breakpoints=5
 --continuation-indentation=2
 --cuddled-break-option=1
@@ -58,11 +56,9 @@
 --delete-old-newlines
 --nodelete-old-whitespace
 --delete-semicolons
---noextended-continuation-indentation
 --extended-syntax
 --format="tidy"
 --format-skipping
---function-paren-vertical-alignment
 --fuzzy-line-length
 --hanging-side-comments
 --nohtml
@@ -86,10 +82,7 @@
 --look-for-selfloader
 --maximum-consecutive-blank-lines=1
 --maximum-fields-per-table=0
---maximum-file-size-mb=10
---maximum-level-errors=1
 --maximum-line-length=400
---maximum-unexpected-errors=0
 --memoize
 --minimum-space-to-comment=4
 --non-indenting-braces
