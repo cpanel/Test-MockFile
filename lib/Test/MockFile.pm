@@ -20,7 +20,7 @@ use constant CIRCULAR_SYMLINK => bless {}, "A::CIRCULAR::SYMLINK";
 
 # we're going to use carp but the errors should come from outside of our package.
 use Carp qw(carp confess);
-$Carp::Internal{(__PACKAGE__)}++;
+$Carp::Internal{ (__PACKAGE__) }++;
 $Carp::Internal{'Overload::FileCheck'}++;
 
 use Cwd                        ();
@@ -823,7 +823,7 @@ Deprecated. Same as C<path>.
 =cut
 
 sub filename {
-    carp( 'filename() is deprecated, use path() instead' );
+    carp('filename() is deprecated, use path() instead');
     goto &path;
 }
 
@@ -1738,7 +1738,7 @@ BEGIN {
         my ($file) = @_;
 
         if ( !defined $file ) {
-            carp( 'Use of uninitialized value in readlink' );
+            carp('Use of uninitialized value in readlink');
             if ( $^O eq 'freebsd' ) {
                 $! = EINVAL;
             }
