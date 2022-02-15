@@ -20,9 +20,11 @@ use constant CIRCULAR_SYMLINK => bless {}, "A::CIRCULAR::SYMLINK";
 
 # we're going to use carp but the errors should come from outside of our package.
 use Carp qw(carp confess);
-$Carp::Internal{ (__PACKAGE__) }++;
-$Carp::Internal{'Overload::FileCheck'}++;
 
+BEGIN {
+    $Carp::Internal{ (__PACKAGE__) }++;
+    $Carp::Internal{'Overload::FileCheck'}++;
+}
 use Cwd                        ();
 use IO::File                   ();
 use Test::MockFile::FileHandle ();
@@ -155,6 +157,7 @@ Relative paths are not supported:
 =cut
 
 our %authorized_strict_mode_packages;
+our $STRICT_MODE_IS_ENABLED;
 
 BEGIN {
     %authorized_strict_mode_packages = (
@@ -205,6 +208,8 @@ sub _upgrade_barewords {
 sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
+    return unless $STRICT_MODE_IS_ENABLED;
+
     my $file_arg =
         $command eq 'open'    ? 2
       : $command eq 'sysopen' ? 1
@@ -213,7 +218,7 @@ sub _strict_mode_violation {
       : $command eq 'lstat'   ? 0
       : $command eq 'chown'   ? 2
       : $command eq 'chmod'   ? 2
-      :                         confess("Unknown strict mode violation for $command");
+      :                         croak("Unknown strict mode violation for $command");
 
     my @stack;
     foreach my $stack_level ( 1 .. 100 ) {
@@ -246,8 +251,16 @@ sub _strict_mode_violation {
 sub import {
     my ( $class, @args ) = @_;
 
-    grep { $_ eq 'nostrict' } @args
-      and clear_file_access_hooks();
+    my $strict_mode = ( grep { $_ eq 'nostrict' } @args ) ? 0 : 1;
+
+    if ( defined $STRICT_MODE_IS_ENABLED && $STRICT_MODE_IS_ENABLED != $strict_mode ) {
+
+        # could consider using authorized_strict_mode_packages for all packages
+        die q[Test::MockFile is imported multiple times with different strict modes (not currently supported) ] . $class;
+    }
+    $STRICT_MODE_IS_ENABLED = $strict_mode;
+
+    return;
 }
 
 =head1 SUBROUTINES/METHODS
@@ -1167,13 +1180,15 @@ One use might be:
 
 =cut
 
-my @file_access_hooks = ( \&_strict_mode_violation );
+# always use the _strict_mode_violation
+my @_public_access_hooks;
+my @_internal_access_hooks = ( \&_strict_mode_violation );
 
 sub add_file_access_hook {
     my ($code_ref) = @_;
 
     ( $code_ref && ref $code_ref eq 'CODE' ) or confess("add_file_access_hook needs to be passed a code reference.");
-    push @file_access_hooks, $code_ref;
+    push @_public_access_hooks, $code_ref;
 
     return 1;
 }
@@ -1186,7 +1201,7 @@ B<add_file_access_hook>
 =cut
 
 sub clear_file_access_hooks {
-    @file_access_hooks = ();
+    @_public_access_hooks = ();
 
     return 1;
 }
@@ -1196,7 +1211,7 @@ sub clear_file_access_hooks {
 sub _real_file_access_hook {
     my ( $access_type, $at_under_ref ) = @_;
 
-    foreach my $code (@file_access_hooks) {
+    foreach my $code ( @_internal_access_hooks, @_public_access_hooks ) {
         $code->( $access_type, $at_under_ref );
     }
 
