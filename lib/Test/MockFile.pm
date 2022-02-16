@@ -166,14 +166,20 @@ Relative paths are not supported:
 
 =cut
 
+use constant STRICT_MODE_DISABLED => 1;
+use constant STRICT_MODE_ENABLED  => 2;
+use constant STRICT_MODE_UNSET    => 4;
+use constant STRICT_MODE_DEFAULT  => STRICT_MODE_ENABLED | STRICT_MODE_UNSET;    # default state when unset by user
+
 our %authorized_strict_mode_packages;
-our $STRICT_MODE_IS_ENABLED;
+our $STRICT_MODE_STATUS;
 
 BEGIN {
     %authorized_strict_mode_packages = (
         'DynaLoader' => 1,
         'lib'        => 1,
     );
+    $STRICT_MODE_STATUS = STRICT_MODE_DEFAULT;
 }
 
 # Perl understands barewords are filehandles during compilation and
@@ -255,7 +261,7 @@ sub file_arg_position_for_command {    # can also be used by user hooks
 sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
-    return unless $STRICT_MODE_IS_ENABLED;
+    return unless $STRICT_MODE_STATUS & STRICT_MODE_ENABLED;
 
     my @stack;
     foreach my $stack_level ( 1 .. 100 ) {
@@ -291,14 +297,18 @@ sub _strict_mode_violation {
 sub import {
     my ( $class, @args ) = @_;
 
-    my $strict_mode = ( grep { $_ eq 'nostrict' } @args ) ? 0 : 1;
+    my $strict_mode = ( grep { $_ eq 'nostrict' } @args ) ? STRICT_MODE_DISABLED : STRICT_MODE_ENABLED;
 
-    if ( defined $STRICT_MODE_IS_ENABLED && $STRICT_MODE_IS_ENABLED != $strict_mode ) {
+    if (
+        defined $STRICT_MODE_STATUS
+        && !( $STRICT_MODE_STATUS & STRICT_MODE_UNSET )    # mode is set by user
+        && $STRICT_MODE_STATUS != $strict_mode
+    ) {
 
         # could consider using authorized_strict_mode_packages for all packages
         die q[Test::MockFile is imported multiple times with different strict modes (not currently supported) ] . $class;
     }
-    $STRICT_MODE_IS_ENABLED = $strict_mode;
+    $STRICT_MODE_STATUS = $strict_mode;
 
     return;
 }
