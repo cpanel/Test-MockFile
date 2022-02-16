@@ -19,7 +19,7 @@ use constant BROKEN_SYMLINK   => bless {}, "A::BROKEN::SYMLINK";
 use constant CIRCULAR_SYMLINK => bless {}, "A::CIRCULAR::SYMLINK";
 
 # we're going to use carp but the errors should come from outside of our package.
-use Carp qw(carp confess);
+use Carp qw(carp confess croak);
 
 BEGIN {
     $Carp::Internal{ (__PACKAGE__) }++;
@@ -205,21 +205,43 @@ sub _upgrade_barewords {
     return @args;
 }
 
+=head2 file_arg_position_for_command
+
+Args: ($command)
+
+Provides a hint with the position of the argument most likely
+holding the file name for the current C<$command> call.
+
+This is used internaly to provide better error messages.
+This can be used when plugging hooks to know what's the filename
+we currently try to access.
+
+=cut
+
+my $_file_arg_post;
+
+sub file_arg_position_for_command {    # can also be used by user hooks
+    my ($command) = @_;
+
+    $_file_arg_post //= {
+        'chmod'   => 2,
+        'chown'   => 2,
+        'lstat'   => 0,
+        'open'    => 2,
+        'opendir' => 1,
+        'stat'    => 0,
+        'sysopen' => 1,
+    };
+
+    croak("Unknown strict mode violation for $command") unless defined $command && defined $_file_arg_post->{$command};
+
+    return $_file_arg_post->{$command};
+}
+
 sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
     return unless $STRICT_MODE_IS_ENABLED;
-
-    my $file_arg =
-        $command eq 'open'    ? 2
-      : $command eq 'sysopen' ? 1
-      : $command eq 'opendir' ? 1
-      : $command eq 'stat'    ? 0
-      : $command eq 'lstat'   ? 0
-      : $command eq 'chown'   ? 2
-      : $command eq 'chmod'   ? 2
-      : $command eq 'mkdir'   ? 0
-      :                         croak("Unknown strict mode violation for $command");
 
     my @stack;
     foreach my $stack_level ( 1 .. 100 ) {
@@ -236,6 +258,9 @@ sub _strict_mode_violation {
         #
         last;
     }
+
+    # check it later so we give priority to authorized_strict_mode_packages
+    my $file_arg = file_arg_position_for_command($command);
 
     if ( $command eq 'open' and scalar @$at_under_ref != 3 ) {
         $file_arg = 1 if scalar @$at_under_ref == 2;
