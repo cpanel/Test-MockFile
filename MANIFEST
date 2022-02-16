@@ -19,6 +19,8 @@ t/fileno.t
 t/globbing.t
 t/goto_is_available.t
 t/handle-corruption.t
+t/import.t
+t/lib/Test/TMF.pm
 t/manifest.t
 t/mkdir.t
 t/mock_stat.t
