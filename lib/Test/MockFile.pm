@@ -72,8 +72,9 @@ use constant S_IFIFO  => 0010000;     # FIFO
 Intercepts file system calls for specific files so unit testing can
 take place without any files being altered on disk.
 
-This is useful for L<small tests|https://testing.googleblog.com/2010/12/test-sizes.html>
-where file interaction is discouraged.
+This is useful for L<small
+tests|https://testing.googleblog.com/2010/12/test-sizes.html> where
+file interaction is discouraged.
 
 A strict mode is even provided (and turned on by default) which can
 throw a die when files are accessed during your tests!
@@ -82,41 +83,50 @@ throw a die when files are accessed during your tests!
     use Module::I::Dont::Want::To::Alter;
 
     # strict mode by default
-    use Test::MockFile;
+    use Test::MockFile ();
 
     # non-strict mode
     use Test::MockFile qw< nostrict >;
 
     # Be sure to assign the output of mocks, they disappear when they go out of scope
-    my $mock_file = Test::MockFile->file("/foo/bar", "contents\ngo\nhere");
-    open my $fh, '<', '/foo/bar' or die; # Does not actually open the file on disk
-    say 'ok' if -e $fh;
+    my $foobar = Test::MockFile->file( "/foo/bar", "contents\ngo\nhere" );
+    open my $fh, '<', '/foo/bar' or die;    # Does not actually open the file on disk
+    say '/foo/bar exists' if -e $fh;
     close $fh;
-    say 'ok' if -f '/foo/bar';
+
+    say '/foo/bar is a file' if -f '/foo/bar';
     say '/foo/bar is THIS BIG: ' . -s '/foo/bar';
 
-    my $missing_mocked_file = Test::MockFile->file('/foo/baz'); # File starts out missing
-    my $opened              = open my $baz_fh, '<', '/foo/baz'; # File reports as missing so fails
-    say 'ok' if !-e '/foo/baz';
+    my $foobaz = Test::MockFile->file('/foo/baz');    # File starts out missing
+    my $opened = open my $baz_fh, '<', '/foo/baz';    # File reports as missing so fails
+    say '/foo/baz does not exist yet' if !-e '/foo/baz';
 
-    open $baz_fh, '>', '/foo/baz' or die; # open for writing
-    print {$baz_fh} "replace contents\n";
+    open $baz_fh, '>', '/foo/baz' or die;             # open for writing
+    print {$baz_fh} "first line\n";
 
-    open $baz_fh, '>>', '/foo/baz' or die; # open for append.
+    open $baz_fh, '>>', '/foo/baz' or die;            # open for append.
     print {$baz_fh} "second line";
     close $baz_fh;
 
-    say $baz->contents;
+    say "Contents of /foo/baz:\n>>" . $foobaz->contents() . '<<';
 
     # Unmock your file.
-    undef $missing_mocked_file;
+    # (same as the variable going out of scope
+    undef $foobaz;
 
     # The file check will now happen on file system now the file is no longer mocked.
-    say 'ok' if !-e '/foo/baz';
+    say '/foo/baz is missing again (no longer mocked)' if !-e '/foo/baz';
 
-    my $quux    = Test::MockFile->file('/foo/bar/quux.txt');
-    my @matches = </foo/bar/*.txt>;       # ( 'quux.txt' )
-    my @matches = glob('/foo/bar/*.txt'); # same as above
+    my $quux    = Test::MockFile->file( '/foo/bar/quux.txt', '' );
+    my @matches = </foo/bar/*.txt>;
+
+    # ( '/foo/bar/quux.txt' )
+    say "Contents of /foo/bar directory: " . join "\n", @matches;
+
+    @matches = glob('/foo/bar/*.txt');
+
+    # same as above
+    say "Contents of /foo/bar directory (using glob()): " . join "\n", @matches;
 
 =head1 IMPORT
 
