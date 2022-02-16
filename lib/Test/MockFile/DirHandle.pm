@@ -17,7 +17,7 @@ L<Test::MockFile> to give out for opendir calls.
 
 =head1 VERSION
 
-Version 0.028
+Version 0.029
 
 =cut
 

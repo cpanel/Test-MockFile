@@ -1,63 +1,84 @@
+[![linux](https://github.com/cpanel/Test-MockFile/actions/workflows/linux.yml/badge.svg)](https://github.com/cpanel/Test-MockFile/actions/workflows/linux.yml)
+
 # NAME
 
-Test::MockFile - Allows tests to validate code that can interact with files without touching the file system.
+Test::MockFile - Allows tests to validate code that can interact with
+files without touching the file system.
 
 # VERSION
 
-Version 0.023
+Version 0.029
 
 # SYNOPSIS
 
-Intercepts file system calls for specific files so unit testing can take place without any files being altered on disk.
+Intercepts file system calls for specific files so unit testing can
+take place without any files being altered on disk.
 
-This is useful for [small tests](https://en.wikipedia.org/wiki/Google_Test#Small_Tests_\(Unit_Tests\)) where file interaction is discouraged.
+This is useful for [small
+tests](https://testing.googleblog.com/2010/12/test-sizes.html) where
+file interaction is discouraged.
 
-A strict mode is even provided which can throw a die when files are accessed during your tests!
+A strict mode is even provided (and turned on by default) which can
+throw a die when files are accessed during your tests!
 
     # Loaded before Test::MockFile so uses the core perl functions without any hooks.
     use Module::I::Dont::Want::To::Alter;
 
-    # strict mode
-    use Test::MockFile qw< strict >;
+    # strict mode by default
+    use Test::MockFile ();
+
+    # non-strict mode
+    use Test::MockFile qw< nostrict >;
 
     # Be sure to assign the output of mocks, they disappear when they go out of scope
-    my $mock_file = Test::MockFile->file("/foo/bar", "contents\ngo\nhere");
-    open my $fh, '<', '/foo/bar' or die; # Does not actually open the file on disk
-    say 'ok' if -e $fh;
+    my $foobar = Test::MockFile->file( "/foo/bar", "contents\ngo\nhere" );
+    open my $fh, '<', '/foo/bar' or die;    # Does not actually open the file on disk
+    say '/foo/bar exists' if -e $fh;
     close $fh;
-    say 'ok' if -f '/foo/bar';
+
+    say '/foo/bar is a file' if -f '/foo/bar';
     say '/foo/bar is THIS BIG: ' . -s '/foo/bar';
 
-    my $missing_mocked_file = Test::MockFile->file('/foo/baz'); # File starts out missing
-    my $opened              = open my $baz_fh, '<', '/foo/baz'; # File reports as missing so fails
-    say 'ok' if !-e '/foo/baz';
+    my $foobaz = Test::MockFile->file('/foo/baz');    # File starts out missing
+    my $opened = open my $baz_fh, '<', '/foo/baz';    # File reports as missing so fails
+    say '/foo/baz does not exist yet' if !-e '/foo/baz';
 
-    open $baz_fh, '>', '/foo/baz' or die; # open for writing
-    print {$baz_fh} "replace contents\n";
+    open $baz_fh, '>', '/foo/baz' or die;             # open for writing
+    print {$baz_fh} "first line\n";
 
-    open $baz_fh, '>>', '/foo/baz' or die; # open for append.
+    open $baz_fh, '>>', '/foo/baz' or die;            # open for append.
     print {$baz_fh} "second line";
     close $baz_fh;
 
-    say $baz->contents;
+    say "Contents of /foo/baz:\n>>" . $foobaz->contents() . '<<';
 
     # Unmock your file.
-    undef $missing_mocked_file;
+    # (same as the variable going out of scope
+    undef $foobaz;
 
     # The file check will now happen on file system now the file is no longer mocked.
-    say 'ok' if !-e '/foo/baz';
+    say '/foo/baz is missing again (no longer mocked)' if !-e '/foo/baz';
 
-    my $quux    = Test::MockFile->file('/foo/bar/quux.txt');
-    my @matches = </foo/bar/*.txt>;       # ( 'quux.txt' )
-    my @matches = glob('/foo/bar/*.txt'); # same as above
+    my $quux    = Test::MockFile->file( '/foo/bar/quux.txt', '' );
+    my @matches = </foo/bar/*.txt>;
+
+    # ( '/foo/bar/quux.txt' )
+    say "Contents of /foo/bar directory: " . join "\n", @matches;
+
+    @matches = glob('/foo/bar/*.txt');
+
+    # same as above
+    say "Contents of /foo/bar directory (using glob()): " . join "\n", @matches;
 
 # IMPORT
 
-If the module is loaded in strict mode, any file checks, open, sysopen, opendir, stat, or lstat will throw a die.
+When the module is loaded with no parameters, strict mode is turned on.
+Any file checks, `open`, `sysopen`, `opendir`, `stat`, or `lstat`
+will throw a die.
 
 For example:
 
-    use Test::MockFile qw< strict >;
+    use Test::MockFile;
 
     # This will not die.
     my $file    = Test::MockFile->file("/bar", "...");
@@ -72,6 +93,10 @@ For example:
     -e '/file';
     -l '/file';
 
+If we want to load the module without strict mode:
+
+    use Test::MockFile qw< nostrict >;
+
 Relative paths are not supported:
 
     use Test::MockFile;
@@ -81,10 +106,16 @@ Relative paths are not supported:
     $file = Test::MockFile->file( '/bar',        '...' ); # ok     - absolute path
     $file = Test::MockFile->file( 'bar', '...' );         # ok     - current dir
 
-And if you have multiple forward slashes, it will croak as well:
+## file\_arg\_position\_for\_command
 
-    use Test::MockFile;
-    $file = Test::MockFile->file( '//bar', '...' );
+Args: ($command)
+
+Provides a hint with the position of the argument most likely
+holding the file name for the current `$command` call.
+
+This is used internaly to provide better error messages.
+This can be used when plugging hooks to know what's the filename
+we currently try to access.
 
 # SUBROUTINES/METHODS
 
@@ -94,10 +125,11 @@ Args: ($file, $contents, $stats)
 
 This will make cause $file to be mocked in all file checks, opens, etc.
 
-`undef` contents means that the file should act like it's not there. You can
-only set the stats if you provide content.
+`undef` contents means that the file should act like it's not there.
+You can only set the stats if you provide content.
 
-If you give file content, the directory inside it will be mocked as well.
+If you give file content, the directory inside it will be mocked as
+well.
 
     my $f = Test::MockFile->file( '/foo/bar' );
     -d '/foo' # not ok
@@ -111,7 +143,8 @@ See ["Mock Stats"](#mock-stats) for what goes into the stats hashref.
 
 Args: `($file_to_mock, $file_on_disk, $stats)`
 
-This will make cause `$file` to be mocked in all file checks, opens, etc.
+This will make cause `$file` to be mocked in all file checks, opens,
+etc.
 
 If `file_on_disk` isn't present, then this will die.
 
@@ -123,25 +156,31 @@ Args: ($readlink, $file )
 
 This will cause $file to be mocked in all file checks, opens, etc.
 
-`$readlink` indicates what "fake" file it points to. If the file `$readlink` points to is not mocked, it will act like a broken link, regardless of what's on disk.
+`$readlink` indicates what "fake" file it points to. If the file
+`$readlink` points to is not mocked, it will act like a broken link,
+regardless of what's on disk.
 
-If `$readlink` is undef, then the symlink is mocked but not present.(lstat $file is empty.)
+If `$readlink` is undef, then the symlink is mocked but not
+present.(lstat $file is empty.)
 
-Stats are not able to be specified on instantiation but can in theory be altered after the object is created. People don't normally mess with the permissions on a symlink.
+Stats are not able to be specified on instantiation but can in theory
+be altered after the object is created. People don't normally mess with
+the permissions on a symlink.
 
 ## dir
 
 Args: ($dir)
 
-This will cause $dir to be mocked in all file checks, and `opendir` interactions.
+This will cause $dir to be mocked in all file checks, and `opendir`
+interactions.
 
 The directory name is normalized so any trailing slash is removed.
 
     $dir = Test::MockFile->dir( 'mydir/', ... ); # ok
-    $dir->filename();                            # mydir
+    $dir->path();                                # mydir
 
-If there were previously mocked files (within the same scope), the directory will
-exist. Otherwise, the directory will be nonexistent.
+If there were previously mocked files (within the same scope), the
+directory will exist. Otherwise, the directory will be nonexistent.
 
     my $dir = Test::MockFile->dir('/etc');
     -d $dir;          # not ok since directory wasn't created yet
@@ -169,13 +208,13 @@ exist. Otherwise, the directory will be nonexistent.
     -d '/foo';                # true
     $dir->contents();         # . .. bar
 
-NOTE: Because `.` and `..` will always be the first things `readdir` returns,
-These files are automatically inserted at the front of the array. The order of
-files is sorted.
+NOTE: Because `.` and `..` will always be the first things `readdir`
+returns, These files are automatically inserted at the front of the
+array. The order of files is sorted.
 
-If you want to affect the stat information of a directory, you need to use the
-available core Perl keywords. (We might introduce a special helper method for it
-in the future.)
+If you want to affect the stat information of a directory, you need to
+use the available core Perl keywords. (We might introduce a special
+helper method for it in the future.)
 
     $d = Test::MockFile->dir( '/foo', [], { 'mode' => 0755 } );    # dies
     $d = Test::MockFile->dir( '/foo', undef, { 'mode' => 0755 } ); # dies
@@ -202,10 +241,14 @@ When creating mocked files or directories, we default their stats to:
             'fileno'    => undef,    # fileno()
     } );
 
-You'll notice that mode, size, and blocks have been left out of this. Mode is set to 666 (for files) or 777 (for directories), xored against the current umask.
-Size and blocks are calculated based on the size of 'contents' a.k.a. the fake file.
+You'll notice that mode, size, and blocks have been left out of this.
+Mode is set to 666 (for files) or 777 (for directories), xored against
+the current umask. Size and blocks are calculated based on the size of
+'contents' a.k.a. the fake file.
 
-When you want to override one of the defaults, all you need to do is specify that when you declare the file or directory. The rest will continue to default.
+When you want to override one of the defaults, all you need to do is
+specify that when you declare the file or directory. The rest will
+continue to default.
 
     my $mfile = Test::MockFile->file("/root/abc", "...", {inode => 65, uid => 123, mtime => int((2000-1970) * 365.25 * 24 * 60 * 60 }));
 
@@ -213,7 +256,8 @@ When you want to override one of the defaults, all you need to do is specify tha
 
 ## new
 
-This class method is called by file/symlink/dir. There is no good reason to call this directly.
+This class method is called by file/symlink/dir. There is no good
+reason to call this directly.
 
 ## contents
 
@@ -221,14 +265,20 @@ Optional Arg: $contents
 
 Retrieves or updates the current contents of the file.
 
-Only retrieves the content of the directory (as an arrayref).  You can set
-directory contents with calling the `file()` method described above.
+Only retrieves the content of the directory (as an arrayref).  You can
+set directory contents with calling the `file()` method described
+above.
 
 Symlinks have no contents.
 
 ## filename
 
-The name of the file this mock object is controlling.
+Deprecated. Same as `path`.
+
+## path
+
+The path (filename or dirname) of the file or directory this mock
+object is controlling.
 
 ## unlink
 
@@ -238,9 +288,11 @@ Makes the virtual file go away. NOTE: This also works for directories.
 
 Optional Args: ($epoch\_time)
 
-This function acts like the UNIX utility touch. It sets atime, mtime, ctime to $epoch\_time.
+This function acts like the UNIX utility touch. It sets atime, mtime,
+ctime to $epoch\_time.
 
-If no arguments are passed, $epoch\_time is set to time(). If the file does not exist, contents are set to an empty string.
+If no arguments are passed, $epoch\_time is set to time(). If the file
+does not exist, contents are set to an empty string.
 
 ## stat
 
@@ -250,7 +302,8 @@ Returns the stat of a mocked file (does not follow symlinks.)
 
 Optional Arg: $readlink
 
-Returns the stat of a mocked file (does not follow symlinks.) You can also use this to change what your symlink is pointing to.
+Returns the stat of a mocked file (does not follow symlinks.) You can
+also use this to change what your symlink is pointing to.
 
 ## is\_link
 
@@ -280,8 +333,9 @@ Calculates the block count of the file based on its size.
 
 Optional Arg: $perms
 
-Allows you to alter the permissions of a file. This only allows you to change the `07777` bits of the file permissions.
-The number passed should be the octal `0755` form, not the alphabetic `"755"` form
+Allows you to alter the permissions of a file. This only allows you to
+change the `07777` bits of the file permissions. The number passed
+should be the octal `0755` form, not the alphabetic `"755"` form
 
 ## permissions
 
@@ -291,29 +345,36 @@ Returns the permissions of the file.
 
 Optional Arg: $new\_epoch\_time
 
-Returns and optionally sets the mtime of the file if passed as an integer.
+Returns and optionally sets the mtime of the file if passed as an
+integer.
 
 ## ctime
 
 Optional Arg: $new\_epoch\_time
 
-Returns and optionally sets the ctime of the file if passed as an integer.
+Returns and optionally sets the ctime of the file if passed as an
+integer.
 
 ## atime
 
 Optional Arg: $new\_epoch\_time
 
-Returns and optionally sets the atime of the file if passed as an integer.
+Returns and optionally sets the atime of the file if passed as an
+integer.
 
 ## add\_file\_access\_hook
 
 Args: ( $code\_ref )
 
-You can use **add\_file\_access\_hook** to add a code ref that gets called every time a real file (not mocked) operation happens.
-We use this for strict mode to die if we detect your program is unexpectedly accessing files. You are welcome to use it for whatever you like.
+You can use **add\_file\_access\_hook** to add a code ref that gets called
+every time a real file (not mocked) operation happens. We use this for
+strict mode to die if we detect your program is unexpectedly accessing
+files. You are welcome to use it for whatever you like.
 
-Whenever the code ref is called, we pass 2 arguments: `$code->($access_type, $at_under_ref)`. Be aware that altering the variables in
-`$at_under_ref` will affect the variables passed to open / sysopen, etc.
+Whenever the code ref is called, we pass 2 arguments:
+`$code->($access_type, $at_under_ref)`. Be aware that altering the
+variables in `$at_under_ref` will affect the variables passed to open
+/ sysopen, etc.
 
 One use might be:
 
@@ -321,7 +382,8 @@ One use might be:
 
 ## clear\_file\_access\_hooks
 
-Calling this subroutine will clear everything that was passed to **add\_file\_access\_hook**
+Calling this subroutine will clear everything that was passed to
+**add\_file\_access\_hook**
 
 ## How this mocking is done:
 
@@ -329,23 +391,37 @@ Test::MockFile uses 2 methods to mock file access:
 
 ### -X via [Overload::FileCheck](https://metacpan.org/pod/Overload%3A%3AFileCheck)
 
-It is currently not possible in pure perl to override [stat](http://perldoc.perl.org/functions/stat.html), [lstat](http://perldoc.perl.org/functions/lstat.html) and [-X operators](http://perldoc.perl.org/functions/-X.html).
-In conjunction with this module, we've developed [Overload::FileCheck](https://metacpan.org/pod/Overload%3A%3AFileCheck).
+It is currently not possible in pure perl to override
+[stat](http://perldoc.perl.org/functions/stat.html),
+[lstat](http://perldoc.perl.org/functions/lstat.html) and [-X
+operators](http://perldoc.perl.org/functions/-X.html). In conjunction
+with this module, we've developed [Overload::FileCheck](https://metacpan.org/pod/Overload%3A%3AFileCheck).
 
-This enables us to intercept calls to stat, lstat and -X operators (like -e, -f, -d, -s, etc.) and pass them to our control. If the file is currently being mocked, we return the stat (or lstat) information on the file to be used to determine the answer to whatever check was made. This even works for things like `-e _`.
-If we do not control the file in question, we return `FALLBACK_TO_REAL_OP()` which then makes a normal check.
+This enables us to intercept calls to stat, lstat and -X operators
+(like -e, -f, -d, -s, etc.) and pass them to our control. If the file
+is currently being mocked, we return the stat (or lstat) information on
+the file to be used to determine the answer to whatever check was made.
+This even works for things like `-e _`. If we do not control the file
+in question, we return `FALLBACK_TO_REAL_OP()` which then makes a
+normal check.
 
 ### CORE::GLOBAL:: overrides
 
-Since 5.10, it has been possible to override function calls by defining them. like:
+Since 5.10, it has been possible to override function calls by defining
+them. like:
 
     *CORE::GLOBAL::open = sub(*;$@) {...}
 
-Any code which is loaded **AFTER** this happens will use the alternate open. This means you can place your `use Test::MockFile` statement after statements you don't want to be mocked and
-there is no risk that the code will ever be altered by Test::MockFile.
+Any code which is loaded **AFTER** this happens will use the alternate
+open. This means you can place your `use Test::MockFile` statement
+after statements you don't want to be mocked and there is no risk that
+the code will ever be altered by Test::MockFile.
 
-We oveload the following statements and then return tied handles to enable the rest of the IO functions to work properly. Only **open** / **sysopen** are needed to address file operations.
-However **opendir** file handles were never setup for tie so we have to override all of **opendir**'s related functions.
+We oveload the following statements and then return tied handles to
+enable the rest of the IO functions to work properly. Only **open** /
+**sysopen** are needed to address file operations. However **opendir**
+file handles were never setup for tie so we have to override all of
+**opendir**'s related functions.
 
 - open
 - sysopen
@@ -356,16 +432,47 @@ However **opendir** file handles were never setup for tie so we have to override
 - rewinddir
 - closedir
 
-# BAREWORD FILEHANDLE FAILURES
+# CAEATS AND LIMITATIONS
 
-There is a particular type of bareword filehandle failures that cannot be
-fixed.
+## DEBUGGER UNDER STRICT MODE
+
+If you want to use the Perl debugger ([perldebug](https://metacpan.org/pod/perldebug)) on any code that
+uses [Test::MockFile](https://metacpan.org/pod/Test%3A%3AMockFile) in strict mode, you will need to load
+[Term::ReadLine](https://metacpan.org/pod/Term%3A%3AReadLine) beforehand, because it loads a file. Under the
+debugger, the debugger will load the module after [Test::MockFile](https://metacpan.org/pod/Test%3A%3AMockFile) and
+get mad.
+
+    # Load it from the command line
+    perl -MTerm::ReadLine -d code.pl
+
+    # Or alternatively, add this to the top of your code:
+    use Term::ReadLine
+
+## FILENO IS UNSUPPORTED
+
+Filehandles can provide the file descriptor (in number) using the
+`fileno` keyword but this is purposefully unsupported in
+[Test::MockFile](https://metacpan.org/pod/Test%3A%3AMockFile).
+
+The reaosn is that by mocking a file, we're creating an alternative
+file system. Returning a `fileno` (file descriptor number) would
+require creating file descriptor numbers that would possibly conflict
+with the file desciptors you receive from the real filesystem.
+
+In short, this is a recipe for buggy tests or worse - truly destructive
+behavior. If you have a need for a real file, we suggest [File::Temp](https://metacpan.org/pod/File%3A%3ATemp).
+
+## BAREWORD FILEHANDLE FAILURES
+
+There is a particular type of bareword filehandle failures that cannot
+be fixed.
 
 These errors occur because there's compile-time code that uses bareword
-filehandles in a function call that cannot be expressed by this module's
-prototypes for core functions.
+filehandles in a function call that cannot be expressed by this
+module's prototypes for core functions.
 
-The only solution to these is loading \`Test::MockFile\` after the other code:
+The only solution to these is loading \`Test::MockFile\` after the other
+code:
 
 This will fail:
 
@@ -390,7 +497,8 @@ Todd Rinaldo, `<toddr at cpan.org>`
 
 # BUGS
 
-Please report any bugs or feature requests to [https://github.com/CpanelInc/Test-MockFile](https://github.com/CpanelInc/Test-MockFile).
+Please report any bugs or feature requests to
+[https://github.com/CpanelInc/Test-MockFile](https://github.com/CpanelInc/Test-MockFile).
 
 # SUPPORT
 
@@ -410,7 +518,9 @@ You can also look for information at:
 
 # ACKNOWLEDGEMENTS
 
-Thanks to Nicolas R., `<atoomic at cpan.org>` for help with [Overload::FileCheck](https://metacpan.org/pod/Overload%3A%3AFileCheck). This module could not have been completed without it.
+Thanks to Nicolas R., `<atoomic at cpan.org>` for help with
+[Overload::FileCheck](https://metacpan.org/pod/Overload%3A%3AFileCheck). This module could not have been completed
+without it.
 
 # LICENSE AND COPYRIGHT
 
@@ -420,5 +530,5 @@ All rights reserved.
 
 [http://cpanel.net](http://cpanel.net)
 
-This is free software; you can redistribute it and/or modify it under the
-same terms as Perl itself. See [perlartistic](https://metacpan.org/pod/perlartistic).
+This is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself. See [perlartistic](https://metacpan.org/pod/perlartistic).
