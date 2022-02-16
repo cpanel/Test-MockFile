@@ -224,13 +224,17 @@ sub file_arg_position_for_command {    # can also be used by user hooks
     my ($command) = @_;
 
     $_file_arg_post //= {
-        'chmod'   => 2,
-        'chown'   => 2,
-        'lstat'   => 0,
-        'open'    => 2,
-        'opendir' => 1,
-        'stat'    => 0,
-        'sysopen' => 1,
+        'chmod'    => 2,
+        'chown'    => 2,
+        'lstat'    => 0,
+        'mkdir'    => 0,
+        'open'     => 2,
+        'opendir'  => 1,
+        'readlink' => 0,
+        'rmdir'    => 0,
+        'stat'     => 0,
+        'sysopen'  => 1,
+        'unlink'   => 0,
     };
 
     croak("Unknown strict mode violation for $command") unless defined $command && defined $_file_arg_post->{$command};
