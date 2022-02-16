@@ -18,9 +18,26 @@ umask 022;
 
 note "_abs_path_to_file";
 my $cwd = Cwd::getcwd();
-is( Test::MockFile::_abs_path_to_file("0"),    "$cwd/0", "no / prefix makes prepends path on it." );
-is( Test::MockFile::_abs_path_to_file("/lib"), "/lib",   "/lib is /lib" );
-is( Test::MockFile::_abs_path_to_file(),       undef,    "undef is undef" );
+
+is( Test::MockFile::_abs_path_to_file("0"), "$cwd/0", "no / prefix makes prepends path on it." );
+
+is( Test::MockFile::_abs_path_to_file(), undef, "undef is undef" );
+
+my @abs_path = (
+    [ '/lib'                         => '/lib' ],
+    [ '/lib/'                        => '/lib' ],
+    [ '/abc/.'                       => '/abc' ],
+    [ '/abc/./'                      => '/abc' ],
+    [ '/abc/./././.'                 => '/abc' ],
+    [ '/from/here/or-not/..'         => '/from/here' ],
+    [ '/../../..'                    => '/' ],
+    [ '/one/two/three/four/../../..' => '/one' ],
+    [ '/a.b.c.d'                     => '/a.b.c.d' ],
+);
+foreach my $t (@abs_path) {
+    my ( $path, $normalized_path ) = @$t;
+    is( Test::MockFile::_abs_path_to_file($path), $normalized_path, "_abs_path_to_file( '$path' ) = '$normalized_path'" );
+}
 
 note "_fh_to_file";
 my @mocked_files;
