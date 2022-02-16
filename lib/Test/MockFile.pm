@@ -295,7 +295,7 @@ sub file {
     _get_file_object($file) and confess("It looks like $file is already being mocked. We don't support double mocking yet.");
 
     my $path = _abs_path_to_file($file);
-    _validate_path($path);
+    _validate_path($_) for $file, $path;
 
     if ( @stats > 1 ) {
         confess(
@@ -418,6 +418,8 @@ sub _validate_path {
     if ( $path =~ m{ ( ^ | / ) \.{2} ( / | $ ) }xms ) {
         confess('Relative paths are not supported');
     }
+
+    return;
 }
 
 =head2 dir
@@ -485,7 +487,7 @@ sub dir {
       and confess("It looks like $dirname is already being mocked. We don't support double mocking yet.");
 
     my $path = _abs_path_to_file($dirname);
-    _validate_path($path);
+    _validate_path($_) for $dirname, $path;
 
     # Cleanup trailing forward slashes
     $path ne '/'
@@ -739,11 +741,22 @@ sub _abs_path_to_file {
 
     defined $path or return;
 
-    # cleanup multiple slashes
-    $path =~ s{//+}{/}xmsg;
+    my $match = 1;
+    while ($match) {
+        $match = 0;
+        $match = 1 if $path =~ s{//+}{/}xmsg;                # cleanup multiple slashes
+        $match = 1 if $path =~ s{/\.$}{/};
+        $match = 1 if $path =~ s{(?:[^/]+)/\.\.(/|$)}{$1};
+        $match = 1 if $path =~ s{/$}{};
+    }
+
+    return q[/] if $path eq q[/..];
 
     return $path if $path =~ m{^/};
 
+    my $cwd = Cwd::getcwd();
+
+    return $cwd if $path eq '.';
     return Cwd::getcwd() . "/$path";
 }
 
