@@ -171,14 +171,9 @@ use constant STRICT_MODE_ENABLED  => 2;
 use constant STRICT_MODE_UNSET    => 4;
 use constant STRICT_MODE_DEFAULT  => STRICT_MODE_ENABLED | STRICT_MODE_UNSET;    # default state when unset by user
 
-our %authorized_strict_mode_packages;
 our $STRICT_MODE_STATUS;
 
 BEGIN {
-    %authorized_strict_mode_packages = (
-        'DynaLoader' => 1,
-        'lib'        => 1,
-    );
     $STRICT_MODE_STATUS = STRICT_MODE_DEFAULT;
 }
 
@@ -221,6 +216,28 @@ sub _upgrade_barewords {
     return @args;
 }
 
+=head2 authorized_strict_mode_for_package( $pkg )
+
+Add a package namespace to the list of authorize namespaces.
+
+    authorized_strict_mode_for_package( 'Your::Package' );
+
+=cut
+
+our %authorized_strict_mode_packages;
+
+sub authorized_strict_mode_for_package {
+    my ($pkg) = @_;
+
+    $authorized_strict_mode_packages{$pkg} = 1;
+
+    return;
+}
+
+BEGIN {
+    authorized_strict_mode_for_package($_) for qw{ DynaLoader lib };
+}
+
 =head2 file_arg_position_for_command
 
 Args: ($command)
@@ -237,7 +254,7 @@ we currently try to access.
 my $_file_arg_post;
 
 sub file_arg_position_for_command {    # can also be used by user hooks
-    my ($command) = @_;
+    my ( $command, $at_under_ref ) = @_;
 
     $_file_arg_post //= {
         'chmod'    => 2,
@@ -255,7 +272,31 @@ sub file_arg_position_for_command {    # can also be used by user hooks
 
     croak("Unknown strict mode violation for $command") unless defined $command && defined $_file_arg_post->{$command};
 
+    # exception for open
+    return 1 if $command eq 'open' && ref $at_under_ref && scalar @$at_under_ref == 2;
+
     return $_file_arg_post->{$command};
+}
+
+use constant _STACK_ITERATION_MAX => 100;
+
+sub _get_stack {
+    my @stack;
+
+    foreach my $stack_level ( 1 .. _STACK_ITERATION_MAX ) {
+        @stack = caller($stack_level);
+        last if !scalar @stack;
+        last if !defined $stack[0];    # We don't know when this would ever happen.
+
+        next if $stack[0] eq __PACKAGE__;
+        next if $stack[0] eq 'Overload::FileCheck';
+
+        return if $authorized_strict_mode_packages{ $stack[0] };
+
+        last;
+    }
+
+    return @stack;
 }
 
 sub _strict_mode_violation {
@@ -263,28 +304,11 @@ sub _strict_mode_violation {
 
     return unless $STRICT_MODE_STATUS & STRICT_MODE_ENABLED;
 
-    my @stack;
-    foreach my $stack_level ( 1 .. 100 ) {
-        @stack = caller($stack_level);
-        last if !scalar @stack;
-        last if !defined $stack[0];                       # We don't know when this would ever happen.
-        next if ( $stack[0] eq __PACKAGE__ );
-        next if ( $stack[0] eq 'Overload::FileCheck' );
-
-        # We found a package that isn't one of ours. Is it allowed to access files?
-        # If so we're not going to die.
-        return if $authorized_strict_mode_packages{ $stack[0] };
-
-        #
-        last;
-    }
+    my @stack = _get_stack();
+    return unless scalar @stack;    # skip the package
 
     # check it later so we give priority to authorized_strict_mode_packages
-    my $file_arg = file_arg_position_for_command($command);
-
-    if ( $command eq 'open' and scalar @$at_under_ref != 3 ) {
-        $file_arg = 1 if scalar @$at_under_ref == 2;
-    }
+    my $file_arg = file_arg_position_for_command( $command, $at_under_ref );
 
     my $filename = scalar @$at_under_ref <= $file_arg ? '<not specified>' : $at_under_ref->[$file_arg];
 
