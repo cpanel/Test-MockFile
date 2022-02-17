@@ -237,7 +237,7 @@ we currently try to access.
 my $_file_arg_post;
 
 sub file_arg_position_for_command {    # can also be used by user hooks
-    my ($command) = @_;
+    my ( $command, $at_under_ref ) = @_;
 
     $_file_arg_post //= {
         'chmod'    => 2,
@@ -254,6 +254,10 @@ sub file_arg_position_for_command {    # can also be used by user hooks
     };
 
     croak("Unknown strict mode violation for $command") unless defined $command && defined $_file_arg_post->{$command};
+
+    if ( $command eq 'open' && ref $at_under_ref && scalar @$at_under_ref == 2 ) {
+        return 1;
+    }
 
     return $_file_arg_post->{$command};
 }
@@ -280,11 +284,7 @@ sub _strict_mode_violation {
     }
 
     # check it later so we give priority to authorized_strict_mode_packages
-    my $file_arg = file_arg_position_for_command($command);
-
-    if ( $command eq 'open' and scalar @$at_under_ref != 3 ) {
-        $file_arg = 1 if scalar @$at_under_ref == 2;
-    }
+    my $file_arg = file_arg_position_for_command($command, $at_under_ref);
 
     my $filename = scalar @$at_under_ref <= $file_arg ? '<not specified>' : $at_under_ref->[$file_arg];
 
