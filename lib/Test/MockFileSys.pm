@@ -10,7 +10,7 @@ sub import {
     my ( $class, @args ) = @_;
 
     foreach my $arg (@args) {
-        Test::MockFile->import($arg) if ( $arg =~ m/^(?:no)strict/i );
+        Test::MockFile->import($arg) if ( $arg =~ m/^(?:no)strict$/ );
     }
 
     Test::MockFile::set_strict_mode_automock( \&_automock_hook );
