@@ -54,6 +54,7 @@ Version 0.029
 our $VERSION = '0.029';
 
 our %files_being_mocked;
+my $automock_sub;
 
 # From http://man7.org/linux/man-pages/man7/inode.7.html
 use constant S_IFMT    => 0170000;    # bit mask for the file type bit field
@@ -258,10 +259,14 @@ sub file_arg_position_for_command {    # can also be used by user hooks
     return $_file_arg_post->{$command};
 }
 
+sub is_strict_mode {
+    return $STRICT_MODE_STATUS & STRICT_MODE_ENABLED;
+}
+
 sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
-    return unless $STRICT_MODE_STATUS & STRICT_MODE_ENABLED;
+    return unless is_strict_mode();
 
     my @stack;
     foreach my $stack_level ( 1 .. 100 ) {
@@ -685,7 +690,7 @@ sub _mock_stat {
     }
 
     # Find the path, following the symlink if required.
-    my $file = _find_file_or_fh( $file_or_fh, $follow_link );
+    my $file = _get_file_object( $file_or_fh, $follow_link );
 
     return [] if defined $file && defined BROKEN_SYMLINK   && $file eq BROKEN_SYMLINK;      # Allow an ELOOP to fall through here.
     return [] if defined $file && defined CIRCULAR_SYMLINK && $file eq CIRCULAR_SYMLINK;    # Allow an ELOOP to fall through here.
@@ -709,11 +714,17 @@ sub _mock_stat {
 }
 
 sub _get_file_object {
-    my ($file_path) = @_;
+    my ( $file_path, $type, $follow_symlink ) = @_;
 
-    my $file = _find_file_or_fh($file_path) or return;
+    my $absolute_path_to_file = _find_file_or_fh( $file_path, $follow_symlink ) or return;
 
-    return $files_being_mocked{$file};
+    my $mock_object = $files_being_mocked{$absolute_path_to_file};
+
+    if ( !$mock_object && is_strict_mode() && $automock_sub ) {
+        $mock_object = $automock_sub->($absolute_path_to_file);
+    }
+
+    return $mock_object;
 }
 
 # This subroutine finds the absolute path to a file, returning the absolute path of what it ultimately points to.
@@ -1223,6 +1234,21 @@ sub atime {
     return $self->{'atime'};
 }
 
+sub set_strict_mode_automock {
+    my ($code) = @_;
+
+    if ( !defined $code ) {
+        undef $automock_sub;
+        return;
+    }
+
+    ref $code eq 'CODE' or die('Unknown automock method passed');
+
+    $automock_sub = $code;
+
+    return;
+}
+
 =head2 add_file_access_hook
 
 Args: ( $code_ref )
@@ -1443,7 +1469,7 @@ BEGIN {
             return CORE::open( $_[0], $mode, $file );
         }
 
-        my $abs_path = _find_file_or_fh( $file, 1 );    # Follow the link.
+        my $abs_path = _get_file_object( $file, 1 );    # Follow the link.
         confess() if !$abs_path && $mode ne '|-' && $mode ne '-|';
         confess() if $abs_path eq BROKEN_SYMLINK;
         my $mock_file = _get_file_object($abs_path);
