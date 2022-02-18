@@ -54,6 +54,7 @@ Version 0.030
 our $VERSION = '0.030';
 
 our %files_being_mocked;
+my $automock_sub;
 
 # From http://man7.org/linux/man-pages/man7/inode.7.html
 use constant S_IFMT    => 0170000;    # bit mask for the file type bit field
@@ -1040,9 +1041,15 @@ sub _is_path_mocked {
 sub _get_file_object {
     my ($file_path) = @_;
 
-    my $file = _find_file_or_fh($file_path) or return;
+    my $absolute_path_to_file = _find_file_or_fh($file_path) or return;
 
-    return $files_being_mocked{$file};
+    my $mock_object = $files_being_mocked{$absolute_path_to_file};
+
+    if ( !$mock_object && is_strict_mode() && $automock_sub ) {
+        $mock_object = $automock_sub->($absolute_path_to_file);
+    }
+
+    return $mock_object;
 }
 
 # This subroutine finds the absolute path to a file, returning the absolute path of what it ultimately points to.
@@ -1218,6 +1225,9 @@ sub contents {
         return $self->{'contents'};
     }
 
+    # The path is mocked but doesn't exist yet.
+    return;
+
     confess('This seems to be neither a file nor a dir - what is it?');
 }
 
@@ -1379,6 +1389,8 @@ returns true/false, depending on whether this object is a symlink.
 sub is_link {
     my ($self) = @_;
 
+    $self->{'mode'} // return 0;
+
     return ( defined $self->{'readlink'} && length $self->{'readlink'} && $self->{'mode'} & S_IFLNK ) ? 1 : 0;
 }
 
@@ -1391,6 +1403,8 @@ returns true/false, depending on whether this object is a directory.
 sub is_dir {
     my ($self) = @_;
 
+    $self->{'mode'} // return 0;
+
     return ( ( $self->{'mode'} & S_IFMT ) == S_IFDIR ) ? 1 : 0;
 }
 
@@ -1402,6 +1416,8 @@ returns true/false, depending on whether this object is a regular file.
 
 sub is_file {
     my ($self) = @_;
+
+    $self->{'mode'} // return 0;
 
     return ( ( $self->{'mode'} & S_IFMT ) == S_IFREG ) ? 1 : 0;
 }
@@ -1550,6 +1566,21 @@ sub atime {
     }
 
     return $self->{'atime'};
+}
+
+sub set_strict_mode_automock {
+    my ($code) = @_;
+
+    if ( !defined $code ) {
+        undef $automock_sub;
+        return;
+    }
+
+    ref $code eq 'CODE' or die('Unknown automock method passed');
+
+    $automock_sub = $code;
+
+    return;
 }
 
 =head2 add_file_access_hook
@@ -1772,6 +1803,26 @@ sub __open (*;$@) {
     confess() if !$abs_path && $mode ne '|-' && $mode ne '-|';
     confess() if $abs_path eq BROKEN_SYMLINK;
     my $mock_file = _get_file_object($abs_path);
+
+    if ( $mock_file && !$mock_file->is_file ) {
+        if ( $mock_file->exists ) {
+            if ( $mock_file->is_dir ) {
+                $! = EISDIR;
+                return;
+            }
+            elsif ( $mock_file->is_link ) {
+                die("Failed to follow link. We shouldn't have gotten here.");
+            }
+            else {
+                die("Unhandled mocked open for a non-file");
+            }
+        }
+        else {
+            # it doesn't exist so we need to coerce it into a file with the correct perms.
+            my $perms = 0777 ^ umask;
+            $mock_file->{'mode'} = $perms & S_IFREG;
+        }
+    }
 
     # For now we're going to just strip off the binmode and hope for the best.
     $mode =~ s/(:.+$)//;
