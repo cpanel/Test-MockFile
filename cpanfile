@@ -1,6 +1,8 @@
 # kind of duplicate of Makefile.PL
 #	but convenient for Continuous Integration
 
+requires 'Test::MockModule';
+
 on 'build' => sub {
     requires 'Text::Glob' => 0;
 };
@@ -16,6 +18,7 @@ on 'test' => sub {
     requires 'Test::Pod'                 => 0;
     requires 'Test2::API'                => 0;
     requires 'File::Temp'                => 0;
+    requires 'File::Path'                => 0;
     requires 'File::Basename'            => 0;
     requires 'Test2::Harness::Util::IPC' => 0;
 };
