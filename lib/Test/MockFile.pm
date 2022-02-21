@@ -88,6 +88,11 @@ throw a die when files are accessed during your tests!
     # non-strict mode
     use Test::MockFile qw< nostrict >;
 
+    # Load with one or more plugins
+
+    use Test::MockFile plugin => 'FileTemp';
+    use Test::MockFile plugin => [ 'FileTemp', ... ];
+
     # Be sure to assign the output of mocks, they disappear when they go out of scope
     my $foobar = Test::MockFile->file( "/foo/bar", "contents\ngo\nhere" );
     open my $fh, '<', '/foo/bar' or die;    # Does not actually open the file on disk
@@ -534,6 +539,8 @@ sub _check_rule_condition {
     return;
 }
 
+my @plugins;
+
 sub import {
     my ( $class, @args ) = @_;
 
@@ -549,6 +556,14 @@ sub import {
         die q[Test::MockFile is imported multiple times with different strict modes (not currently supported) ] . $class;
     }
     $STRICT_MODE_STATUS = $strict_mode;
+
+    while ( my $opt = shift @args ) {
+        next unless defined $opt && $opt eq 'plugin';
+        my $what = shift @args;
+        require Test::MockFile::Plugins;
+
+        push @plugins, Test::MockFile::Plugins::load_plugin($what);
+    }
 
     return;
 }
