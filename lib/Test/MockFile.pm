@@ -1391,6 +1391,8 @@ returns true/false, depending on whether this object is a directory.
 sub is_dir {
     my ($self) = @_;
 
+    return 0 unless $self->{'mode'};
+
     return ( ( $self->{'mode'} & S_IFMT ) == S_IFDIR ) ? 1 : 0;
 }
 
@@ -1402,6 +1404,8 @@ returns true/false, depending on whether this object is a regular file.
 
 sub is_file {
     my ($self) = @_;
+    
+    return 0 unless $self->{'mode'};
 
     return ( ( $self->{'mode'} & S_IFMT ) == S_IFREG ) ? 1 : 0;
 }
@@ -1772,6 +1776,26 @@ sub __open (*;$@) {
     confess() if !$abs_path && $mode ne '|-' && $mode ne '-|';
     confess() if $abs_path eq BROKEN_SYMLINK;
     my $mock_file = _get_file_object($abs_path);
+
+    if ( !$mock_file->is_file ) {
+        if ( $mock_file->exists ) {
+            if ( $mock_file->is_dir ) {
+                $! = EISDIR;
+                return;
+            }
+            elsif ( $mock_file->is_link ) {
+                die("Failed to follow link. We shouldn't have gotten here.");
+            }
+            else {
+                die("Unhandled mocked open for a non-file");
+            }
+        }
+        else {
+            # it doesn't exist so we need to coerce it into a file.
+            my $perms = ( 0777 ^ umask ) & S_IFPERMS;
+            $mock_file->{'mode'} = $perms | S_IFREG;               # Set it.
+        }
+    }
 
     # For now we're going to just strip off the binmode and hope for the best.
     $mode =~ s/(:.+$)//;
