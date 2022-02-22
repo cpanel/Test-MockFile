@@ -579,7 +579,7 @@ sub file {
     my ( $class, $file, $contents, @stats ) = @_;
 
     ( defined $file && length $file ) or confess("No file provided to instantiate $class");
-    _get_file_object($file) and confess("It looks like $file is already being mocked. We don't support double mocking yet.");
+    _is_path_mocked($file) and confess("It looks like $file is already being mocked. We don't support double mocking yet.");
 
     my $path = _abs_path_to_file($file);
     _validate_path($_) for $file, $path;
@@ -677,7 +677,7 @@ sub symlink {
     ( defined $file && length $file )          or confess("No file provided to instantiate $class");
     ( !defined $readlink || length $readlink ) or confess("No file provided for $file to point to in $class");
 
-    _get_file_object($file) and confess("It looks like $file is already being mocked. We don't support double mocking yet.");
+    _is_path_mocked($file) and confess("It looks like $file is already being mocked. We don't support double mocking yet.");
 
     # Check if directory for this file is an object we're mocking
     # If so, mark it now as having content
@@ -770,8 +770,7 @@ sub dir {
     my ( $class, $dirname ) = @_;
 
     ( defined $dirname && length $dirname ) or confess("No directory name provided to instantiate $class");
-    _get_file_object($dirname)
-      and confess("It looks like $dirname is already being mocked. We don't support double mocking yet.");
+    _is_path_mocked($dirname) and confess("It looks like $dirname is already being mocked. We don't support double mocking yet.");
 
     my $path = _abs_path_to_file($dirname);
     _validate_path($_) for $dirname, $path;
@@ -990,6 +989,13 @@ sub _mock_stat {
 
     # Make sure the file size is correct in the stats before returning its contents.
     return [ $file_data->stat ];
+}
+
+sub _is_path_mocked {
+    my ($file_path) = @_;
+    my $absolute_path_to_file = _find_file_or_fh($file_path) or return;
+
+    return $files_being_mocked{$absolute_path_to_file} ? 1 : 0;
 }
 
 sub _get_file_object {
