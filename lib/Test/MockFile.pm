@@ -317,7 +317,7 @@ add rules work for you.
 =item C<$command_rule> a string or regexp or list of any to indicate
 which command to match
 
-=itemC<$file_rule> a string, or regexp or list of any to indicate
+=itemC<$file_rule> a string or regexp or undef or list of any to indicate
 which files your rules apply to.
 
 =item C<$action> a CODE ref or scalar to handle the exception.
@@ -325,10 +325,13 @@ Returning '1' skip all other rules and indicate an exception.
 
 =back
 
+    # Check open() on /this/file
     add_strict_rule( 'open', '/this/file', sub { ... } );
 
-    add_strict_rule( 'open', '/this/file', 1 ); # always bypass the strict rule
+    # always bypass the strict rule
+    add_strict_rule( 'open', '/this/file', 1 );
 
+    # all available options
     add_strict_rule( 'open', '/this/file', sub {
         my ($context) = @_;
 
@@ -337,6 +340,21 @@ Returning '1' skip all other rules and indicate an exception.
         return 1; # Strict passing, stop testing rules
     } );
 
+    # Disallow open(), close() on everything in /tmp/
+    add_strict_rule(
+        [ qw< open close > ],
+        qr{^/tmp}xms,
+        0,
+    );
+
+    # Disallow open(), close() on everything (ignore filenames)
+    # Use add_strict_rule_for_command() instead!
+    add_strict_rule(
+        [ qw< open close > ],
+        undef,
+        0,
+    );
+
 =cut
 
 my @STRICT_RULES;
@@ -344,7 +362,7 @@ my @STRICT_RULES;
 sub add_strict_rule {
     my ( $command_rule, $file_rule, $action ) = @_;
 
-    defined $command_rule && defined $file_rule
+    defined $command_rule
       or croak("add_strict_rule( COMMAND, PATH, ACTION )");
 
     croak("Invalid rule: missing action code") unless defined $action;
@@ -355,8 +373,8 @@ sub add_strict_rule {
     foreach my $c_rule (@commands) {
         foreach my $f_rule (@files) {
             push @STRICT_RULES, {
-                'command_rule' => ref $c_rule eq 'Regexp' ? $c_rule : qr/^\Q$c_rule\E$/,
-                'file_rule'    => ref $f_rule eq 'Regexp' ? $f_rule : qr/^\Q$f_rule\E$/,
+                'command_rule' => ref $c_rule eq 'Regexp'                         ? $c_rule : qr/^\Q$c_rule\E$/,
+                'file_rule'    => ( ref $f_rule eq 'Regexp' || !defined $f_rule ) ? $f_rule : qr/^\Q$f_rule\E$/,
                 'action'       => $action,
             };
         }
@@ -365,7 +383,7 @@ sub add_strict_rule {
     return;
 }
 
-=head2 clear_srtrict_rules()
+=head2 clear_strict_rules()
 
 Args: none
 
@@ -373,7 +391,7 @@ Clear all previously defined rules. (Mainly used for testing purpose)
 
 =cut
 
-sub clear_srtrict_rules {
+sub clear_strict_rules {
     @STRICT_RULES = ();
 
     return;
@@ -435,7 +453,7 @@ Apply a rule to one or more files.
 sub add_strict_rule_for_command {
     my ( $command_rule, $action ) = @_;
 
-    return add_strict_rule( $command_rule, qr/.*/, $action );
+    return add_strict_rule( $command_rule, undef, $action );
 }
 
 =head2 add_strict_rule_generic( $action )
@@ -466,7 +484,7 @@ Apply a rule to one or more files.
 sub add_strict_rule_generic {
     my ($action) = @_;
 
-    return add_strict_rule( qr/.*/, qr/.*/, $action );
+    return add_strict_rule( qr/.*/, undef, $action );
 }
 
 =head2 is_strict_mode
@@ -508,8 +526,7 @@ sub _strict_mode_violation {
     };    # object
 
     my $pass = _validate_strict_rules($context);
-    return                          if $pass;
-    croak('Failed violation check') if $pass == 0;
+    return if $pass;
 
     croak("Unknown strict mode violation for $command") if $file_arg == -1;
 
@@ -521,8 +538,14 @@ sub _validate_strict_rules {
 
     # rules dispatch
     foreach my $rule (@STRICT_RULES) {
-        $context->{'filename'} =~ $rule->{'file_rule'}
-          or next;
+
+        # This is when a rule was added without a filename at all
+        # intending to match whether there's a filename available or not
+        # (open() can be used on a scalar, for example)
+        if ( defined $rule->{'file_rule'} ) {
+            defined $context->{'filename'} && $context->{'filename'} =~ $rule->{'file_rule'}
+              or next;
+        }
 
         $context->{'command'} =~ $rule->{'command_rule'}
           or next;
@@ -535,7 +558,7 @@ sub _validate_strict_rules {
 
     # We say it failed even though it didn't
     # It's because we want to test the internal violation rule check
-    return 0;
+    return;
 }
 
 my @plugins;

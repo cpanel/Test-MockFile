@@ -61,6 +61,9 @@ Test::MockFile::Plugins - Plugin loader
 
 L<Test::MockFile::Plugins> is responsible for loading plugins.
 
+BETA WARNING: This is a preliminary plugins implementation. It might
+change in the future.
+
 =head1 METHODS
 
 =head2 load_plugin( $plugin_name )
