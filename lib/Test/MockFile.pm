@@ -464,10 +464,20 @@ sub add_strict_rule_generic {
     return add_strict_rule( qr/.*/, qr/.*/, $action );
 }
 
+=head2 is_strict_mode
+
+Boolean helper to determine if strict mode is currently enabled.
+
+=cut
+
+sub is_strict_mode {
+    return $STRICT_MODE_STATUS & STRICT_MODE_ENABLED ? 1 : 0;
+}
+
 sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
-    return unless $STRICT_MODE_STATUS & STRICT_MODE_ENABLED;
+    return unless is_strict_mode();
 
     my @stack = _get_stack();
     return unless scalar @stack;    # skip the package
