@@ -270,7 +270,7 @@ sub file_arg_position_for_command {    # can also be used by user hooks
         'unlink'   => 0,
     };
 
-    croak("Unknown strict mode violation for $command") unless defined $command && defined $_file_arg_post->{$command};
+    return -1 unless defined $command && defined $_file_arg_post->{$command};
 
     # exception for open
     return 1 if $command eq 'open' && ref $at_under_ref && scalar @$at_under_ref == 2;
@@ -289,7 +289,7 @@ sub _get_stack {
         last if !defined $stack[0];    # We don't know when this would ever happen.
 
         next if $stack[0] eq __PACKAGE__;
-        next if $stack[0] eq 'Overload::FileCheck';
+        next if $stack[0] eq 'Overload::FileCheck';    # companion package
 
         return if $authorized_strict_mode_packages{ $stack[0] };
 
@@ -297,6 +297,171 @@ sub _get_stack {
     }
 
     return @stack;
+}
+
+=head2 add_strict_rule( $command_rule, $file_rule, $action )
+
+Args: ($command_rule, $file_rule, $action)
+
+Add a custom rule to validate strictness mode. This is the fundation to
+add strict rules. You should use it, when none of the other helper to
+add rules work for you.
+
+=over
+
+=item C<$command_rule> a string or regexp or list of any to indicate
+which command to match
+
+=itemC<$file_rule> a string, or regexp or list of any to indicate
+which files your rules apply to.
+
+=item C<$action> a CODE ref or scalar to handle the exception.
+Returning '1' skip all other rules and indicate an exception.
+
+=back
+
+    add_strict_rule( 'open', '/this/file', sub { ... } );
+
+    add_strict_rule( 'open', '/this/file', 1 ); # always bypass the strict rule
+
+    add_strict_rule( 'open', '/this/file', sub {
+        my ($context) = @_;
+
+        return;   # Skip this rule and continue from the next one
+        return 0; # Strict violation, stop testing rules and die
+        return 1; # Strict passing, stop testing rules
+    } );
+
+=cut
+
+my @STRICT_RULES;
+
+sub add_strict_rule {
+    my ( $command_rule, $file_rule, $action ) = @_;
+
+    defined $command_rule && defined $file_rule
+      or croak("add_strict_rule( COMMAND, PATH, ACTION )");
+
+    croak("Invalid rule: missing action code") unless defined $action;
+
+    my @commands = ref $command_rule eq 'ARRAY' ? @{$command_rule} : ($command_rule);
+    my @files    = ref $file_rule eq 'ARRAY'    ? @{$file_rule}    : ($file_rule);
+
+    foreach my $c_rule (@commands) {
+        foreach my $f_rule (@files) {
+            push @STRICT_RULES, {
+                'command_rule' => ref $c_rule eq 'Regexp' ? $c_rule : qr/^\Q$c_rule\E$/,
+                'file_rule'    => ref $f_rule eq 'Regexp' ? $f_rule : qr/^\Q$f_rule\E$/,
+                'action'       => $action,
+            };
+        }
+    }
+
+    return;
+}
+
+=head2 clear_srtrict_rules()
+
+Args: none
+
+Clear all previously defined rules. (Mainly used for testing purpose)
+
+=cut
+
+sub clear_srtrict_rules {
+    @STRICT_RULES = ();
+
+    return;
+}
+
+=head2 add_strict_rule_for_filename( $file_rule, $action )
+
+Args: ($file_rule, $action)
+
+Prefer using that helper when trying to add strict rules targeting
+files.
+
+Apply a rule to one or more files.
+
+    add_strict_rule_for_filename( '/that/file' => sub { ... } );
+
+    add_strict_rule_for_filename( [ qw{list of files} ] => sub { ... } );
+
+    add_strict_rule_for_filename( qr{*\.t$} => sub { ... } );
+
+    add_strict_rule_for_filename( [ $dir, qr{^${dir}/} ] => 1 );
+
+=cut
+
+sub add_strict_rule_for_filename {
+    my ( $file_rule, $action ) = @_;
+
+    return add_strict_rule( qr/.*/, $file_rule, $action );
+}
+
+=head2 add_strict_rule_for_command( $command_rule, $action )
+
+Args: ($command_rule, $action)
+
+Prefer using that helper when trying to add strict rules targeting
+specici commands.
+
+Apply a rule to one or more files.
+
+    add_strict_rule_for_command( 'open' => sub { ... } );
+
+    add_strict_rule_for_command( [ qw{open readdir} ] => sub { ... } );
+
+    add_strict_rule_for_command( qr{open.*} => sub { ... } );
+
+    Test::MockFile::add_strict_rule_for_command(
+        [qw{ readdir closedir readlink }],
+        sub {
+            my ($ctx) = @_;
+            my $command = $ctx->{command} // 'unknown';
+
+            warn( "Ignoring strict mode violation for $command" );
+            return 1;
+        }
+    );
+
+=cut
+
+sub add_strict_rule_for_command {
+    my ( $command_rule, $action ) = @_;
+
+    return add_strict_rule( $command_rule, qr/.*/, $action );
+}
+
+=head2 add_strict_rule_generic( $action )
+
+Args: ($action)
+
+Prefer using that helper when adding a rule which is global and does
+not apply to a specific command or file.
+
+Apply a rule to one or more files.
+
+    add_strict_rule_generic( sub { ... } );
+
+    add_strict_rule_generic( sub  {
+        my ($ctx) = @_;
+
+        my $filename = $ctx->{filename};
+
+        return unless defined $filename;
+
+        return 1 if UNIVERSAL::isa( $filename, 'GLOB' );
+
+        return;
+    } );
+
+=cut
+
+sub add_strict_rule_generic {
+    my ($action) = @_;
+
+    return add_strict_rule( qr/.*/, qr/.*/, $action );
 }
 
 sub _strict_mode_violation {
@@ -307,15 +472,54 @@ sub _strict_mode_violation {
     my @stack = _get_stack();
     return unless scalar @stack;    # skip the package
 
+    my $filename;
+
     # check it later so we give priority to authorized_strict_mode_packages
     my $file_arg = file_arg_position_for_command( $command, $at_under_ref );
 
-    my $filename = scalar @$at_under_ref <= $file_arg ? '<not specified>' : $at_under_ref->[$file_arg];
+    if ( $file_arg >= 0 ) {
+        $filename = scalar @$at_under_ref <= $file_arg ? '<not specified>' : $at_under_ref->[$file_arg];
+    }
 
     # Ignore stats on STDIN, STDOUT, STDERR
-    return if $filename =~ m/^\*?(?:main::)?[<*&+>]*STD(?:OUT|IN|ERR)$/;
+    return if defined $filename && $filename =~ m/^\*?(?:main::)?[<*&+>]*STD(?:OUT|IN|ERR)$/;
+
+    my $path = _abs_path_to_file($filename);
+
+    my $context = {
+        command      => $command,
+        filename     => $path,
+        at_under_ref => $at_under_ref
+    };    # object
+
+    my $pass = _validate_strict_rules($context);
+    return if $pass;
+
+    croak("Unknown strict mode violation for $command") if $file_arg == -1;
 
     confess("Use of $command to access unmocked file or directory '$filename' in strict mode at $stack[1] line $stack[2]");
+}
+
+sub _validate_strict_rules {
+    my ($context) = @_;
+
+    # rules dispatch
+    foreach my $rule (@STRICT_RULES) {
+        $context->{'filename'} =~ $rule->{'file_rule'}
+          or next;
+
+        $context->{'command'} =~ $rule->{'command_rule'}
+          or next;
+
+        my $answer = ref $rule->{'action'} ? $rule->{'action'}->($context) : $rule->{'action'};
+
+        defined $answer
+          and return $answer;
+    }
+
+    # We say it failed even though it didn't
+    # It's because we want to test the internal violation rule check
+    return 0;
 }
 
 sub import {
@@ -858,7 +1062,7 @@ sub _files_in_dir {
 sub _abs_path_to_file {
     my ($path) = shift;
 
-    defined $path or return;
+    return unless defined $path;
 
     my $match = 1;
     while ($match) {
