@@ -7,8 +7,14 @@ use parent 'Test::MockFile::Plugin';
 
 use Test::MockModule qw{strict};
 
+use Carp qw(croak);
+
 sub register {
     my ($self) = @_;
+
+    if ( $^V lt 5.28.0 ) {
+        croak( __PACKAGE__ . " is only supported for Perl >= 5.28" );
+    }
 
     foreach my $pkg (qw{ File::Temp File::Temp::Dir File::Temp::END File::Temp::Dir::DESTROY }) {
         Test::MockFile::authorized_strict_mode_for_package($pkg);

@@ -6,7 +6,9 @@ use warnings;
 use Test2::V0;
 use Test2::Plugin::NoWarnings;
 
-skip_all("Skip for now < 5.28") unless $^V ge 5.28.0;
+BEGIN {
+    skip_all("Skip for now < 5.28") unless $^V ge 5.28.0;
+}
 
 # Do not load File::Temp to ensure this can be loaded under Test::MockFile
 my $has_filetemp_before_load;
@@ -18,7 +20,7 @@ BEGIN {
 use Test::MockFile 'strict', plugin => 'FileTemp';
 
 ok !$has_filetemp_before_load, "File::Temp is not loaded before Test::MockFile";
-ok $INC{'File/Temp.pm'},       'File::Temp is loaded';
+ok $INC{'File/Temp.pm'}, 'File::Temp is loaded';
 
 require File::Temp;    # not really needed
 
@@ -39,7 +41,7 @@ require File::Temp;    # not really needed
 
 {
     my $dir = File::Temp->newdir();
-    ok opendir( my $dh, "$dir" ),             "opendir - newdir";
+    ok opendir( my $dh, "$dir" ), "opendir - newdir";
     ok open( my $f, '>', "$dir/myfile.txt" ), "open a file created under newdir";
 }
 
