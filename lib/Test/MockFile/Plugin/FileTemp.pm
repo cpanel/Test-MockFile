@@ -3,14 +3,14 @@ package Test::MockFile::Plugin::FileTemp;
 use strict;
 use warnings;
 
-use base 'Test::MockFile::Plugin';
+use parent 'Test::MockFile::Plugin';
 
 use Test::MockModule qw{strict};
 
 sub register {
     my ($self) = @_;
 
-    foreach my $pkg (qw{ File::Temp File::Temp::Dir File::Temp::END }) {
+    foreach my $pkg (qw{ File::Temp File::Temp::Dir File::Temp::END File::Temp::Dir::DESTROY }) {
         Test::MockFile::authorized_strict_mode_for_package($pkg);
     }
 
@@ -99,8 +99,8 @@ Test::MockFile::Plugin::FileTemp - Plugin to allow File::Temp calls
 
 =head1 DESCRIPTION
 
-L<Test::MockFile::Plugin::FileTemp> provides plugin to Test::MockFile to authorize any
-calls from File::Temp package.
+L<Test::MockFile::Plugin::FileTemp> provides plugin to Test::MockFile
+to authorize any calls from File::Temp package.
 
 =head1 METHODS
 
@@ -110,6 +110,6 @@ Public method to register the plugin.
 
 =head1 SEE ALSO
 
-L<Test::MockFile>, L<Test::MockFile::Plugins>
+L<Test::MockFile>, L<Test::MockFile::Plugins>, L<Test::MockModule>
 
 =cut
