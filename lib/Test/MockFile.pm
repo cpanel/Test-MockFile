@@ -508,7 +508,8 @@ sub _strict_mode_violation {
     };    # object
 
     my $pass = _validate_strict_rules($context);
-    return if $pass;
+    return                          if $pass;
+    croak('Failed violation check') if $pass == 0;
 
     croak("Unknown strict mode violation for $command") if $file_arg == -1;
 
