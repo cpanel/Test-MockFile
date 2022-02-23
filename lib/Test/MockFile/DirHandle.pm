@@ -10,6 +10,8 @@ package Test::MockFile::DirHandle;
 use strict;
 use warnings;
 
+our $VERSION = '0.030';
+
 =head1 NAME
 
 Test::MockFile::DirHandle - Provides a class object for
