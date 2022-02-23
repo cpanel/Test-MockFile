@@ -12,6 +12,8 @@ use warnings;
 use Errno qw/EBADF/;
 use Scalar::Util ();
 
+our $VERSION = '0.030';
+
 my $files_being_mocked;
 {
     no warnings 'once';
