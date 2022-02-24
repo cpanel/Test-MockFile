@@ -625,6 +625,20 @@ See L<Mock Stats> for what goes into the stats hashref.
 
 =cut
 
+sub _generate_mode {
+    my ( $perms, $file_type ) = @_;
+    my $file_type_bits =
+        $file_type eq 'file'    ? S_IFREG
+      : $file_type eq 'dir'     ? S_IFDIR
+      : $file_type eq 'symlink' ? S_IFLNK
+      :                           die("Unknown file type $file_type");
+
+    # Symlinks don't normally honor umasks?
+    my $umask = $file_type eq 'symlink' ? 0 : umask;
+
+    return ( ( $perms & S_IFPERMS ) & ~$umask ) | $file_type_bits;
+}
+
 sub file {
     my ( $class, $file, $contents, @stats ) = @_;
 
@@ -653,7 +667,7 @@ sub file {
     }
 
     my $perms = S_IFPERMS & ( defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666 );
-    $stats{'mode'} = ( $perms ^ umask ) | S_IFREG;
+    $stats{'mode'} = _generate_mode( $perms, 'file' );
 
     # Check if directory for this file is an object we're mocking
     # If so, mark it now as having content
@@ -742,7 +756,7 @@ sub symlink {
             'path'     => $file,
             'contents' => undef,
             'readlink' => $readlink,
-            'mode'     => 07777 | S_IFLNK,
+            'mode'     => 07777 | S_IFLNK,    # Symlinks don't normally honor umasks.
         }
     );
 }
@@ -832,13 +846,9 @@ sub dir {
     @_ > 2
       and confess("You cannot set stats for nonexistent dir '$path'");
 
-    my $perms = S_IFPERMS & 0777;
-    my %stats = ( 'mode' => ( $perms ^ umask ) | S_IFDIR );
+    my %stats;
+    my $has_content = 0;
 
-    # TODO: Add stat information
-
-    # FIXME: Quick and dirty: provide a helper method?
-    my $has_content = grep m{^\Q$path/\E}xms, %files_being_mocked;
     return $class->new(
         {
             'path'        => $path,
@@ -1187,7 +1197,7 @@ sub contents {
     $self or confess;
 
     $self->is_link
-      and confess("checking or setting contents on a symlink is not supported");
+      and confess("checking or setting contents on a symlink is not yet supported");
 
     # handle directories
     if ( $self->is_dir() ) {
@@ -1216,20 +1226,15 @@ sub contents {
         return [ '.', '..', sort keys %uniq ];
     }
 
-    # handle files
-    if ( $self->is_file() ) {
-        if ( defined $new_contents ) {
-            ref $new_contents
-              and confess('File contents must be a simple string');
+    $self->is_file or die;    # only files from here on.
 
-            # XXX Why use $_[1] directly?
-            $self->{'contents'} = $_[1];
-        }
-
+    if ( !defined $new_contents ) {
         return $self->{'contents'};
     }
+    ref $new_contents and confess('File contents must be a simple string');
 
-    confess('This seems to be neither a file nor a dir - what is it?');
+    $self->touch;
+    return $self->{'contents'} = $new_contents;
 }
 
 =head2 filename
@@ -1282,6 +1287,8 @@ sub unlink {
         return 0;
     }
 
+    $self->{'mode'} = 0;
+
     if ( $self->is_link ) {
         $self->{'readlink'} = undef;
     }
@@ -1309,12 +1316,13 @@ sub touch {
     $self or confess("touch is a method");
     $now //= time;
 
-    $self->is_file or confess("touch only supports files");
+    ( $self->is_dir || $self->is_link ) and confess("touch only supports files");
 
     my $pre_size = $self->size();
 
     if ( !defined $pre_size ) {
-        $self->contents('');
+        $self->{'mode'}     = _generate_mode( 0777, 'file' );
+        $self->{'contents'} = '';
     }
 
     # TODO: Should this happen any time contents goes from undef to existing? Should we be setting perms?
@@ -1390,7 +1398,7 @@ returns true/false, depending on whether this object is a symlink.
 sub is_link {
     my ($self) = @_;
 
-    return ( defined $self->{'readlink'} && length $self->{'readlink'} && $self->{'mode'} & S_IFLNK ) ? 1 : 0;
+    return ( $self->mode & S_IFLNK && defined $self->{'readlink'} && length $self->{'readlink'} ) ? 1 : 0;
 }
 
 =head2 is_dir
@@ -1402,7 +1410,7 @@ returns true/false, depending on whether this object is a directory.
 sub is_dir {
     my ($self) = @_;
 
-    return ( ( $self->{'mode'} & S_IFMT ) == S_IFDIR ) ? 1 : 0;
+    return ( ( $self->mode & S_IFMT ) == S_IFDIR ) ? 1 : 0;
 }
 
 =head2 is_file
@@ -1414,7 +1422,7 @@ returns true/false, depending on whether this object is a regular file.
 sub is_file {
     my ($self) = @_;
 
-    return ( ( $self->{'mode'} & S_IFMT ) == S_IFREG ) ? 1 : 0;
+    return ( ( $self->mode & S_IFMT ) == S_IFREG ) ? 1 : 0;
 }
 
 =head2 size
@@ -1437,6 +1445,18 @@ sub size {
     return length $self->contents;
 }
 
+=head2 mode
+
+Returns the mode of the mocked thing. Returns 0 if the mocked thing does not exist.
+
+=cut
+
+sub mode {
+    my ($self) = @_;
+
+    return int( $self->{'mode'} // 0 );
+}
+
 =head2 exists
 
 returns true or false based on if the file exists right now.
@@ -1446,16 +1466,7 @@ returns true or false based on if the file exists right now.
 sub exists {
     my ($self) = @_;
 
-    $self->is_link()
-      and return defined $self->{'readlink'} ? 1 : 0;
-
-    $self->is_file()
-      and return defined $self->{'contents'} ? 1 : 0;
-
-    $self->is_dir()
-      and return $self->{'has_content'} ? 1 : 0;
-
-    return 0;
+    return $self->mode & S_IFMT ? 1 : 0;
 }
 
 =head2 blocks
@@ -1487,9 +1498,9 @@ should be the octal C<0755> form, not the alphabetic C<"755"> form
 sub chmod {
     my ( $self, $mode ) = @_;
 
-    $mode = ( int($mode) & S_IFPERMS ) ^ umask;
+    $mode = ( int($mode) & S_IFPERMS ) & ~umask;
 
-    $self->{'mode'} = ( $self->{'mode'} & S_IFMT ) + $mode;
+    $self->{'mode'} = ( $self->mode & S_IFMT ) + $mode;
 
     return $mode;
 }
@@ -1503,7 +1514,7 @@ Returns the permissions of the file.
 sub permissions {
     my ($self) = @_;
 
-    return int( $self->{'mode'} ) & S_IFPERMS;
+    return $self->mode & S_IFPERMS;
 }
 
 =head2 mtime
@@ -1781,8 +1792,30 @@ sub __open (*;$@) {
 
     my $abs_path = _find_file_or_fh( $file, 1 );    # Follow the link.
     confess() if !$abs_path && $mode ne '|-' && $mode ne '-|';
-    confess() if $abs_path eq BROKEN_SYMLINK;
+    if ( $abs_path eq BROKEN_SYMLINK ) {
+        $! = ENOENT;
+        return;
+    }
+
     my $mock_file = _get_file_object($abs_path);
+
+    if ( $mock_file && !$mock_file->is_file ) {
+        if ( $mock_file->exists ) {
+            if ( $mock_file->is_dir ) {
+                $! = EISDIR;
+                return;
+            }
+            elsif ( $mock_file->is_link ) {
+                die("Failed to follow link. We shouldn't have gotten here.");
+            }
+            else {
+                die("Unhandled mocked open for a non-file");
+            }
+        }
+        elsif ( defined $mode && $mode =~ tr/>+// ) {    # If this is an open for write.
+            $mock_file->touch;                           # Coerce the missing file into a file via touch.
+        }
+    }
 
     # For now we're going to just strip off the binmode and hope for the best.
     $mode =~ s/(:.+$)//;
@@ -1963,7 +1996,7 @@ sub __opendir (*$) {
         return undef;
     }
 
-    if ( !( $mock_dir->{'mode'} & S_IFDIR ) ) {
+    if ( !( $mock_dir->mode & S_IFDIR ) ) {
         $! = ENOTDIR;
         return undef;
     }
@@ -2205,7 +2238,7 @@ sub __mkdir (_;$) {
     }
 
     # If the mock was a symlink or a file, we've just made it a dir.
-    $mock->{'mode'} = ( $perms ^ umask ) | S_IFDIR;
+    $mock->{'mode'} = _generate_mode( $perms, 'dir' );
     delete $mock->{'readlink'};
 
     # This should now start returning content
@@ -2259,6 +2292,7 @@ sub __rmdir (_) {
     }
 
     $mock->{'has_content'} = undef;
+    $mock->{'mode'}        = 0;
     return 1;
 }
 
@@ -2386,7 +2420,7 @@ sub __chmod (@) {
             next;
         }
 
-        $mock->{'mode'} = ( $mock->{'mode'} & S_IFMT ) + $mode;
+        $mock->{'mode'} = ( $mock->mode & S_IFMT ) + $mode;
 
         $num_changed++;
     }

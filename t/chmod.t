@@ -13,9 +13,11 @@ use Test::MockFile qw< nostrict >;
 my $filename = __FILE__;
 my $file     = Test::MockFile->file( $filename, 'whatevs' );
 
+umask 022;
+
 subtest(
     'Defaults' => sub {
-        my $dir_foo  = Test::MockFile->dir('/foo');
+        my $dir_foo  = Test::MockFile->new_dir('/foo');
         my $file_bar = Test::MockFile->file( '/foo/bar', 'content' );
 
         ok( -d '/foo',     'Directory /foo exists' );
@@ -54,7 +56,7 @@ subtest(
         );
         ok( CORE::rmdir('fooz'), 'Successfully deleted real directory' );
 
-        my $dir_foo  = Test::MockFile->dir('/foo');
+        my $dir_foo  = Test::MockFile->new_dir('/foo');
         my $file_bar = Test::MockFile->file( '/foo/bar', 'content' );
 
         ok( -d '/foo',     'Directory /foo exists' );

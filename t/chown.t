@@ -9,6 +9,8 @@ use Test2::Plugin::NoWarnings;
 use Test2::Tools::Exception qw< lives dies >;
 use Test::MockFile ();
 
+use Errno qw/ENOENT EPERM/;
+
 my $euid     = $>;
 my $egid     = int $);
 my $filename = __FILE__;
@@ -33,7 +35,7 @@ if ( !$is_root ) {
 
 subtest(
     'Default ownership' => sub {
-        my $dir_foo  = Test::MockFile->dir('/foo');
+        my $dir_foo  = Test::MockFile->new_dir('/foo');
         my $file_bar = Test::MockFile->file( '/foo/bar', 'content' );
 
         ok( -d '/foo',     'Directory /foo exists' );
@@ -71,7 +73,7 @@ subtest(
             }
             else {
                 ok( !chown( @{$args} ), $message );
-                is( $! + 0, 1, "chown failed (EPERM): \$>:$>, \$):$)" );
+                is( $! + 0, EPERM, "chown failed (EPERM): \$>:$>, \$):$)" );
             }
         };
 
@@ -109,16 +111,12 @@ subtest(
 
 subtest(
     'chown with bareword (nonexistent file)' => sub {
-        no strict;
+        no strict 'subs';
         my $bareword_file = Test::MockFile->file('RANDOM_FILE_THAT_WILL_NOT_EXIST');
 
         is( $! + 0, 0, '$! starts clean' );
-        ok(
-            !chown( $euid, $egid, RANDOM_FILE_THAT_WILL_NOT_EXIST ),
-            'Using bareword treats it as string',
-        );
-
-        is( $! + 0, 2, 'Correct ENOENT error' );
+        ok(!chown( $euid, $egid, RANDOM_FILE_THAT_WILL_NOT_EXIST ), 'Using bareword treats it as string' );
+        is( $! + 0, ENOENT, 'Correct ENOENT error' );
     }
 );
 

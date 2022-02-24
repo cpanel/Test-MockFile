@@ -83,8 +83,8 @@ subtest(
 subtest(
     'Scenario 2: ->dir() on an already existing dir fails made with ->dir()' => sub {
         my $dirname = $get_dirname->();
+        my $dir     = Test::MockFile->new_dir($dirname);
         my $file    = Test::MockFile->file( "$dirname/bar", 'my content' );
-        my $dir     = Test::MockFile->dir($dirname);
 
         ok( -d $dirname,      "-d $dirname succeeds, dir exists" );
         ok( !mkdir($dirname), "mkdir $dirname fails, dir already exists" );
@@ -129,14 +129,12 @@ subtest(
 );
 
 subtest(
-    'Scenario 4: Creating ->file() with content creates dir' => sub {
+    'Scenario 4: Creating ->file() with content DOES NOT create the dir' => sub {
         my $dirname = $get_dirname->();
+        my $file    = Test::MockFile->file( "$dirname/foo", 'some content' );
         my $dir     = Test::MockFile->dir($dirname);
-
-        ok( !-d $dirname, "$dirname does not exist yet" );
-        my $file = Test::MockFile->file( "$dirname/foo", 'some content' );
-        ok( -d $dirname,      "$dirname now exists, after creating file with content" );
-        ok( !mkdir($dirname), "mkdir $dirname fails, since dir already exists" );
+        ok( !-d $dirname,    "$dirname DOES NOT exist, after creating file with content" );
+        ok( mkdir($dirname), "mkdir $dirname can happen after the file." );
 
         is(
             $dir->contents(),

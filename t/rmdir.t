@@ -103,7 +103,7 @@ subtest "rmdir when nothing is there." => sub {
 
 subtest(
     'rmdir non-empty directory fails' => sub {
-        my $foo = Test::MockFile->dir('/foo');
+        my $foo = Test::MockFile->new_dir('/foo');
         my $bar = Test::MockFile->file( '/foo/bar', 'content' );
 
         $! = 0;

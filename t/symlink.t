@@ -9,12 +9,10 @@ use Test2::Plugin::NoWarnings;
 use Test2::Tools::Exception qw< lives dies >;
 use Test::MockFile;
 
-my $dir  = Test::MockFile->dir('/foo');
+my $dir  = Test::MockFile->new_dir('/foo');
 my $file = Test::MockFile->file('/bar');
-ok( !-d ('/foo'), 'Directory does not exist yet' );
 
 my $symlink = Test::MockFile->symlink( '/bar', '/foo/baz' );
-ok( -d ('/foo'), 'Directory now exists' );
 
 {
     opendir my $dh, '/foo' or die $!;

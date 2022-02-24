@@ -91,7 +91,7 @@ is(
     '<' . $tests[3][1] . '>',
 );
 
-my $top_dir3 = Test::MockFile->dir('/dir3');
+my $top_dir3 = Test::MockFile->new_dir('/dir3');
 ok( -d '/dir3', 'Directory now exists' );
 
 ok( !-d '/dir3/dir5',    'Directory does not exist' );

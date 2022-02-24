@@ -34,6 +34,9 @@ ok( !-d '/dir',    'Directory does not exist yet' );
 ok( mkdir('/dir'), 'Successfully created /dir' );
 ok( -d '/dir',     'Directory now exists' );
 
+like( dies { $dir->touch },  qr/^touch only supports files at \S/, "touch /dir doesn't work." );
+like( dies { $link->touch }, qr/^touch only supports files at \S/, "touch /link doesn't work." );
+
 is( $link->unlink, 1, "unlink /link works." );
 is( $link->exists, 0, "/link is now gone" );
 SKIP: {
@@ -42,9 +45,6 @@ SKIP: {
     is( $dir->unlink, 0,                   "unlink /dir doesn't work." );
     is( $! + 0,       $unlink_dir_errorno, "   ... and throws a \$\!" );
 }
-
-like( dies { $dir->touch },  qr/^touch only supports files at \S/, "touch /dir doesn't work." );
-like( dies { $link->touch }, qr/^touch only supports files at \S/, "touch /link doesn't work." );
 
 is( $file->mtime(5), 5, "Set mtime to 1970" );
 is( $file->ctime(5), 5, "Set ctime to 1970" );

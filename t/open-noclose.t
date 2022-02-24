@@ -27,16 +27,19 @@ use Test::MockFile qw< nostrict >;
     $mock_file->touch;
 
     note "empty file";
-    is myread($path), [], "empty file";
+    my $contents = myread($path);
+    is( $contents, [], "empty file" ) or diag explain $contents;
 
-    $mock_file->contents( <<'EOS' );
+    my $test_contents = <<'EOS';
 Some content
 for your eyes only
 EOS
 
-    ok !-z $path, "file is not empty";
+    $mock_file->contents($test_contents);
 
-    ok $mock_file->contents;
+    is( -z $path, undef, "-z says file is now not empty" );
+
+    is( $mock_file->contents, $test_contents, "File is populated" );
 
     my $out = myread($path);
     is $out, [ split( /\n/, $mock_file->contents ) ], "$path file should not be empty (on second read)"

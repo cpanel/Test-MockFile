@@ -44,7 +44,7 @@ like( warning { readdir($real_fh) }, qr/^readdir\(\) attempted on invalid dirhan
 note "-------------- MOCK MODE --------------";
 my $abc = Test::MockFile->file( "$temp_dir/abc", 'hello' );
 my $def = Test::MockFile->file( "$temp_dir/def", 'hello' );
-my $bar = Test::MockFile->dir($temp_dir);
+my $bar = Test::MockFile->new_dir($temp_dir);
 my $baz = Test::MockFile->file( $temp_notdir, '' );
 
 is( opendir( $dir_fh, $temp_dir ), 1,     "Mocked temp dir opens and returns true" );
@@ -71,8 +71,8 @@ is( opendir( my $still_notdir_fh, $temp_notdir ), undef,   "opendir on a mocked 
 is( $! + 0,                                       ENOTDIR, '$! numeric is right.' );
 
 # Check symlinks appear in readdir
-my $dir_for_symlink = Test::MockFile->dir('/foo');
-my $dir_in_dir      = Test::MockFile->dir('/foo/infoo');
+my $dir_for_symlink = Test::MockFile->new_dir('/foo');
+my $dir_in_dir      = Test::MockFile->new_dir('/foo/infoo');
 my $symlink_dest    = Test::MockFile->file( '/foo/dest', '' );
 my $symlink         = Test::MockFile->symlink( '/foo/dest', '/foo/source' );
 
