@@ -35,7 +35,7 @@ sub register {
 
             Test::MockFile::add_strict_rule_for_filename( $out[1] => 1 );
 
-            return @out;
+            return wantarray ? @out : $out[0];
         }
     );
 
