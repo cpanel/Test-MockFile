@@ -1,5 +1,7 @@
 Revision history for Test-MockFile
 
+- Fix for Plugin::FileTemp when calling tempfile in scalar context
+
 0.030   2/22/2022
 - Simplify _strict_mode_violation
 - Introduce new_dir() to allow older dir() syntax.
