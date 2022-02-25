@@ -12,7 +12,7 @@ use warnings;
 use Errno qw/EBADF/;
 use Scalar::Util ();
 
-our $VERSION = '0.031';
+our $VERSION = '0.032';
 
 my $files_being_mocked;
 {
@@ -27,7 +27,7 @@ tie to on B<open> or B<sysopen>.
 
 =head1 VERSION
 
-Version 0.031
+Version 0.032
 
 =cut
 
