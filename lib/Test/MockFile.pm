@@ -262,7 +262,7 @@ sub file_arg_position_for_command {    # can also be used by user hooks
     my ( $command, $at_under_ref ) = @_;
 
     $_file_arg_post //= {
-        'chmod'    => 2,
+        'chmod'    => 1,
         'chown'    => 2,
         'lstat'    => 0,
         'mkdir'    => 0,
