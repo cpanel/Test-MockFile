@@ -1141,7 +1141,31 @@ sub _abs_path_to_file {
 
     return q[/] if $path eq q[/..];
 
-    return $path if $path =~ m{^/};
+    return $path if $path =~ m{^/}xms;
+
+    # ~
+    # ~/...
+    # ~sawyer
+    if ( $path =~ m{ ^(~ ([^/]+)? ) }xms ) {
+        my $username = $2 || getpwuid($<);
+        my $homedir;
+        endpwent;
+        while ( my @pwdata = getpwent ) {
+            if ( $pwdata[0] eq $username ) {
+                $homedir = $pwdata[7];
+                endpwent;
+                last;
+            }
+        }
+
+        endpwent;
+
+        $homedir
+          or die;
+
+        $path =~ s{\Q$1\E}{$homedir};
+        return $path;
+    }
 
     my $cwd = Cwd::getcwd();
 
