@@ -1147,23 +1147,26 @@ sub _abs_path_to_file {
     # ~/...
     # ~sawyer
     if ( $path =~ m{ ^(~ ([^/]+)? ) }xms ) {
-        my $username = $2 || getpwuid($<);
-        my $homedir;
+        my $req_homedir = $1;
+        my $username    = $2 || getpwuid($<);
+        my $pw_homedir;
+
+        # Reset iterator so we *definitely* start from the first one
+        # Then reset when done looping over pw entries
         endpwent;
         while ( my @pwdata = getpwent ) {
             if ( $pwdata[0] eq $username ) {
-                $homedir = $pwdata[7];
+                $pw_homedir = $pwdata[7];
                 endpwent;
                 last;
             }
         }
-
         endpwent;
 
-        $homedir
+        $pw_homedir
           or die;
 
-        $path =~ s{\Q$1\E}{$homedir};
+        $path =~ s{\Q$req_homedir\E}{$pw_homedir};
         return $path;
     }
 
