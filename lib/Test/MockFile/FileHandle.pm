@@ -346,9 +346,10 @@ sub EOF {
 
 =head2 BINMODE
 
-B<UNIMPLEMENTED>: Open a ticket in
-L<github|https://github.com/cpanelinc/Test-MockFile/issues> if you need
-this feature.
+Binmode does nothing as whatever format you put the data into the file as
+is how it will come out. Possibly we could decode the SV if this was done
+but then we'd have to do it every time contents are altered. Please open
+a ticket if you want this to do something.
 
 No L<perldoc
 documentation|http://perldoc.perl.org/perltie.html#Tying-FileHandles>
@@ -358,7 +359,7 @@ exists on this method.
 
 sub BINMODE {
     my ($self) = @_;
-    die('Unimplemented');
+    return;
 }
 
 =head2 OPEN
