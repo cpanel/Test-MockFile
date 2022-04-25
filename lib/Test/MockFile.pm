@@ -47,11 +47,11 @@ files without touching the file system.
 
 =head1 VERSION
 
-Version 0.033
+Version 0.034
 
 =cut
 
-our $VERSION = '0.033';
+our $VERSION = '0.034';
 
 our %files_being_mocked;
 
