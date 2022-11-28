@@ -521,9 +521,13 @@ sub _strict_mode_violation {
     # Ignore stats on STDIN, STDOUT, STDERR
     return if defined $filename && $filename =~ m/^\*?(?:main::)?[<*&+>]*STD(?:OUT|IN|ERR)$/;
 
-    # The filename passed is actually a handle. This means we don't have to check if
-    # it's a violation since something else should have opened it first.
-    return if UNIVERSAL::isa( $filename, 'GLOB' );
+    # The filename passed is actually a handle. This means that, usually,
+    # we don't need to check if it's a violation since something else should
+    # have opened it first. open and sysopen, though, require special care.
+    #
+    if ($command ne 'sysopen' && UNIVERSAL::isa( $filename, 'GLOB' )) {
+        return if $command ne 'open';
+    }
 
     # open >& is for file dups. this isn't a real file access.
     return if $command eq 'open' && $at_under_ref->[1] && $at_under_ref->[1] =~ m/&/;
