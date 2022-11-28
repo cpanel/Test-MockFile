@@ -6,10 +6,17 @@ use warnings;
 use Test2::Bundle::Extended;
 use Test2::Plugin::NoWarnings;
 
-use Test::MockFile plugin => 'FileTemp';
+my $can_run;
+BEGIN {
+    $can_run = ($^V ge 5.28.0);
+}
+
+use Test::MockFile ($can_run ? ( plugin => 'FileTemp' ) : ());
 
 use Fcntl;
 use File::Temp;
+
+plan skip_all => 'Needs FileTemp plugin' if !$can_run;
 
 my $dir = File::Temp::tempdir( CLEANUP => 1 );
 

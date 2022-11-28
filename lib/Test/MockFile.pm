@@ -525,8 +525,8 @@ sub _strict_mode_violation {
     # we don't need to check if it's a violation since something else should
     # have opened it first. open and sysopen, though, require special care.
     #
-    if ($command ne 'sysopen' && UNIVERSAL::isa( $filename, 'GLOB' )) {
-        return if $command ne 'open';
+    if (UNIVERSAL::isa( $filename, 'GLOB' )) {
+        return if $command ne 'open' && $command ne 'sysopen';
     }
 
     # open >& is for file dups. this isn't a real file access.
