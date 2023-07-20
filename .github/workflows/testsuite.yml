@@ -1,4 +1,4 @@
-name: linux
+name: testsuite
 
 on:
   push:
@@ -20,10 +20,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - run: perl -V
       - name: install dependencies
-        uses: perl-actions/install-with-cpm@v1
+        uses: perl-actions/install-with-cpm@stable
         with:
           cpanfile: "cpanfile"
       - name: Makefile.PL
@@ -45,13 +45,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        perl-version: ["5.32", "5.30", "5.28", "5.26", "5.24", "5.22", "5.20", "5.18", "5.16", "5.14", "5.12", "5.10"]
+        perl-version:
+          - "5.38"
+          - "5.36"
+          - "5.34"
+          - "5.32"
+          - "5.30"
+          - "5.28"
+          - "5.26"
+          - "5.24"
+          - "5.22"
+          - "5.20"
+          - "5.18"
+          - "5.16"
+          - "5.14"
+          - "5.12"
+          - "5.10"
 
     container:
       image: perldocker/perl-tester:${{ matrix.perl-version }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: perl -V
         run: perl -V
       - name: Install Dependencies
