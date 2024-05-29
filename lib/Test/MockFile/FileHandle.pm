@@ -402,10 +402,6 @@ Arguments passed are:C<( $self, $pos, $whence )>
 
 Moves the location of our current tell location.
 
-B<$whence is UNIMPLEMENTED>: Open a ticket in
-L<github|https://github.com/cpanelinc/Test-MockFile/issues> if you need
-this feature.
-
 No L<perldoc
 documentation|http://perldoc.perl.org/perltie.html#Tying-FileHandles>
 exists on this method.
@@ -415,16 +411,33 @@ exists on this method.
 sub SEEK {
     my ( $self, $pos, $whence ) = @_;
 
-    if ($whence) {
-        die('Unimplemented');
-    }
     my $file_size = length $self->{'data'}->{'contents'};
     return if $file_size < $pos;
 
-    $self->{'tell'} = $pos;
+    my $new_pos;
 
-    return $pos == 0 ? '0 but true' : $pos;
+    my $SEEK_SET = 0;
+    my $SEEK_CUR = 1;
+    my $SEEK_END = 2;
+
+    if ($whence == $SEEK_SET) {
+        $new_pos = $pos;
+    } elsif ($whence == $SEEK_CUR) {
+        $new_pos = $self->{'tell'} + $pos;
+    } elsif ($whence == $SEEK_END) {
+        $new_pos = $file_size + $pos;
+    } else {
+        die('Invalid whence value');
+    }
+
+    if ($new_pos < 0 || $new_pos > $file_size) {
+        return 0;
+    }
+
+    $self->{'tell'} = $new_pos;
+    return $new_pos == 0 ? '0 but true' : $new_pos;
 }
+
 
 =head2 TELL
 

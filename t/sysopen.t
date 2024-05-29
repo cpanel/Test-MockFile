@@ -83,6 +83,21 @@ is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" ) or 
     ok( seek( $fh, 0, 0 ), 0, "Seek to start of file returns true" );
     is( sysseek( $fh, 0, 0 ), "0 but true", "sysseek to start of file returns '0 but true' to make it so." );
     ok( sysseek( $fh, 0, 0 ), "sysseek to start of file returns true when checked with ok()" );
+
+    ok( sysseek( $fh, 5,  0 ), "sysseek to position 5 returns true." );
+    ok( sysseek( $fh, 10, 1 ), "Seek 10 bytes forward from the current position." );
+    is( sysseek( $fh, 0,  1 ), 15, "Current position is 15 bytes from start." );
+
+    $buf = "";
+    is( sysread( $fh, $buf, 2, 0 ), 2, "Read 2 bytes from current position (10)." );
+    is( $buf, "PQ", "Line is as expected." );
+
+    ok( sysseek( $fh, -5, 2 ),     "Seek 5 bytes back from end of file." );
+    is( sysseek( $fh, 0,  1 ), 46, "Current position is 46 bytes from start." );
+
+    $buf = "";
+    is( sysread( $fh, $buf, 3, 0 ), 3, "Read 3 bytes from current position (46)." );
+    is( $buf, "vwx", "Line is as expected." );
 }
 
 {
@@ -121,6 +136,23 @@ is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" ) or 
     ok( seek( $fh, 0, 0 ), 0, "Seek to start of file returns true" );
     is( sysseek( $fh, 0, 0 ), "0 but true", "sysseek to start of file returns '0 but true' to make it so." );
     ok( sysseek( $fh, 0, 0 ), "sysseek to start of file returns true when checked with ok()" );
+
+    ok( sysseek( $fh, 5,  0 ), "sysseek to position 5 returns true." );
+    ok( sysseek( $fh, 10, 1 ), "Seek 10 bytes forward from the current position." );
+    is( sysseek( $fh, 0,  1 ), 15, "Current position is 15 bytes from start." );
+
+    $buf = "";
+    is( sysread( $fh, $buf, 2, 0 ), 2, "Read 2 bytes from current position (10)." );
+    is( $buf, "PQ", "Line is as expected." );
+
+    ok( sysseek( $fh, -5, 2 ),     "Seek 5 bytes back from end of file." );
+    is( sysseek( $fh, 0,  1 ), 46, "Current position is 46 bytes from start." );
+
+    $buf = "";
+    is( sysread( $fh, $buf, 3, 0 ), 3, "Read 3 bytes from current position (46)." );
+    is( $buf, "vwx", "Line is as expected." );
+
+    like( dies { sysseek( $fh, 10, 3 ) }, qr/Invalid whence value/, "Dies when given an invalid whence value." );
 
     close $fh;
     undef $bar;
