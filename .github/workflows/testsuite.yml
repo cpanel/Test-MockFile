@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: perl -V
       - name: install dependencies
         uses: perl-actions/install-with-cpm@stable
@@ -46,6 +46,8 @@ jobs:
       fail-fast: false
       matrix:
         perl-version:
+          - "5.42"
+          - "5.40"
           - "5.38"
           - "5.36"
           - "5.34"
@@ -66,7 +68,7 @@ jobs:
       image: perldocker/perl-tester:${{ matrix.perl-version }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: perl -V
         run: perl -V
       - name: Install Dependencies
