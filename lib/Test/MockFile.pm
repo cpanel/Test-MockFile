@@ -318,7 +318,7 @@ add rules work for you.
 =item C<$command_rule> a string or regexp or list of any to indicate
 which command to match
 
-=itemC<$file_rule> a string or regexp or undef or list of any to indicate
+=item C<$file_rule> a string or regexp or undef or list of any to indicate
 which files your rules apply to.
 
 =item C<$action> a CODE ref or scalar to handle the exception.
@@ -644,7 +644,7 @@ sub file {
 
     if ( @stats > 1 ) {
         confess(
-            sprintf 'Unkownn arguments (%s) passed to file() as stats',
+            sprintf 'Unknown arguments (%s) passed to file() as stats',
             join ', ', @stats
         );
     }
@@ -846,7 +846,7 @@ sub dir {
     # TODO: Add stat information
 
     # FIXME: Quick and dirty: provide a helper method?
-    my $has_content = grep m{^\Q$path/\E}xms, %files_being_mocked;
+    my $has_content = grep m{^\Q$path/\E}xms, keys %files_being_mocked;
     return $class->new(
         {
             'path'        => $path,
@@ -1974,7 +1974,7 @@ sub __sysopen (*$$;$) {
 sub __opendir (*$) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my $mock_dir = _get_file_object( $_[1] );
 
@@ -2023,7 +2023,7 @@ sub __opendir (*$) {
 sub __readdir (*) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my $mocked_dir = _get_file_object( $_[0] );
 
@@ -2064,7 +2064,7 @@ sub __readdir (*) {
 sub __telldir (*) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);
@@ -2091,7 +2091,7 @@ sub __telldir (*) {
 sub __rewinddir (*) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);
@@ -2119,7 +2119,7 @@ sub __rewinddir (*) {
 sub __seekdir (*$) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my ( $fh, $goto ) = @_;
     my $mocked_dir = _get_file_object($fh);
@@ -2146,7 +2146,7 @@ sub __seekdir (*$) {
 sub __closedir (*) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);
@@ -2476,10 +2476,10 @@ Filehandles can provide the file descriptor (in number) using the
 C<fileno> keyword but this is purposefully unsupported in
 L<Test::MockFile>.
 
-The reaosn is that by mocking a file, we're creating an alternative
+The reason is that by mocking a file, we're creating an alternative
 file system. Returning a C<fileno> (file descriptor number) would
 require creating file descriptor numbers that would possibly conflict
-with the file desciptors you receive from the real filesystem.
+with the file descriptors you receive from the real filesystem.
 
 In short, this is a recipe for buggy tests or worse - truly destructive
 behavior. If you have a need for a real file, we suggest L<File::Temp>.
