@@ -846,7 +846,7 @@ sub dir {
     # TODO: Add stat information
 
     # FIXME: Quick and dirty: provide a helper method?
-    my $has_content = grep m{^\Q$path/\E}xms, %files_being_mocked;
+    my $has_content = grep m{^\Q$path/\E}xms, keys %files_being_mocked;
     return $class->new(
         {
             'path'        => $path,
