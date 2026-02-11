@@ -99,5 +99,21 @@ is(
     is( \@content, [qw< . .. bar >], 'Did not get confused by internal files' );
 }
 
+# Regression: dir() must use "keys" when grepping %files_being_mocked.
+# Without "keys", grep iterates over both keys (paths) and values (weakrefs
+# to blessed hashrefs). The stringified mock objects could accidentally match
+# the path regex, inflating has_content or causing uninitialized-value warnings
+# when weakrefs are cleared during global destruction.
+{
+    my $mock_file = Test::MockFile->file( '/regdir/somefile', 'data' );
+    my $mock_dir  = Test::MockFile->dir('/regdir');
+
+    is( $mock_dir->contents(), [qw< . .. somefile >], 'dir() detects mocked child file via keys %files_being_mocked' );
+
+    opendir my $dh, '/regdir' or die "opendir /regdir: $!";
+    is( [ readdir($dh) ], [qw< . .. somefile >], 'readdir returns correct entries for dir with mocked children' );
+    closedir $dh;
+}
+
 done_testing();
 exit;
