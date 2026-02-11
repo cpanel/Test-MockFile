@@ -99,5 +99,39 @@ is(
     is( \@content, [qw< . .. bar >], 'Did not get confused by internal files' );
 }
 
+note "-------------- BAREWORD GUARD FIX --------------";
+# Regression test: the bareword upgrade guard was checking $_[9] (always undef)
+# instead of $_[0], causing _upgrade_barewords to run unconditionally.
+# Verify dir operations work correctly with reference filehandles (non-barewords).
+{
+    my $mock_dir  = Test::MockFile->dir('/guardtest');
+    my $mock_file = Test::MockFile->file( '/guardtest/aaa', 'data' );
+
+    # opendir with a lexical (reference) filehandle
+    is( opendir( my $dh, '/guardtest' ), 1, "opendir with ref filehandle works" );
+
+    # readdir in scalar context
+    is( scalar readdir($dh), ".",   "readdir with ref fh reads ." );
+    is( scalar readdir($dh), "..",  "readdir with ref fh reads .." );
+
+    # telldir
+    is( telldir($dh), 2, "telldir with ref fh returns correct position" );
+
+    # readdir remaining
+    is( scalar readdir($dh), "aaa", "readdir with ref fh reads aaa" );
+    is( scalar readdir($dh), undef, "readdir with ref fh returns undef at end" );
+
+    # rewinddir
+    is( rewinddir($dh), 1, "rewinddir with ref fh returns true" );
+    is( telldir($dh),   0, "telldir after rewinddir is 0" );
+
+    # seekdir
+    is( seekdir( $dh, 2 ), 1,          "seekdir with ref fh returns true" );
+    is( [ readdir($dh) ],  [qw/aaa/],  "readdir after seekdir returns remaining entries" );
+
+    # closedir
+    is( closedir($dh), 1, "closedir with ref fh returns true" );
+}
+
 done_testing();
 exit;
