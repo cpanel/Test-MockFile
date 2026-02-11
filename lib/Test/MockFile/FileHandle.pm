@@ -402,6 +402,18 @@ Arguments passed are:C<( $self, $pos, $whence )>
 
 Moves the location of our current tell location.
 
+C<$whence> controls the seek origin:
+
+=over 4
+
+=item C<0> (SEEK_SET) - seek to C<$pos> from start of file
+
+=item C<1> (SEEK_CUR) - seek to C<$pos> relative to current position
+
+=item C<2> (SEEK_END) - seek to C<$pos> relative to end of file
+
+=back
+
 No L<perldoc
 documentation|http://perldoc.perl.org/perltie.html#Tying-FileHandles>
 exists on this method.
@@ -412,7 +424,6 @@ sub SEEK {
     my ( $self, $pos, $whence ) = @_;
 
     my $file_size = length $self->{'data'}->{'contents'};
-    return if $file_size < $pos;
 
     my $new_pos;
 
@@ -420,24 +431,26 @@ sub SEEK {
     my $SEEK_CUR = 1;
     my $SEEK_END = 2;
 
-    if ($whence == $SEEK_SET) {
+    if ( $whence == $SEEK_SET ) {
         $new_pos = $pos;
-    } elsif ($whence == $SEEK_CUR) {
+    }
+    elsif ( $whence == $SEEK_CUR ) {
         $new_pos = $self->{'tell'} + $pos;
-    } elsif ($whence == $SEEK_END) {
+    }
+    elsif ( $whence == $SEEK_END ) {
         $new_pos = $file_size + $pos;
-    } else {
+    }
+    else {
         die('Invalid whence value');
     }
 
-    if ($new_pos < 0 || $new_pos > $file_size) {
+    if ( $new_pos < 0 || $new_pos > $file_size ) {
         return 0;
     }
 
     $self->{'tell'} = $new_pos;
     return $new_pos == 0 ? '0 but true' : $new_pos;
 }
-
 
 =head2 TELL
 

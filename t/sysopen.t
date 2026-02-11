@@ -89,7 +89,7 @@ is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" ) or 
     is( sysseek( $fh, 0,  1 ), 15, "Current position is 15 bytes from start." );
 
     $buf = "";
-    is( sysread( $fh, $buf, 2, 0 ), 2, "Read 2 bytes from current position (10)." );
+    is( sysread( $fh, $buf, 2, 0 ), 2, "Read 2 bytes from current position (15)." );
     is( $buf, "PQ", "Line is as expected." );
 
     ok( sysseek( $fh, -5, 2 ),     "Seek 5 bytes back from end of file." );
@@ -142,7 +142,7 @@ is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" ) or 
     is( sysseek( $fh, 0,  1 ), 15, "Current position is 15 bytes from start." );
 
     $buf = "";
-    is( sysread( $fh, $buf, 2, 0 ), 2, "Read 2 bytes from current position (10)." );
+    is( sysread( $fh, $buf, 2, 0 ), 2, "Read 2 bytes from current position (15)." );
     is( $buf, "PQ", "Line is as expected." );
 
     ok( sysseek( $fh, -5, 2 ),     "Seek 5 bytes back from end of file." );
