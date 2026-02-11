@@ -644,7 +644,7 @@ sub file {
 
     if ( @stats > 1 ) {
         confess(
-            sprintf 'Unkownn arguments (%s) passed to file() as stats',
+            sprintf 'Unknown arguments (%s) passed to file() as stats',
             join ', ', @stats
         );
     }
@@ -2476,10 +2476,10 @@ Filehandles can provide the file descriptor (in number) using the
 C<fileno> keyword but this is purposefully unsupported in
 L<Test::MockFile>.
 
-The reaosn is that by mocking a file, we're creating an alternative
+The reason is that by mocking a file, we're creating an alternative
 file system. Returning a C<fileno> (file descriptor number) would
 require creating file descriptor numbers that would possibly conflict
-with the file desciptors you receive from the real filesystem.
+with the file descriptors you receive from the real filesystem.
 
 In short, this is a recipe for buggy tests or worse - truly destructive
 behavior. If you have a need for a real file, we suggest L<File::Temp>.
