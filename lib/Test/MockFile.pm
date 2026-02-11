@@ -318,7 +318,7 @@ add rules work for you.
 =item C<$command_rule> a string or regexp or list of any to indicate
 which command to match
 
-=itemC<$file_rule> a string or regexp or undef or list of any to indicate
+=item C<$file_rule> a string or regexp or undef or list of any to indicate
 which files your rules apply to.
 
 =item C<$action> a CODE ref or scalar to handle the exception.
