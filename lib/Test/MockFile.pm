@@ -30,6 +30,7 @@ use IO::File                   ();
 use Test::MockFile::FileHandle ();
 use Test::MockFile::DirHandle  ();
 use Text::Glob                 ();
+use File::Glob                 ();
 use Scalar::Util               ();
 
 use Symbol;
@@ -1749,7 +1750,24 @@ sub __glob {
     @mocked_files = sort @mocked_files;
 
     my @results = map Text::Glob::match_glob( $_, @mocked_files ), @patterns;
-    return @results;
+
+    # In nostrict mode, also return real filesystem matches (issue #158).
+    # In strict mode, only mocked files are visible — no real FS access.
+    if ( !is_strict_mode() ) {
+        my @real_results = File::Glob::bsd_glob($spec);
+
+        # Merge real results, excluding any paths that are being mocked
+        # (mocked paths take precedence whether they exist or not)
+        my %seen = map { $_ => 1 } @results;
+        foreach my $real_path (@real_results) {
+            my $abs = _abs_path_to_file($real_path);
+            next if $files_being_mocked{$abs};
+            next if $seen{$real_path}++;
+            push @results, $real_path;
+        }
+    }
+
+    return sort @results;
 }
 
 sub __open (*;$@) {
@@ -2532,6 +2550,7 @@ sub __truncate ($$) {
 }
 
 BEGIN {
+    no warnings 'redefine';
     *CORE::GLOBAL::glob = !$^V || $^V lt 5.18.0
       ? sub {
         pop;
