@@ -669,6 +669,7 @@ sub file {
     ( my $dirname = $path ) =~ s{ / [^/]+ $ }{}xms;
     if ( defined $contents && $files_being_mocked{$dirname} ) {
         $files_being_mocked{$dirname}{'has_content'} = 1;
+        _update_parent_dir_times($path);
     }
 
     return $class->new(
@@ -743,6 +744,7 @@ sub symlink {
     ( my $dirname = $file ) =~ s{ / [^/]+ $ }{}xms;
     if ( $files_being_mocked{$dirname} ) {
         $files_being_mocked{$dirname}{'has_content'} = 1;
+        _update_parent_dir_times($file) if defined $readlink;
     }
 
     return $class->new(
@@ -1324,6 +1326,8 @@ sub unlink {
         $self->{'has_content'} = undef;
         $self->{'contents'}    = undef;
     }
+
+    _update_parent_dir_times( $self->path );
     return 1;
 }
 
@@ -1656,6 +1660,25 @@ sub _real_file_access_hook {
     return 1;
 }
 
+# Update the parent directory's mtime and ctime when its contents change.
+# This mirrors real filesystem behavior: adding or removing entries in a
+# directory updates the directory's mtime and ctime.
+sub _update_parent_dir_times {
+    my ($path) = @_;
+
+    ( my $dirname = $path ) =~ s{ / [^/]+ $ }{}xms;
+    return unless length $dirname;
+
+    my $parent = $files_being_mocked{$dirname};
+    return unless $parent && $parent->is_dir();
+
+    my $now = time;
+    $parent->{'mtime'} = $now;
+    $parent->{'ctime'} = $now;
+
+    return 1;
+}
+
 =head2 How this mocking is done:
 
 Test::MockFile uses 2 methods to mock file access:
@@ -1873,6 +1896,9 @@ sub __open (*;$@) {
     Scalar::Util::weaken( $mock_file->{'fh'} ) if ref $_[0];    # Will this make it go out of scope?
 
     # Fix tell based on open options.
+    # Track whether this open creates the file (transitions from non-existent).
+    my $was_new = !defined $mock_file->{'contents'};
+
     if ( $mode eq '>>' or $mode eq '+>>' ) {
         $mock_file->{'contents'} //= '';
         seek $_[0], length( $mock_file->{'contents'} ), 0;
@@ -1880,6 +1906,9 @@ sub __open (*;$@) {
     elsif ( $mode eq '>' or $mode eq '+>' ) {
         $mock_file->{'contents'} = '';
     }
+
+    # Creating a new file in a directory updates the directory's mtime.
+    _update_parent_dir_times($abs_path) if $was_new && defined $mock_file->{'contents'};
 
     return 1;
 }
@@ -1928,6 +1957,7 @@ sub __sysopen (*$$;$) {
     # O_CREAT
     if ( $sysopen_mode & O_CREAT && !defined $mock_file->{'contents'} ) {
         $mock_file->{'contents'} = '';
+        _update_parent_dir_times( $_[1] );
     }
 
     # O_TRUNC
@@ -2246,6 +2276,7 @@ sub __mkdir (_;$) {
     # This should now start returning content
     $mock->{'has_content'} = 1;
 
+    _update_parent_dir_times($file);
     return 1;
 }
 
@@ -2294,6 +2325,8 @@ sub __rmdir (_) {
     }
 
     $mock->{'has_content'} = undef;
+
+    _update_parent_dir_times($file);
     return 1;
 }
 
