@@ -2239,7 +2239,7 @@ sub __sysopen (*$$;$) {
 sub __opendir (*$) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my $mock_dir = _get_file_object( $_[1] );
 
@@ -2288,7 +2288,7 @@ sub __opendir (*$) {
 sub __readdir (*) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my $mocked_dir = _get_file_object( $_[0] );
 
@@ -2331,7 +2331,7 @@ sub __readdir (*) {
 sub __telldir (*) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);
@@ -2358,7 +2358,7 @@ sub __telldir (*) {
 sub __rewinddir (*) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);
@@ -2386,7 +2386,7 @@ sub __rewinddir (*) {
 sub __seekdir (*$) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my ( $fh, $goto ) = @_;
     my $mocked_dir = _get_file_object($fh);
@@ -2407,13 +2407,14 @@ sub __seekdir (*$) {
         confess("seekdir called on a closed dirhandle");
     }
 
-    return $obj->{'tell'} = $goto;
+    $obj->{'tell'} = $goto;
+    return 1;
 }
 
 sub __closedir (*) {
 
     # Upgrade but ignore bareword indicator
-    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[9];
+    ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);

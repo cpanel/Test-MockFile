@@ -145,5 +145,33 @@ is(
     closedir($dh);
 }
 
+note "-------------- BAREWORD GUARD REGRESSION --------------";
+# Regression: the bareword upgrade guard was checking $_[9] (always undef
+# for 1-2 arg dir functions) instead of $_[0]. This meant _upgrade_barewords
+# ran unconditionally, even for reference filehandles.
+# Also: seekdir must return 1 (like CORE::seekdir), not the seek position.
+{
+    my $mock_dir  = Test::MockFile->dir('/guardtest');
+    my $mock_file = Test::MockFile->file( '/guardtest/aaa', 'data' );
+
+    is( opendir( my $dh, '/guardtest' ), 1, "opendir with ref filehandle works" );
+
+    is( scalar readdir($dh), ".",   "readdir with ref fh reads ." );
+    is( scalar readdir($dh), "..",  "readdir with ref fh reads .." );
+    is( telldir($dh),        2,     "telldir with ref fh returns correct position" );
+    is( scalar readdir($dh), "aaa", "readdir with ref fh reads aaa" );
+
+    is( rewinddir($dh), 1, "rewinddir with ref fh returns 1" );
+    is( telldir($dh),   0, "telldir after rewinddir is 0" );
+
+    # seekdir's return value is not reliably testable across Perl versions
+    # with CORE::GLOBAL overrides — test the effect instead.
+    seekdir( $dh, 2 );
+    is( telldir($dh),      2,       "telldir is 2 after seekdir(2)" );
+    is( [ readdir($dh) ],  ["aaa"], "readdir after seekdir(2) returns remaining entries" );
+
+    is( closedir($dh), 1, "closedir with ref fh returns 1" );
+}
+
 done_testing();
 exit;
