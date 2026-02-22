@@ -2429,6 +2429,22 @@ sub __chmod (@) {
     return $num_changed;
 }
 
+sub __flock (*$) {
+    my ( $fh, $operation ) = @_;
+
+    my $mock = _get_file_object($fh);
+    if ($mock) {
+
+        # Mocked files have no real file descriptor, so flock cannot
+        # operate on them.  In a test context, the lock always succeeds.
+        return 1;
+    }
+
+    # Not a mocked file — delegate to the real flock.
+    goto \&CORE::flock if _goto_is_available();
+    return CORE::flock( $fh, $operation );
+}
+
 BEGIN {
     *CORE::GLOBAL::glob = !$^V || $^V lt 5.18.0
       ? sub {
@@ -2452,6 +2468,7 @@ BEGIN {
     *CORE::GLOBAL::rmdir = \&__rmdir;
     *CORE::GLOBAL::chown = \&__chown;
     *CORE::GLOBAL::chmod = \&__chmod;
+    *CORE::GLOBAL::flock = \&__flock;
 }
 
 =head1 CAEATS AND LIMITATIONS
