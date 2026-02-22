@@ -287,8 +287,19 @@ is removed. Further calls to this object should fail.
 sub CLOSE {
     my ($self) = @_;
 
-    delete $self->{'data'}->{'fh'};
-    untie $self;
+    # Remove this specific handle from the mock's fhs list.
+    # Each handle has its own tied object, so we match by tied identity.
+    # Try through the weak data ref first, then fall back to the global hash.
+    my $mock = $self->{'data'};
+    if ( !$mock && $self->{'file'} ) {
+        $mock = $files_being_mocked->{ $self->{'file'} };
+    }
+
+    if ( $mock && $mock->{'fhs'} ) {
+        @{ $mock->{'fhs'} } = grep {
+            defined $_ && ( !ref $_ || ( tied( *{$_} ) || 0 ) != $self )
+        } @{ $mock->{'fhs'} };
+    }
 
     return 1;
 }
