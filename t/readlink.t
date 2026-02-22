@@ -49,23 +49,15 @@ $! = 0;
 my $got = 'abc';
 like( warning { $got = CORE::readlink(undef) }, qr/^Use of uninitialized value in readlink at /, "Got expected warning for passing no value to readlink" );
 is( $got, undef, "readlink without args is undef." );
-if ( $^O eq 'freebsd' ) {
-    is( $! + 0, EINVAL, '$! is EINVAL for a readlink(undef)' );
-}
-else {
-    is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
-}
+# readlink(undef) errno varies by OS and version: FreeBSD 14+ returns EINVAL,
+# FreeBSD 12 and Linux return ENOENT. Accept both. (GH #175)
+ok( $! == EINVAL || $! == ENOENT, "\$! is EINVAL or ENOENT for a readlink(undef) (got: " . ($! + 0) . ")" );
 
 $!   = 0;
 $got = 'abc';
 like( warning { $got = CORE::readlink() }, qr/^Use of uninitialized value \$_ in readlink at /, "Got expected warning for passing no value to readlink" );
 is( $got, undef, "readlink without args is undef." );
-if ( $^O eq 'freebsd' ) {
-    is( $! + 0, EINVAL, '$! is EINVAL for a readlink(undef)' );
-}
-else {
-    is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
-}
+ok( $! == EINVAL || $! == ENOENT, "\$! is EINVAL or ENOENT for a readlink() (got: " . ($! + 0) . ")" );
 
 note "Cleaning up...";
 CORE::unlink( $symlink, $bad_symlink, $file );
@@ -106,12 +98,7 @@ $!   = 0;
 $got = 'abc';
 like( warning { $got = readlink(undef) }, qr/^Use of uninitialized value in readlink at /, "Got expected warning for passing no value to readlink" );
 is( $got, undef, "readlink without args is undef." );
-if ( $^O eq 'freebsd' ) {
-    is( $! + 0, EINVAL, '$! is EINVAL for a readlink(undef)' );
-}
-else {
-    is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
-}
+ok( $! == EINVAL || $! == ENOENT, "\$! is EINVAL or ENOENT for a readlink(undef) (got: " . ($! + 0) . ")" );
 
 $!   = 0;
 $got = 'abc';
@@ -119,11 +106,6 @@ todo "Something's wrong with readlink's prototype and the warning is incorrect n
     like( warning { $got = readlink() }, qr/^Use of uninitialized value \$_ in readlink at /, "Got expected warning for passing no value to readlink" );
 };
 is( $got, undef, "readlink without args is undef." );
-if ( $^O eq 'freebsd' ) {
-    is( $! + 0, EINVAL, '$! is EINVAL for a readlink(undef)' );
-}
-else {
-    is( $! + 0, ENOENT, '$! is ENOENT for a readlink(undef)' );
-}
+ok( $! == EINVAL || $! == ENOENT, "\$! is EINVAL or ENOENT for a readlink() (got: " . ($! + 0) . ")" );
 
 done_testing();
