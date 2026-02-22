@@ -113,7 +113,10 @@ sub PRINT {
         $self->{'data'}->{'contents'} .= $line;
     }
 
-    return length( $self->{'data'}->{'contents'} ) - $starting_bytes;
+    my $written = length( $self->{'data'}->{'contents'} ) - $starting_bytes;
+    $self->{'tell'} = length( $self->{'data'}->{'contents'} );
+
+    return $written;
 }
 
 =head2 PRINTF
