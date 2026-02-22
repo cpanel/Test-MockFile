@@ -37,7 +37,7 @@ use Symbol;
 
 use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
-use Errno qw/EPERM ENOENT ELOOP ENOTEMPTY EEXIST EISDIR ENOTDIR EINVAL/;
+use Errno qw/EPERM ENOENT ELOOP ENOTEMPTY EEXIST EISDIR ENOTDIR EINVAL EXDEV/;
 
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
@@ -143,11 +143,23 @@ throw a die when files are accessed during your tests!
     # same as above
     say "Contents of /foo/bar directory (using glob()): " . join "\n", @matches;
 
+    # Create a symlink using the builtin
+    my $target_mock = Test::MockFile->file('/foo/target', "data");
+    my $link_mock   = Test::MockFile->file('/foo/mylink');  # start as non-existent
+    symlink('/foo/target', '/foo/mylink');                   # now it's a symlink
+    say 'is a symlink!' if -l '/foo/mylink';
+
+    # Create a hard link using the builtin
+    my $orig_mock = Test::MockFile->file('/foo/original', "shared data");
+    my $hard_mock = Test::MockFile->file('/foo/hardlink');
+    link('/foo/original', '/foo/hardlink');
+    say 'hard link exists!' if -f '/foo/hardlink';
+
 =head1 IMPORT
 
 When the module is loaded with no parameters, strict mode is turned on.
-Any file checks, C<open>, C<sysopen>, C<opendir>, C<stat>, or C<lstat>
-will throw a die.
+Any file checks, C<open>, C<sysopen>, C<opendir>, C<stat>, C<lstat>,
+C<symlink>, or C<link> will throw a die.
 
 For example:
 
@@ -300,10 +312,12 @@ sub file_arg_position_for_command {    # can also be used by user hooks
         'mkdir'    => 0,
         'open'     => 2,
         'opendir'  => 1,
+        'link'     => 0,
         'readlink' => 0,
         'rename'   => 0,
         'rmdir'    => 0,
         'stat'     => 0,
+        'symlink'  => 1,
         'sysopen'  => 1,
         'truncate' => 0,
         'unlink'   => 0,
@@ -1490,8 +1504,8 @@ sub contents {
     my ( $self, $new_contents ) = @_;
     $self or confess;
 
-    $self->is_link
-      and confess("checking or setting contents on a symlink is not supported");
+    # Symlinks have no contents — return undef.
+    return if $self->is_link;
 
     # handle directories
     if ( $self->is_dir() ) {
@@ -1819,7 +1833,7 @@ returns true/false, depending on whether this object is a symlink.
 sub is_link {
     my ($self) = @_;
 
-    return ( defined $self->{'readlink'} && length $self->{'readlink'} && $self->{'mode'} & S_IFLNK ) ? 1 : 0;
+    return ( $self->{'mode'} & S_IFLNK ) ? 1 : 0;
 }
 
 =head2 is_dir
@@ -2847,6 +2861,128 @@ sub __readlink (_) {
     return $mock_object->readlink;
 }
 
+sub __symlink ($$) {
+    my ( $oldname, $newname ) = @_;
+
+    if ( !defined $newname ) {
+        carp('Use of uninitialized value in symlink');
+        $! = ENOENT;
+        return 0;
+    }
+
+    my $mock = _get_file_object($newname);
+
+    if ( !$mock ) {
+        _real_file_access_hook( 'symlink', \@_ );
+        goto \&CORE::symlink if _goto_is_available();
+        return CORE::symlink( $oldname, $newname );
+    }
+
+    if ( $mock->exists ) {
+        $! = EEXIST;
+        return 0;
+    }
+
+    # Convert the mock to a symlink pointing to $oldname
+    $mock->{'readlink'} = $oldname;
+    $mock->{'mode'}     = 07777 | S_IFLNK;
+
+    # Mark parent directory as having content
+    ( my $dirname = $mock->{'path'} ) =~ s{ / [^/]+ $ }{}xms;
+    if ( $files_being_mocked{$dirname} ) {
+        $files_being_mocked{$dirname}{'has_content'} = 1;
+    }
+
+    return 1;
+}
+
+sub __link ($$) {
+    my ( $oldname, $newname ) = @_;
+
+    if ( !defined $oldname || !defined $newname ) {
+        carp('Use of uninitialized value in link');
+        $! = ENOENT;
+        return 0;
+    }
+
+    my $old_mock = _get_file_object($oldname);
+    my $new_mock = _get_file_object($newname);
+
+    # Neither path is mocked - passthrough to real link
+    if ( !$old_mock && !$new_mock ) {
+        _real_file_access_hook( 'link', \@_ );
+        goto \&CORE::link if _goto_is_available();
+        return CORE::link( $oldname, $newname );
+    }
+
+    # Source must exist
+    if ( !$old_mock || !$old_mock->exists ) {
+        $! = ENOENT;
+        return 0;
+    }
+
+    # Cannot hard-link directories
+    if ( $old_mock->is_dir ) {
+        $! = EPERM;
+        return 0;
+    }
+
+    # Follow symlinks on the source (link() follows symlinks)
+    my $source_mock = $old_mock;
+    if ( $old_mock->is_link ) {
+        my $target_path = _find_file_or_fh( $oldname, 1 );    # follow_link=1
+        if ( !defined $target_path || $target_path eq BROKEN_SYMLINK || $target_path eq CIRCULAR_SYMLINK ) {
+            $! = ENOENT;
+            return 0;
+        }
+        $source_mock = $files_being_mocked{$target_path};
+        if ( !$source_mock || !$source_mock->exists ) {
+            $! = ENOENT;
+            return 0;
+        }
+    }
+
+    # Destination must be a pre-declared mock
+    if ( !$new_mock ) {
+        $! = EXDEV;
+        return 0;
+    }
+
+    # Destination must not already exist
+    if ( $new_mock->exists ) {
+        $! = EEXIST;
+        return 0;
+    }
+
+    # Copy file attributes from source to destination
+    $new_mock->{'contents'}    = $source_mock->{'contents'};
+    $new_mock->{'has_content'} = 1;
+    $new_mock->{'mode'}        = $source_mock->{'mode'};
+    $new_mock->{'uid'}         = $source_mock->{'uid'};
+    $new_mock->{'gid'}         = $source_mock->{'gid'};
+    $new_mock->{'inode'}       = $source_mock->{'inode'};
+    $new_mock->{'dev'}         = $source_mock->{'dev'};
+
+    # Update link counts
+    $source_mock->{'nlink'}++;
+    $new_mock->{'nlink'} = $source_mock->{'nlink'};
+
+    # Update ctime (inode change) on both
+    my $now = time;
+    $source_mock->{'ctime'} = $now;
+    $new_mock->{'ctime'}    = $now;
+    $new_mock->{'atime'}    = $source_mock->{'atime'};
+    $new_mock->{'mtime'}    = $source_mock->{'mtime'};
+
+    # Mark parent directory as having content
+    ( my $dirname = $new_mock->{'path'} ) =~ s{ / [^/]+ $ }{}xms;
+    if ( $files_being_mocked{$dirname} ) {
+        $files_being_mocked{$dirname}{'has_content'} = 1;
+    }
+
+    return 1;
+}
+
 # $file is always passed because of the prototype.
 sub __mkdir (_;$) {
     my ( $file, $perms ) = @_;
@@ -3316,6 +3452,8 @@ BEGIN {
     *CORE::GLOBAL::closedir  = \&__closedir;
     *CORE::GLOBAL::unlink    = \&__unlink;
     *CORE::GLOBAL::readlink  = \&__readlink;
+    *CORE::GLOBAL::symlink   = \&__symlink;
+    *CORE::GLOBAL::link      = \&__link;
     *CORE::GLOBAL::mkdir     = \&__mkdir;
 
     *CORE::GLOBAL::rename = \&__rename;
@@ -3360,6 +3498,17 @@ get mad.
 
     # Or alternatively, add this to the top of your code:
     use Term::ReadLine
+
+=head2 HARD LINKS
+
+The C<link()> override copies file contents and metadata from the
+source to the destination mock. However, unlike real hard links,
+writes to one file will B<not> be reflected in the other. The
+C<nlink> count is incremented on both files.
+
+The destination path must be a pre-declared mock (via C<file()> or
+C<dir()>). Attempting to C<link()> a mocked source to an unmocked
+destination will fail with C<EXDEV>.
 
 =head2 FILENO IS UNSUPPORTED
 
