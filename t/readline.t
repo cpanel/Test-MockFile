@@ -65,7 +65,12 @@ is( <$fh>, undef,   '9th read on $fh undef at EOF' );
 }
 
 close $fh;
-ok( !exists $Test::MockFile::files_being_mocked{$filename}->{'fh'}, "file handle clears from files_being_mocked hash when it goes out of scope." );
+{
+    my $fhs = $Test::MockFile::files_being_mocked{$filename}->{'fhs'};
+    my @defined_fhs = $fhs ? grep { defined $_ } @{$fhs} : ();
+    ok( !@defined_fhs, "file handle clears from files_being_mocked hash on close" )
+      or diag( "fhs has " . scalar(@defined_fhs) . " defined entries after close" );
+}
 
 undef $bar;
 is( scalar %Test::MockFile::files_being_mocked, 0, "files_being_mocked empties when \$bar is cleared" );

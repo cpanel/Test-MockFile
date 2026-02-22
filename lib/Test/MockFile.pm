@@ -1118,12 +1118,21 @@ sub _fh_to_file {
 
     # See if $fh is a file handle. It might be a path.
     foreach my $path ( sort keys %files_being_mocked ) {
-        my $mock_fh = $files_being_mocked{$path}->{'fh'};
+        my $mock = $files_being_mocked{$path};
 
-        next unless $mock_fh;               # File isn't open.
-        next unless "$mock_fh" eq "$fh";    # This mock doesn't have this file handle open.
+        # Check file handles (multiple handles per file)
+        my $fhs = $mock->{'fhs'};
+        if ( $fhs && @{$fhs} ) {
+            @{$fhs} = grep { defined $_ } @{$fhs};
+            foreach my $mock_fh ( @{$fhs} ) {
+                return $path if "$mock_fh" eq "$fh";
+            }
+        }
 
-        return $path;
+        # Check dir handle (stored as stringified handle)
+        if ( $mock->{'fh'} && $mock->{'fh'} eq "$fh" ) {
+            return $path;
+        }
     }
 
     return;
@@ -1959,10 +1968,10 @@ sub __open (*;$@) {
         $_[0] = $filefh;
     }
 
-    # This is how we tell if the file is open by something.
-
-    $mock_file->{'fh'} = $_[0];
-    Scalar::Util::weaken( $mock_file->{'fh'} ) if ref $_[0];    # Will this make it go out of scope?
+    # Track all open file handles for this mock (supports multiple handles to same file).
+    $mock_file->{'fhs'} //= [];
+    push @{ $mock_file->{'fhs'} }, $_[0];
+    Scalar::Util::weaken( $mock_file->{'fhs'}[-1] ) if ref $_[0];
 
     # Fix tell based on open options.
     if ( $mode eq '>>' or $mode eq '+>>' ) {
@@ -2048,9 +2057,10 @@ sub __sysopen (*$$;$) {
     $_[0] = IO::File->new;
     tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
 
-    # This is how we tell if the file is open by something.
-    $files_being_mocked{$abs_path}->{'fh'} = $_[0];
-    Scalar::Util::weaken( $files_being_mocked{$abs_path}->{'fh'} ) if ref $_[0];    # Will this make it go out of scope?
+    # Track all open file handles for this mock (supports multiple handles to same file).
+    $files_being_mocked{$abs_path}->{'fhs'} //= [];
+    push @{ $files_being_mocked{$abs_path}->{'fhs'} }, $_[0];
+    Scalar::Util::weaken( $files_being_mocked{$abs_path}->{'fhs'}[-1] ) if ref $_[0];
 
     # O_TRUNC
     if ( $sysopen_mode & O_TRUNC ) {
