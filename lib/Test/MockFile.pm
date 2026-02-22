@@ -2341,7 +2341,7 @@ sub __chown (@) {
         if ( !$mock ) {
             _real_file_access_hook( 'chown', \@_ );
             goto \&CORE::chown if _goto_is_available();
-            return CORE::chown(@files);
+            return CORE::chown( $uid, $gid, @files );
         }
 
         # Even if you're root, nonexistent file is nonexistent
@@ -2411,7 +2411,7 @@ sub __chmod (@) {
         if ( !$mock ) {
             _real_file_access_hook( 'chmod', \@_ );
             goto \&CORE::chmod if _goto_is_available();
-            return CORE::chmod(@files);
+            return CORE::chmod( $mode, @files );
         }
 
         # chmod is less specific in such errors
