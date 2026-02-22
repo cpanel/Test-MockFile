@@ -8,6 +8,10 @@ use Test2::Plugin::NoWarnings;
 use Test::MockFile qw< nostrict >;
 
 # GitHub issue #186: parent directory mtime should update when contents change.
+#
+# Note: Test::MockFile->dir() creates a mock placeholder that does NOT yet
+# "exist" (stat returns empty). Use new_dir() to create an existing directory,
+# or create a file with content inside it first.
 
 # Helper: sleep 1 second to ensure mtime changes are detectable.
 # Perl's time() has second-level granularity.
@@ -16,7 +20,7 @@ sub wait_for_time_change {
 }
 
 subtest 'file creation updates parent dir mtime' => sub {
-    my $dir = Test::MockFile->dir('/mtime_test1');
+    my $dir = Test::MockFile->new_dir('/mtime_test1');
     my $dir_mtime_before = ( stat '/mtime_test1' )[9];
     ok( defined $dir_mtime_before, 'directory has mtime' );
 
@@ -28,7 +32,7 @@ subtest 'file creation updates parent dir mtime' => sub {
 };
 
 subtest 'file creation without content does not update parent dir mtime' => sub {
-    my $dir = Test::MockFile->dir('/mtime_test2');
+    my $dir = Test::MockFile->new_dir('/mtime_test2');
     my $dir_mtime_before = ( stat '/mtime_test2' )[9];
 
     wait_for_time_change();
@@ -41,7 +45,7 @@ subtest 'file creation without content does not update parent dir mtime' => sub 
 };
 
 subtest 'unlink updates parent dir mtime' => sub {
-    my $dir  = Test::MockFile->dir('/mtime_test3');
+    my $dir  = Test::MockFile->new_dir('/mtime_test3');
     my $file = Test::MockFile->file( '/mtime_test3/doomed.txt', 'bye' );
 
     wait_for_time_change();
@@ -56,11 +60,8 @@ subtest 'unlink updates parent dir mtime' => sub {
 };
 
 subtest 'mkdir updates parent dir mtime' => sub {
-    my $parent = Test::MockFile->dir('/mtime_test4');
+    my $parent = Test::MockFile->new_dir('/mtime_test4');
     my $child  = Test::MockFile->dir('/mtime_test4/subdir');
-
-    # child starts as non-existent dir mock
-    $child->unlink;    # ensure it doesn't exist
 
     wait_for_time_change();
 
@@ -75,8 +76,8 @@ subtest 'mkdir updates parent dir mtime' => sub {
 };
 
 subtest 'rmdir updates parent dir mtime' => sub {
-    my $parent = Test::MockFile->dir('/mtime_test5');
-    my $child  = Test::MockFile->dir('/mtime_test5/subdir');
+    my $parent = Test::MockFile->new_dir('/mtime_test5');
+    my $child  = Test::MockFile->new_dir('/mtime_test5/subdir');
 
     wait_for_time_change();
 
@@ -91,7 +92,7 @@ subtest 'rmdir updates parent dir mtime' => sub {
 };
 
 subtest 'open for write creates file and updates parent dir mtime' => sub {
-    my $dir  = Test::MockFile->dir('/mtime_test6');
+    my $dir  = Test::MockFile->new_dir('/mtime_test6');
     my $mock = Test::MockFile->file('/mtime_test6/new.txt');    # undef contents
 
     wait_for_time_change();
@@ -110,7 +111,7 @@ subtest 'open for write creates file and updates parent dir mtime' => sub {
 };
 
 subtest 'open existing file for write does NOT update parent dir mtime' => sub {
-    my $dir  = Test::MockFile->dir('/mtime_test7');
+    my $dir  = Test::MockFile->new_dir('/mtime_test7');
     my $mock = Test::MockFile->file( '/mtime_test7/exists.txt', 'old content' );
 
     wait_for_time_change();
@@ -129,7 +130,7 @@ subtest 'open existing file for write does NOT update parent dir mtime' => sub {
 };
 
 subtest 'symlink creation updates parent dir mtime' => sub {
-    my $dir     = Test::MockFile->dir('/mtime_test8');
+    my $dir     = Test::MockFile->new_dir('/mtime_test8');
     my $target  = Test::MockFile->file( '/mtime_test8/target.txt', 'content' );
 
     wait_for_time_change();
@@ -145,7 +146,7 @@ subtest 'symlink creation updates parent dir mtime' => sub {
 };
 
 subtest 'ctime also updates alongside mtime' => sub {
-    my $dir = Test::MockFile->dir('/mtime_test9');
+    my $dir = Test::MockFile->new_dir('/mtime_test9');
     my $dir_ctime_before = ( stat '/mtime_test9' )[10];
     ok( defined $dir_ctime_before, 'directory has ctime' );
 
