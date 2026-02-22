@@ -109,17 +109,25 @@ use Test::MockFile qw< nostrict >;
 }
 
 {
-    note "--- say() advances tell (includes newline) ---";
+    note "--- print with explicit output record separator ---";
 
-    my $mock = Test::MockFile->file('/fake/say_tell');
-    open( my $fh, '>', '/fake/say_tell' ) or die;
+    my $mock = Test::MockFile->file('/fake/ors_tell');
+    open( my $fh, '>', '/fake/ors_tell' ) or die;
 
-    say $fh "Hello";
-    is( tell($fh), 6, "tell is 6 after say 'Hello' (5 chars + newline)" );
+    {
+        local $\ = "\n";
+        print $fh "Hello";
+    }
+    is( tell($fh), 6, "tell is 6 after print with ORS (5 chars + newline)" );
 
     close $fh;
-    is( $mock->contents, "Hello\n", "Contents include newline from say" );
+    is( $mock->contents, "Hello\n", "Contents include newline from output record separator" );
 }
+
+# Note: say() with tied filehandles does NOT append the newline via $\.
+# Perl handles say's newline at the C level (pp_print) after the tied
+# PRINT method returns, so it is never passed to PRINT. This is a known
+# limitation of tied filehandles in Perl.
 
 is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" );
 

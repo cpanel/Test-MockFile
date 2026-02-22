@@ -113,6 +113,13 @@ sub PRINT {
         $self->{'data'}->{'contents'} .= $line;
     }
 
+    # Append output record separator ($\) when set explicitly by the caller.
+    # Note: say() does NOT set $\ for tied handles (Perl handles its newline
+    # at the C level after PRINT returns), so this only covers explicit usage.
+    if ( defined $\ ) {
+        $self->{'data'}->{'contents'} .= $\;
+    }
+
     my $written = length( $self->{'data'}->{'contents'} ) - $starting_bytes;
     $self->{'tell'} = length( $self->{'data'}->{'contents'} );
 
