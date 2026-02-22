@@ -98,6 +98,9 @@ throw a die when files are accessed during your tests!
     # trace mode - logs unmocked file accesses to STDERR
     use Test::MockFile qw< :trace >;
 
+    # warn mode (like strict, but warns instead of dying)
+    use Test::MockFile qw< warnstrict >;
+
     # Load with one or more plugins
 
     use Test::MockFile plugin => 'FileTemp';
@@ -204,6 +207,14 @@ compatibility:
 
     use Test::MockFile qw< trace nostrict >;
 
+If we want to be warned about unmocked file access without dying:
+
+    use Test::MockFile qw< warnstrict >;
+
+This is useful when migrating an existing test suite to strict mode.
+It allows you to discover all unmocked file accesses at once,
+rather than fixing them one at a time.
+
 Relative paths are not supported:
 
     use Test::MockFile;
@@ -218,6 +229,7 @@ Relative paths are not supported:
 use constant STRICT_MODE_DISABLED => 1;
 use constant STRICT_MODE_ENABLED  => 2;
 use constant STRICT_MODE_UNSET    => 4;
+use constant STRICT_MODE_WARN     => 8;
 use constant STRICT_MODE_DEFAULT  => STRICT_MODE_ENABLED | STRICT_MODE_UNSET;    # default state when unset by user
 
 our $STRICT_MODE_STATUS;
@@ -551,6 +563,18 @@ sub is_strict_mode {
     return $STRICT_MODE_STATUS & STRICT_MODE_ENABLED ? 1 : 0;
 }
 
+=head2 is_warn_mode
+
+Boolean helper to determine if warn mode is currently enabled.
+When warn mode is active, strict mode violations produce warnings
+instead of fatal errors.
+
+=cut
+
+sub is_warn_mode {
+    return ( $STRICT_MODE_STATUS & STRICT_MODE_ENABLED && $STRICT_MODE_STATUS & STRICT_MODE_WARN ) ? 1 : 0;
+}
+
 sub _strict_mode_violation {
     my ( $command, $at_under_ref ) = @_;
 
@@ -596,9 +620,20 @@ sub _strict_mode_violation {
     my $pass = _validate_strict_rules($context);
     return if $pass;
 
-    croak("Unknown strict mode violation for $command") if $file_arg == -1;
+    if ( $file_arg == -1 ) {
+        if ( $STRICT_MODE_STATUS & STRICT_MODE_WARN ) {
+            carp("Unknown strict mode violation for $command");
+            return;
+        }
+        croak("Unknown strict mode violation for $command");
+    }
 
-    confess("Use of $command to access unmocked file or directory '$filename' in strict mode at $stack[1] line $stack[2]");
+    my $msg = "Use of $command to access unmocked file or directory '$filename' in strict mode at $stack[1] line $stack[2]";
+    if ( $STRICT_MODE_STATUS & STRICT_MODE_WARN ) {
+        carp($msg);
+        return;
+    }
+    confess($msg);
 }
 
 sub _validate_strict_rules {
@@ -645,7 +680,16 @@ my $TRACE_ENABLED;
 sub import {
     my ( $class, @args ) = @_;
 
-    my $strict_mode = ( grep { $_ eq 'nostrict' || $_ eq ':nostrict' } @args ) ? STRICT_MODE_DISABLED : STRICT_MODE_ENABLED;
+    my $strict_mode;
+    if ( grep { $_ eq 'nostrict' || $_ eq ':nostrict' } @args ) {
+        $strict_mode = STRICT_MODE_DISABLED;
+    }
+    elsif ( grep { $_ eq 'warnstrict' || $_ eq ':warnstrict' } @args ) {
+        $strict_mode = STRICT_MODE_ENABLED | STRICT_MODE_WARN;
+    }
+    else {
+        $strict_mode = STRICT_MODE_ENABLED;
+    }
 
     if (
         defined $STRICT_MODE_STATUS
