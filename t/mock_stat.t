@@ -9,7 +9,7 @@ use Test2::Plugin::NoWarnings;
 
 use Test::MockFile qw< nostrict >;
 use Overload::FileCheck qw/:check/;
-use Errno qw/ELOOP/;
+use Errno qw/ELOOP ENOENT/;
 
 use Cwd ();
 
@@ -97,11 +97,12 @@ my $basic_stat_return = array {
 };
 
 is( Test::MockFile::_mock_stat( 'lstat', '/foo/bar' ), $basic_stat_return, "/foo/bar mock stat" );
-is( Test::MockFile::_mock_stat( 'stat',  '/aaa' ),     [],                 "/aaa mock stat when looped." );
+is( Test::MockFile::_mock_stat( 'stat',  '/aaa' ),     0,                  "/aaa mock stat when looped." );
 is( $! + 0, ELOOP, "Throws an ELOOP error" );
 
 push @mocked_files, Test::MockFile->file('/foo/baz');    # Missing file but mocked.
-is( Test::MockFile::_mock_stat( 'lstat', '/foo/baz' ), [], "/foo/baz mock stat when missing." );
+is( Test::MockFile::_mock_stat( 'lstat', '/foo/baz' ), 0, "/foo/baz mock stat when missing." );
+is( $! + 0, ENOENT, "Throws an ENOENT error for missing file" );
 
 my $symlink_lstat_return = array {
     item 0;
@@ -120,7 +121,7 @@ my $symlink_lstat_return = array {
 };
 
 is( Test::MockFile::_mock_stat( 'lstat', '/broken_link' ), $symlink_lstat_return, "lstat on /broken_link returns the stat on the symlink itself." );
-is( Test::MockFile::_mock_stat( 'stat',  '/broken_link' ), [],                    "stat on /broken_link is an empty array since what it points to doesn't exist." );
+is( Test::MockFile::_mock_stat( 'stat',  '/broken_link' ), 0,                     "stat on /broken_link returns 0 since what it points to doesn't exist." );
 
 {
     my $exe = q[/tmp/custom.exe];
