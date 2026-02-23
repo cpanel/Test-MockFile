@@ -56,6 +56,9 @@ our $VERSION = '0.037';
 
 our %files_being_mocked;
 
+# Original Cwd functions saved before override
+my $_original_cwd_abs_path;
+
 # From http://man7.org/linux/man-pages/man7/inode.7.html
 use constant S_IFMT    => 0170000;    # bit mask for the file type bit field
 use constant S_IFPERMS => 07777;      # bit mask for file perms.
@@ -1185,6 +1188,74 @@ sub _abs_path_to_file {
 
     return $cwd if $path eq '.';
     return Cwd::getcwd() . "/$path";
+}
+
+# Override for Cwd::abs_path / Cwd::realpath that resolves mocked symlinks.
+# When a path (or any component of it) involves a mocked symlink, we resolve
+# the symlinks ourselves. Otherwise, we delegate to the original implementation.
+
+sub __cwd_abs_path {
+    my ($path) = @_;
+    $path = '.' unless defined $path && length $path;
+
+    # Make absolute without collapsing .. (symlink-aware resolution does that)
+    if ( $path !~ m{^/} ) {
+        $path = Cwd::getcwd() . "/$path";
+    }
+
+    my @remaining = grep { $_ ne '' && $_ ne '.' } split( m{/}, $path );
+    my $resolved      = '';
+    my $depth         = 0;
+    my $involves_mock = 0;
+
+    while (@remaining) {
+        my $component = shift @remaining;
+
+        if ( $component eq '..' ) {
+            $resolved =~ s{/[^/]+$}{};
+            next;
+        }
+
+        my $candidate = "$resolved/$component";
+        my $mock_obj  = $files_being_mocked{$candidate};
+
+        if ( $mock_obj && $mock_obj->is_link ) {
+            $involves_mock = 1;
+            $depth++;
+            if ( $depth > FOLLOW_LINK_MAX_DEPTH ) {
+                $! = ELOOP;
+                return undef;
+            }
+
+            my $target = $mock_obj->readlink;
+
+            # Broken symlink: undefined or empty target
+            return undef unless defined $target && length $target;
+
+            my @target_parts = grep { $_ ne '' && $_ ne '.' } split( m{/}, $target );
+
+            if ( $target =~ m{^/} ) {
+
+                # Absolute target: restart from root
+                $resolved = '';
+            }
+
+            # Relative target: stays at current $resolved
+            unshift @remaining, @target_parts;
+        }
+        elsif ($mock_obj) {
+            $involves_mock = 1;
+            $resolved = $candidate;
+        }
+        else {
+            $resolved = $candidate;
+        }
+    }
+
+    # If no mocked paths were involved, delegate to original
+    return $_original_cwd_abs_path->($path) unless $involves_mock;
+
+    return $resolved || '/';
 }
 
 sub DESTROY {
@@ -2581,6 +2652,16 @@ BEGIN {
     *CORE::GLOBAL::flock    = \&__flock;
     *CORE::GLOBAL::utime    = \&__utime;
     *CORE::GLOBAL::truncate = \&__truncate;
+
+    # Override Cwd functions to resolve mocked symlinks (GH #139)
+    $_original_cwd_abs_path = \&Cwd::abs_path;
+    {
+        no warnings 'redefine';
+        *Cwd::abs_path      = \&__cwd_abs_path;
+        *Cwd::realpath      = \&__cwd_abs_path;
+        *Cwd::fast_abs_path = \&__cwd_abs_path;
+        *Cwd::fast_realpath = \&__cwd_abs_path;
+    }
 }
 
 =head1 CAEATS AND LIMITATIONS
