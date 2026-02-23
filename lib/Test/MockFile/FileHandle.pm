@@ -179,26 +179,19 @@ sub WRITE {
     my ( $self, $buf, $len, $offset ) = @_;
 
     unless ( $len =~ m/^-?[0-9.]+$/ ) {
-        $! = qq{Argument "$len" isn't numeric in syswrite at ??};
+        CORE::warn(qq{Argument "$len" isn't numeric in syswrite at @{[ join ' line ', (caller)[1,2] ]}.\n});
         return 0;
     }
 
     $len = int($len);    # Perl seems to do this to floats.
 
     if ( $len < 0 ) {
-        $! = qq{Negative length at ???};
-        return 0;
+        die(qq{Negative length at @{[ join ' line ', (caller)[1,2] ]}.\n});
     }
 
     my $strlen = length($buf);
     $offset //= 0;
 
-    if ( $strlen - $offset < abs($len) ) {
-        $! = q{Offset outside string at ???.};
-        return 0;
-    }
-
-    $offset //= 0;
     if ( $offset < 0 ) {
         $offset = $strlen + $offset;
     }

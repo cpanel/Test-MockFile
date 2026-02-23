@@ -37,7 +37,7 @@ use Symbol;
 
 use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
-use Errno qw/EPERM ENOENT ELOOP EEXIST EISDIR ENOTDIR EINVAL/;
+use Errno qw/EPERM ENOENT ELOOP ENOTEMPTY EEXIST EISDIR ENOTDIR EINVAL/;
 
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
@@ -2581,7 +2581,7 @@ sub __rmdir (_) {
     }
 
     if ( _files_in_dir($file) ) {
-        $! = 39;
+        $! = ENOTEMPTY;
         return 0;
     }
 
