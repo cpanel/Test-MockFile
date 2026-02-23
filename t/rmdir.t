@@ -7,7 +7,7 @@ use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 
-use Errno qw/ENOENT EISDIR EEXIST ENOTDIR/;
+use Errno qw/ENOENT ENOTEMPTY EISDIR EEXIST ENOTDIR/;
 use File::Temp qw/tempfile tempdir/;
 
 my $temp_dir_name = tempdir( CLEANUP => 1 );
@@ -113,7 +113,7 @@ subtest(
 
         is( $! + 0, 0, 'No errors yet' );
         ok( !rmdir('/foo'), 'rmdir failed because directory has files' );
-        is( $! + 0, 39, '$! is set to correct perror (39)' );
+        is( $! + 0, ENOTEMPTY, '$! is ENOTEMPTY' );
     }
 );
 
