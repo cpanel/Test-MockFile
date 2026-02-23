@@ -1352,6 +1352,129 @@ sub contents {
     confess('This seems to be neither a file nor a dir - what is it?');
 }
 
+=head2 read
+
+Returns the contents of a mocked file. Dies if called on a directory
+or symlink.
+
+In scalar context, returns the entire file contents as a single string.
+In list context, splits the contents into lines using C<$/> as the
+input record separator (preserving the separator in each element),
+consistent with Perl's C<readline> behavior.
+
+Returns C<undef> in scalar context (or an empty list in list context)
+if the file does not currently exist.
+
+    my $bar  = Test::MockFile->file( '/foo/bar', "line1\nline2\n" );
+    my $text = $bar->read;     # "line1\nline2\n"
+    my @lines = $bar->read;    # ( "line1\n", "line2\n" )
+
+=cut
+
+sub read {
+    my ($self) = @_;
+    $self or confess("read is a method");
+
+    $self->is_link
+      and confess("read is not supported for symlinks");
+    $self->is_dir
+      and confess("read is not supported for directories");
+
+    my $contents = $self->{'contents'};
+    return $contents unless wantarray;
+
+    return () unless defined $contents;
+
+    # If $/ is undef, slurp mode — return single element
+    return ($contents) unless defined $/;
+
+    # Split keeping the separator, like readline
+    my @lines;
+    while ( length $contents ) {
+        my $idx = index( $contents, $/ );
+        if ( $idx == -1 ) {
+            push @lines, $contents;
+            last;
+        }
+        push @lines, substr( $contents, 0, $idx + length($/) );
+        $contents = substr( $contents, $idx + length($/) );
+    }
+    return @lines;
+}
+
+=head2 write
+
+Sets the contents of a mocked file. Dies if called on a directory
+or symlink.
+
+Multiple arguments are concatenated. If the file does not currently
+exist, calling C<write> brings it into existence.
+
+Returns the mock object for chaining.
+
+    my $bar = Test::MockFile->file( '/foo/bar' );  # non-existent file
+    $bar->write("hello world");                     # now exists
+    $bar->write("line1\n", "line2\n");              # concatenated
+
+=cut
+
+sub write {
+    my ( $self, @args ) = @_;
+    $self or confess("write is a method");
+
+    $self->is_link
+      and confess("write is not supported for symlinks");
+    $self->is_dir
+      and confess("write is not supported for directories");
+
+    my $data = join '', @args;
+    $self->{'contents'} = $data;
+
+    my $now = time;
+    $self->{'mtime'} = $now;
+    $self->{'ctime'} = $now;
+
+    return $self;
+}
+
+=head2 append
+
+Appends to the contents of a mocked file. Dies if called on a
+directory or symlink.
+
+Multiple arguments are concatenated before appending. If the file does
+not currently exist, calling C<append> brings it into existence (as if
+writing to an empty file).
+
+Returns the mock object for chaining.
+
+    my $bar = Test::MockFile->file( '/foo/bar', "first\n" );
+    $bar->append("second\n");                        # "first\nsecond\n"
+    $bar->append("third\n", "fourth\n");             # concatenated
+
+=cut
+
+sub append {
+    my ( $self, @args ) = @_;
+    $self or confess("append is a method");
+
+    $self->is_link
+      and confess("append is not supported for symlinks");
+    $self->is_dir
+      and confess("append is not supported for directories");
+
+    my $data = join '', @args;
+
+    $self->{'contents'} //= '';
+    $self->{'contents'} .= $data;
+
+    my $now = time;
+    $self->{'mtime'} = $now;
+    $self->{'ctime'} = $now;
+
+    return $self;
+}
+
 =head2 filename
 
 Deprecated. Same as C<path>.
