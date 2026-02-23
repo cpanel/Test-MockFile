@@ -1038,11 +1038,11 @@ sub _mock_stat {
 
     if ( defined $file && defined BROKEN_SYMLINK && $file eq BROKEN_SYMLINK ) {
         $! = ELOOP;
-        return [];
+        return 0;
     }
     if ( defined $file && defined CIRCULAR_SYMLINK && $file eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
-        return [];
+        return 0;
     }
 
     if ( !defined $file or !length $file ) {
@@ -1059,7 +1059,7 @@ sub _mock_stat {
     # File is not present so no stats for you!
     if ( !$file_data->is_link && !defined $file_data->contents() ) {
         $! = ENOENT;
-        return [];
+        return 0;
     }
 
     # Make sure the file size is correct in the stats before returning its contents.
