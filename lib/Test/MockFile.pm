@@ -1051,7 +1051,10 @@ sub _mock_stat {
     }
 
     # File is not present so no stats for you!
-    return [] if !$file_data->is_link && !defined $file_data->contents();
+    if ( !$file_data->is_link && !defined $file_data->contents() ) {
+        $! = ENOENT;
+        return [];
+    }
 
     # Make sure the file size is correct in the stats before returning its contents.
     return [ $file_data->stat ];
