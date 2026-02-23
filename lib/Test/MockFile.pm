@@ -1036,8 +1036,14 @@ sub _mock_stat {
     # Find the path, following the symlink if required.
     my $file = _find_file_or_fh( $file_or_fh, $follow_link );
 
-    return [] if defined $file && defined BROKEN_SYMLINK   && $file eq BROKEN_SYMLINK;      # Allow an ELOOP to fall through here.
-    return [] if defined $file && defined CIRCULAR_SYMLINK && $file eq CIRCULAR_SYMLINK;    # Allow an ELOOP to fall through here.
+    if ( defined $file && defined BROKEN_SYMLINK && $file eq BROKEN_SYMLINK ) {
+        $! = ELOOP;
+        return [];
+    }
+    if ( defined $file && defined CIRCULAR_SYMLINK && $file eq CIRCULAR_SYMLINK ) {
+        $! = ELOOP;
+        return [];
+    }
 
     if ( !defined $file or !length $file ) {
         _real_file_access_hook( $type, [$file_or_fh] );
