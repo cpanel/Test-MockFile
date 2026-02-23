@@ -38,6 +38,7 @@ t/plugin-filetemp.t
 t/plugin.t
 t/pod-coverage.t
 t/pod.t
+t/read_write_helpers.t
 t/readline.t
 t/readlink.t
 t/rmdir.t
