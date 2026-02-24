@@ -273,6 +273,7 @@ sub file_arg_position_for_command {    # can also be used by user hooks
         'open'     => 2,
         'opendir'  => 1,
         'readlink' => 0,
+        'rename'   => 0,
         'rmdir'    => 0,
         'stat'     => 0,
         'sysopen'  => 1,
@@ -2588,6 +2589,77 @@ sub __rmdir (_) {
     return 1;
 }
 
+sub __rename ($$) {
+    my ( $old, $new ) = @_;
+
+    my $mock_old = _get_file_object($old);
+    my $mock_new = _get_file_object($new);
+
+    # If neither is mocked, pass through to real FS
+    if ( !$mock_old && !$mock_new ) {
+        _real_file_access_hook( 'rename', \@_ );
+        goto \&CORE::rename if _goto_is_available();
+        return CORE::rename( $old, $new );
+    }
+
+    # Can't rename between mocked and real filesystem
+    if ( !$mock_old || !$mock_new ) {
+        confess("rename: Cannot rename between mocked and real filesystem");
+    }
+
+    # Source must exist
+    if ( !$mock_old->exists ) {
+        $! = ENOENT;
+        return 0;
+    }
+
+    # Can't overwrite a directory with a non-directory
+    if ( $mock_new->exists && $mock_new->is_dir && !$mock_old->is_dir ) {
+        $! = EISDIR;
+        return 0;
+    }
+
+    # Can't overwrite a file with a directory
+    if ( $mock_old->is_dir && $mock_new->exists && !$mock_new->is_dir ) {
+        $! = ENOTDIR;
+        return 0;
+    }
+
+    # Move state from old to new
+    if ( $mock_old->is_link ) {
+        delete $mock_new->{'contents'};
+        delete $mock_new->{'has_content'};
+        $mock_new->{'readlink'} = $mock_old->{'readlink'};
+        $mock_old->{'readlink'} = undef;
+    }
+    elsif ( $mock_old->is_dir ) {
+        delete $mock_new->{'contents'};
+        delete $mock_new->{'readlink'};
+        $mock_new->{'has_content'} = $mock_old->{'has_content'};
+        $mock_old->{'has_content'} = undef;
+    }
+    else {
+        delete $mock_new->{'readlink'};
+        delete $mock_new->{'has_content'};
+        $mock_new->{'contents'} = $mock_old->{'contents'};
+        $mock_old->{'contents'} = undef;
+    }
+
+    # Copy mode and ownership
+    $mock_new->{'mode'}  = $mock_old->{'mode'};
+    $mock_new->{'uid'}   = $mock_old->{'uid'};
+    $mock_new->{'gid'}   = $mock_old->{'gid'};
+    $mock_new->{'mtime'} = $mock_old->{'mtime'};
+    $mock_new->{'atime'} = $mock_old->{'atime'};
+
+    # rename updates ctime on both source and destination
+    my $now = time;
+    $mock_new->{'ctime'} = $now;
+    $mock_old->{'ctime'} = $now;
+
+    return 1;
+}
+
 sub __chown (@) {
     my ( $uid, $gid, @files ) = @_;
 
@@ -2841,7 +2913,8 @@ BEGIN {
     *CORE::GLOBAL::readlink  = \&__readlink;
     *CORE::GLOBAL::mkdir     = \&__mkdir;
 
-    *CORE::GLOBAL::rmdir = \&__rmdir;
+    *CORE::GLOBAL::rename = \&__rename;
+    *CORE::GLOBAL::rmdir  = \&__rmdir;
     *CORE::GLOBAL::chown = \&__chown;
     *CORE::GLOBAL::chmod = \&__chmod;
     *CORE::GLOBAL::flock    = \&__flock;
