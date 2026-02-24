@@ -272,6 +272,7 @@ sub file_arg_position_for_command {    # can also be used by user hooks
         'rmdir'    => 0,
         'stat'     => 0,
         'sysopen'  => 1,
+        'truncate' => 0,
         'unlink'   => 0,
         'utime'    => 2,
         'readdir'  => 0,
@@ -2446,6 +2447,7 @@ sub __flock (*$) {
     return CORE::flock( $fh, $operation );
 }
 
+<<<<<<< HEAD
 sub __utime (@) {
     my ( $atime, $mtime, @files ) = @_;
 
@@ -2490,6 +2492,46 @@ sub __utime (@) {
     return $num_changed;
 }
 
+sub __truncate ($$) {
+    my ( $file_or_fh, $length ) = @_;
+
+    my $mock = _get_file_object($file_or_fh);
+
+    if ( !$mock ) {
+        _real_file_access_hook( 'truncate', \@_ );
+        return CORE::truncate( $file_or_fh, $length );
+    }
+
+    if ( $mock->is_dir() ) {
+        $! = EISDIR;
+        return 0;
+    }
+
+    if ( !$mock->exists() ) {
+        $! = ENOENT;
+        return 0;
+    }
+
+    if ( $length < 0 ) {
+        $! = EINVAL;
+        return 0;
+    }
+
+    my $contents = $mock->contents() // '';
+    my $cur_len  = length $contents;
+
+    if ( $length < $cur_len ) {
+        $contents = substr( $contents, 0, $length );
+    }
+    elsif ( $length > $cur_len ) {
+        $contents .= "\0" x ( $length - $cur_len );
+    }
+
+    $mock->contents($contents);
+
+    return 1;
+}
+
 BEGIN {
     *CORE::GLOBAL::glob = !$^V || $^V lt 5.18.0
       ? sub {
@@ -2513,8 +2555,9 @@ BEGIN {
     *CORE::GLOBAL::rmdir = \&__rmdir;
     *CORE::GLOBAL::chown = \&__chown;
     *CORE::GLOBAL::chmod = \&__chmod;
-    *CORE::GLOBAL::flock = \&__flock;
-    *CORE::GLOBAL::utime = \&__utime;
+    *CORE::GLOBAL::flock    = \&__flock;
+    *CORE::GLOBAL::utime    = \&__utime;
+    *CORE::GLOBAL::truncate = \&__truncate;
 }
 
 =head1 CAEATS AND LIMITATIONS

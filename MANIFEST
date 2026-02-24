@@ -51,5 +51,6 @@ t/sysopen.t
 t/sysopen_strict.t
 t/Test-MockFile_file.t
 t/touch.t
+t/truncate.t
 t/unlink.t
 t/writeline.t
