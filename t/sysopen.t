@@ -240,8 +240,8 @@ note "O_NOFOLLOW on a symlink returns ELOOP";
 {
     use Errno qw/ELOOP/;
 
-    my $mock = Test::MockFile->symlink( '/nofollow_link', '/some_target' );
-    my $target = Test::MockFile->file( '/some_target', "data" );
+    my $target = Test::MockFile->file( '/nofollow_target', "data" );
+    my $link   = Test::MockFile->symlink( '/nofollow_target', '/nofollow_link' );
 
     $! = 0;
     my $ret = sysopen( my $fh, '/nofollow_link', O_RDONLY | O_NOFOLLOW );

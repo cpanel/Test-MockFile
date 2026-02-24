@@ -2063,8 +2063,13 @@ sub __open (*;$@) {
     my $abs_path = _find_file_or_fh( $file, 1 );    # Follow the link.
     confess() if !$abs_path && $mode ne '|-' && $mode ne '-|';
 
-    # Broken or circular symlinks should fail with ELOOP, not confess.
-    if ( $abs_path eq BROKEN_SYMLINK || $abs_path eq CIRCULAR_SYMLINK ) {
+    # Broken symlinks → ENOENT (target doesn't exist).
+    # Circular symlinks → ELOOP (too many levels of symlinks).
+    if ( $abs_path eq BROKEN_SYMLINK ) {
+        $! = ENOENT;
+        return;
+    }
+    if ( $abs_path eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
         return;
     }
