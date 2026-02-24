@@ -2062,7 +2062,13 @@ sub __open (*;$@) {
 
     my $abs_path = _find_file_or_fh( $file, 1 );    # Follow the link.
     confess() if !$abs_path && $mode ne '|-' && $mode ne '-|';
-    confess() if $abs_path eq BROKEN_SYMLINK;
+
+    # Broken or circular symlinks should fail with ELOOP, not confess.
+    if ( $abs_path eq BROKEN_SYMLINK || $abs_path eq CIRCULAR_SYMLINK ) {
+        $! = ELOOP;
+        return;
+    }
+
     my $mock_file = _get_file_object($abs_path);
 
     # For now we're going to just strip off the binmode and hope for the best.
@@ -2168,7 +2174,7 @@ sub __sysopen (*$$;$) {
 
     # O_NOFOLLOW
     if ( ( $sysopen_mode & O_NOFOLLOW ) == O_NOFOLLOW && $mock_file->is_link ) {
-        $! = 40;
+        $! = ELOOP;
         return undef;
     }
 
