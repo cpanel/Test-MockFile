@@ -23,7 +23,7 @@ subtest(
         ok( -d '/foo',     'Directory /foo exists' );
         ok( -f '/foo/bar', 'File /foo/bar exists' );
 
-        my $dir_def_perm = sprintf '%04o', 0777 - umask;
+        my $dir_def_perm = sprintf '%04o', 0777 & ~umask;
         is(
             sprintf( '%04o', ( stat '/foo' )[2] & 07777 ),
             $dir_def_perm,
@@ -33,10 +33,10 @@ subtest(
         # These variables are for debugging test failures
         my $umask         = sprintf '%04o', umask;
         my $perms_before  = sprintf '%04o', Test::MockFile::S_IFPERMS() & 0666;
-        my $perms_after_1 = sprintf '%04o', ( Test::MockFile::S_IFPERMS() & 0666 ) ^ umask;
-        my $perms_after_2 = sprintf '%04o', ( ( Test::MockFile::S_IFPERMS() & 0666 ) ^ umask ) | Test::MockFile::S_IFREG();
+        my $perms_after_1 = sprintf '%04o', ( Test::MockFile::S_IFPERMS() & 0666 ) & ~umask;
+        my $perms_after_2 = sprintf '%04o', ( ( Test::MockFile::S_IFPERMS() & 0666 ) & ~umask ) | Test::MockFile::S_IFREG();
 
-        my $file_def_perm = sprintf '%04o', 0666 - umask;
+        my $file_def_perm = sprintf '%04o', 0666 & ~umask;
         is(
             sprintf( '%04o', ( stat '/foo/bar' )[2] & 07777 ),
             $file_def_perm,
@@ -178,6 +178,58 @@ subtest(
 
         ok( rmdir('/foo'), 'Successfully deleted real directory' );
         ok( !-d '/foo',    'Directory /foo no longer exist' );
+    }
+);
+
+subtest(
+    'File creation with non-default mode applies umask correctly' => sub {
+        # With umask 0022, creating a file with mode 0644 should stay 0644
+        # (bits already clear). With the old XOR bug, 0644 ^ 0022 = 0666.
+        my $file = Test::MockFile->file( '/umask_test/file', 'data', { mode => 0644 } );
+
+        my $expected = sprintf '%04o', 0644 & ~umask;
+        is(
+            sprintf( '%04o', ( stat '/umask_test/file' )[2] & 07777 ),
+            $expected,
+            "File with explicit mode 0644 gets $expected after umask",
+        );
+    }
+);
+
+subtest(
+    'chmod method ignores umask' => sub {
+        my $file = Test::MockFile->file( '/chmod_umask/file', 'content' );
+
+        # Real chmod(2) ignores umask — setting 0755 should give exactly 0755
+        $file->chmod(0755);
+        is(
+            sprintf( '%04o', ( stat '/chmod_umask/file' )[2] & 07777 ),
+            '0755',
+            'chmod(0755) gives exactly 0755 (umask not applied)',
+        );
+
+        $file->chmod(0644);
+        is(
+            sprintf( '%04o', ( stat '/chmod_umask/file' )[2] & 07777 ),
+            '0644',
+            'chmod(0644) gives exactly 0644 (umask not applied)',
+        );
+    }
+);
+
+subtest(
+    'mkdir with non-default mode applies umask correctly' => sub {
+        # mkdir(path, 0700) with umask 0022 should give 0700 (bits already clear)
+        # With the old XOR bug, 0700 ^ 0022 = 0722
+        my $dir = Test::MockFile->dir('/umask_mkdir');
+
+        my $expected = sprintf '%04o', 0700 & ~umask;
+        ok( mkdir( '/umask_mkdir', 0700 ), 'mkdir with mode 0700' );
+        is(
+            sprintf( '%04o', ( stat '/umask_mkdir' )[2] & 07777 ),
+            $expected,
+            "mkdir(0700) gives $expected after umask",
+        );
     }
 );
 

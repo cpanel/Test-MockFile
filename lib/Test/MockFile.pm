@@ -667,7 +667,7 @@ sub file {
     }
 
     my $perms = S_IFPERMS & ( defined $stats{'mode'} ? int( $stats{'mode'} ) : 0666 );
-    $stats{'mode'} = ( $perms ^ umask ) | S_IFREG;
+    $stats{'mode'} = ( $perms & ~umask ) | S_IFREG;
 
     # Check if directory for this file is an object we're mocking
     # If so, mark it now as having content
@@ -847,7 +847,7 @@ sub dir {
       and confess("You cannot set stats for nonexistent dir '$path'");
 
     my $perms = S_IFPERMS & 0777;
-    my %stats = ( 'mode' => ( $perms ^ umask ) | S_IFDIR );
+    my %stats = ( 'mode' => ( $perms & ~umask ) | S_IFDIR );
 
     # TODO: Add stat information
 
@@ -1596,7 +1596,7 @@ should be the octal C<0755> form, not the alphabetic C<"755"> form
 sub chmod {
     my ( $self, $mode ) = @_;
 
-    $mode = ( int($mode) & S_IFPERMS ) ^ umask;
+    $mode = int($mode) & S_IFPERMS;
 
     $self->{'mode'} = ( $self->{'mode'} & S_IFMT ) + $mode;
 
@@ -2336,7 +2336,7 @@ sub __mkdir (_;$) {
     }
 
     # If the mock was a symlink or a file, we've just made it a dir.
-    $mock->{'mode'} = ( $perms ^ umask ) | S_IFDIR;
+    $mock->{'mode'} = ( $perms & ~umask ) | S_IFDIR;
     delete $mock->{'readlink'};
 
     # This should now start returning content
