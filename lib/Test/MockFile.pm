@@ -1144,7 +1144,7 @@ sub _abs_path_to_file {
         $match = 1 if $path =~ s{//+}{/}xmsg;                # cleanup multiple slashes
         $match = 1 if $path =~ s{/\.$}{/};
         $match = 1 if $path =~ s{(?:[^/]+)/\.\.(/|$)}{$1};
-        $match = 1 if $path =~ s{/$}{};
+        $match = 1 if $path =~ s{(?<=.)\/$}{};
     }
 
     return q[/] if $path eq q[/..];

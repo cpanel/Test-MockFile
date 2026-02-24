@@ -33,6 +33,9 @@ my @abs_path = (
     [ '/../../..'                    => '/' ],
     [ '/one/two/three/four/../../..' => '/one' ],
     [ '/a.b.c.d'                     => '/a.b.c.d' ],
+    [ '/'                            => '/' ],
+    [ '/there/..'                    => '/' ],
+    [ '/a/b/../../c'                 => '/c' ],
 );
 foreach my $t (@abs_path) {
     my ( $path, $normalized_path ) = @$t;
@@ -143,6 +146,24 @@ is( Test::MockFile::_mock_stat( 'stat',  '/broken_link' ), [],                  
     mkdir $dir->path();
     ok( -d ( $dir->path() ),       'Directory /quux exists' );
     ok( -d ( $dir->path() . '/' ), 'Directory /quux/ also exists' );
+}
+
+{
+    # Paths with /. and /.. should resolve correctly through _mock_stat
+    my $dir = Test::MockFile->dir('/parent');
+    mkdir '/parent';
+    ok( -d '/parent',    'Directory /parent exists' );
+    ok( -d '/parent/.',  'Directory /parent/. resolves to /parent' );
+
+    my $child = Test::MockFile->dir('/parent/child');
+    mkdir '/parent/child';
+    ok( -d '/parent/child',    'Directory /parent/child exists' );
+    ok( -d '/parent/child/.',  'Directory /parent/child/. resolves to /parent/child' );
+
+    # /parent/child/.. should resolve to /parent
+    is( Test::MockFile::_mock_stat( 'stat', '/parent/child/..' ),
+        Test::MockFile::_mock_stat( 'stat', '/parent' ),
+        '_mock_stat resolves /parent/child/.. to /parent' );
 }
 
 done_testing();
