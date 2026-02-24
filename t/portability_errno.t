@@ -52,28 +52,32 @@ subtest "syswrite with non-numeric length warns" => sub {
     close $fh;
 };
 
-subtest "syswrite with negative length dies" => sub {
+subtest "syswrite with negative length warns" => sub {
     my $mock = Test::MockFile->file('/tmp/write_test2');
     sysopen( my $fh, '/tmp/write_test2', O_WRONLY | O_CREAT | O_TRUNC ) or die;
 
-    ok(
-        dies { syswrite( $fh, "hello", -1 ) },
-        "syswrite with negative length dies"
-    );
-    like( $@, qr/Negative length/, "error message mentions negative length" );
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+
+    my $ret = syswrite( $fh, "hello", -1 );
+    is( $ret, 0, "syswrite with negative length returns 0" );
+    ok( scalar @warnings >= 1, "got a warning" );
+    like( $warnings[0], qr/Negative length/, "warning mentions negative length" ) if @warnings;
 
     close $fh;
 };
 
-subtest "syswrite with offset outside string dies" => sub {
+subtest "syswrite with offset outside string warns" => sub {
     my $mock = Test::MockFile->file('/tmp/write_test3');
     sysopen( my $fh, '/tmp/write_test3', O_WRONLY | O_CREAT | O_TRUNC ) or die;
 
-    ok(
-        dies { syswrite( $fh, "hello", 2, 100 ) },
-        "syswrite with offset beyond string dies"
-    );
-    like( $@, qr/Offset outside string/, "error message mentions offset" );
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+
+    my $ret = syswrite( $fh, "hello", 2, 100 );
+    is( $ret, 0, "syswrite with offset beyond string returns 0" );
+    ok( scalar @warnings >= 1, "got a warning" );
+    like( $warnings[0], qr/Offset outside string/, "warning mentions offset" ) if @warnings;
 
     close $fh;
 };
@@ -89,15 +93,17 @@ subtest "syswrite with valid negative offset works" => sub {
     close $fh;
 };
 
-subtest "syswrite with too-negative offset dies" => sub {
+subtest "syswrite with too-negative offset warns" => sub {
     my $mock = Test::MockFile->file('/tmp/write_test5');
     sysopen( my $fh, '/tmp/write_test5', O_WRONLY | O_CREAT | O_TRUNC ) or die;
 
-    ok(
-        dies { syswrite( $fh, "hello", 2, -10 ) },
-        "syswrite with offset before start of string dies"
-    );
-    like( $@, qr/Offset outside string/, "error message mentions offset" );
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+
+    my $ret = syswrite( $fh, "hello", 2, -10 );
+    is( $ret, 0, "syswrite with offset before start of string returns 0" );
+    ok( scalar @warnings >= 1, "got a warning" );
+    like( $warnings[0], qr/Offset outside string/, "warning mentions offset" ) if @warnings;
 
     close $fh;
 };
