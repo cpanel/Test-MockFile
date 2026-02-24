@@ -36,7 +36,7 @@ use Symbol;
 
 use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
-use Errno qw/EPERM ENOENT ELOOP EEXIST EISDIR ENOTDIR EINVAL/;
+use Errno qw/EPERM ENOENT ELOOP EEXIST EISDIR ENOTDIR EINVAL EXDEV ENOTEMPTY/;
 
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
@@ -269,6 +269,7 @@ sub file_arg_position_for_command {    # can also be used by user hooks
         'open'     => 2,
         'opendir'  => 1,
         'readlink' => 0,
+        'rename'   => 0,
         'rmdir'    => 0,
         'stat'     => 0,
         'sysopen'  => 1,
@@ -2297,6 +2298,80 @@ sub __rmdir (_) {
     return 1;
 }
 
+sub __rename ($$) {
+    my ( $oldname, $newname ) = @_;
+
+    # rename() does not follow symlinks — resolve paths without following
+    my $old_path = _abs_path_to_file($oldname);
+    my $new_path = _abs_path_to_file($newname);
+
+    my $old_mock = defined $old_path ? $files_being_mocked{$old_path} : undef;
+    my $new_mock = defined $new_path ? $files_being_mocked{$new_path} : undef;
+
+    # Both unmocked — pass through to CORE::rename
+    if ( !$old_mock && !$new_mock ) {
+        _real_file_access_hook( 'rename', \@_ );
+        goto \&CORE::rename if _goto_is_available();
+        return CORE::rename( $oldname, $newname );
+    }
+
+    # Source is real but destination is mocked — can't cross boundary
+    if ( !$old_mock && $new_mock ) {
+        $! = EXDEV;
+        return 0;
+    }
+
+    # From here, source IS mocked
+
+    # Source doesn't exist
+    if ( !$old_mock->exists ) {
+        $! = ENOENT;
+        return 0;
+    }
+
+    # Same path — no-op success (matches real rename behavior)
+    if ( defined $old_path && defined $new_path && $old_path eq $new_path ) {
+        return 1;
+    }
+
+    # Destination exists — check compatibility
+    if ( $new_mock && $new_mock->exists ) {
+
+        # Can't rename a non-directory over a directory
+        if ( !$old_mock->is_dir && $new_mock->is_dir ) {
+            $! = EISDIR;
+            return 0;
+        }
+
+        # Can't rename a directory over a non-directory
+        if ( $old_mock->is_dir && !$new_mock->is_dir ) {
+            $! = ENOTDIR;
+            return 0;
+        }
+
+        # Can't rename over a non-empty directory
+        if ( $new_mock->is_dir && _files_in_dir($new_path) ) {
+            $! = ENOTEMPTY;
+            return 0;
+        }
+    }
+
+    # Detach any destination mock (even non-existent placeholders) so its
+    # DESTROY won't confess about a different object mocking the same path.
+    if ($new_mock) {
+        $new_mock->{'path'} = undef;
+        delete $files_being_mocked{$new_path};
+    }
+
+    # Re-register the mock under the new path
+    delete $files_being_mocked{$old_path};
+    $old_mock->{'path'} = $new_path;
+    $files_being_mocked{$new_path} = $old_mock;
+    Scalar::Util::weaken( $files_being_mocked{$new_path} );
+
+    return 1;
+}
+
 sub __chown (@) {
     my ( $uid, $gid, @files ) = @_;
 
@@ -2449,9 +2524,10 @@ BEGIN {
     *CORE::GLOBAL::readlink  = \&__readlink;
     *CORE::GLOBAL::mkdir     = \&__mkdir;
 
-    *CORE::GLOBAL::rmdir = \&__rmdir;
-    *CORE::GLOBAL::chown = \&__chown;
-    *CORE::GLOBAL::chmod = \&__chmod;
+    *CORE::GLOBAL::rename = \&__rename;
+    *CORE::GLOBAL::rmdir  = \&__rmdir;
+    *CORE::GLOBAL::chown  = \&__chown;
+    *CORE::GLOBAL::chmod  = \&__chmod;
 }
 
 =head1 CAEATS AND LIMITATIONS

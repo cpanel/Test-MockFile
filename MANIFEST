@@ -39,6 +39,7 @@ t/pod-coverage.t
 t/pod.t
 t/readline.t
 t/readlink.t
+t/rename.t
 t/rmdir.t
 t/runtime-bareword-filehandles.t
 t/stat-x.t
