@@ -69,11 +69,12 @@ sub TIEHANDLE {
     length $file or die("No file name passed!");
 
     my $self = bless {
-        'file'  => $file,
-        'data'  => $files_being_mocked->{$file},
-        'tell'  => 0,
-        'read'  => $mode =~ m/r/ ? 1 : 0,
-        'write' => $mode =~ m/w/ ? 1 : 0,
+        'file'   => $file,
+        'data'   => $files_being_mocked->{$file},
+        'tell'   => 0,
+        'read'   => $mode =~ m/r/ ? 1 : 0,
+        'write'  => $mode =~ m/w/ ? 1 : 0,
+        'append' => $mode =~ m/a/ ? 1 : 0,
     }, $class;
 
     # This ref count can't hold the object from getting released.
@@ -88,10 +89,13 @@ This method will be triggered every time the tied handle is printed to
 with the print() or say() functions. Beyond its self reference it also
 expects the list that was passed to the print function.
 
-We append to
-C<$Test::MockFile::files_being_mocked{$file}->{'contents'}> with what
-was sent. If the file handle wasn't opened in a read mode, then this
-call with throw EBADF via $!
+In append mode (C<< >> >> or C<< +>> >>), output is always written at
+the end of the file contents. In other write modes, output is written
+at the current tell position, overwriting existing bytes. The tell
+position advances by the number of bytes written.
+
+If the file handle wasn't opened in a write mode, this call will set
+C<$!> to EBADF and return.
 
 =cut
 
@@ -107,23 +111,38 @@ sub PRINT {
         return;
     }
 
-    my $starting_bytes = length $self->{'data'}->{'contents'};
-    foreach my $line (@list) {
-        next if !defined $line;
-        $self->{'data'}->{'contents'} .= $line;
+    # Build the output string: join with $, (output field separator) if set.
+    my $output = '';
+    for my $i ( 0 .. $#list ) {
+        $output .= $list[$i] if defined $list[$i];
+        $output .= $, if defined $, && $i < $#list;
     }
 
     # Append output record separator ($\) when set explicitly by the caller.
     # Note: say() does NOT set $\ for tied handles (Perl handles its newline
     # at the C level after PRINT returns), so this only covers explicit usage.
-    if ( defined $\ ) {
-        $self->{'data'}->{'contents'} .= $\;
+    $output .= $\ if defined $\;
+
+    my $tell     = $self->{'tell'};
+    my $contents = \$self->{'data'}->{'contents'};
+
+    if ( $self->{'append'} ) {
+        # Append mode (>> / +>>): always write at end regardless of tell.
+        $$contents .= $output;
+        $self->{'tell'} = length $$contents;
+    }
+    else {
+        # Overwrite at tell position (>, +<, +>).
+        # Pad with null bytes if tell is past end of current contents.
+        my $content_len = length $$contents;
+        if ( $tell > $content_len ) {
+            $$contents .= "\0" x ( $tell - $content_len );
+        }
+        substr( $$contents, $tell, length($output), $output );
+        $self->{'tell'} = $tell + length($output);
     }
 
-    my $written = length( $self->{'data'}->{'contents'} ) - $starting_bytes;
-    $self->{'tell'} = length( $self->{'data'}->{'contents'} );
-
-    return $written;
+    return length($output);
 }
 
 =head2 PRINTF

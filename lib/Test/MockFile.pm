@@ -1873,6 +1873,7 @@ sub __open (*;$@) {
     my $rw = '';
     $rw .= 'r' if grep { $_ eq $mode } qw/+< +> +>> </;
     $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
+    $rw .= 'a' if grep { $_ eq $mode } qw/>> +>>/;
 
     my $filefh = IO::File->new;
     tie *{$filefh}, 'Test::MockFile::FileHandle', $abs_path, $rw;
@@ -1962,6 +1963,8 @@ sub __sysopen (*$$;$) {
       : $rd_wr_mode == O_WRONLY ? 'w'
       : $rd_wr_mode == O_RDWR   ? 'rw'
       :                           confess("Unexpected sysopen read/write mode ($rd_wr_mode)");    # O_WRONLY| O_RDWR mode makes no sense and we should die.
+
+    $rw .= 'a' if $sysopen_mode & O_APPEND;
 
     # If contents is undef, we act like the file isn't there.
     if ( !defined $mock_file->{'contents'} && $rd_wr_mode == O_RDONLY ) {
