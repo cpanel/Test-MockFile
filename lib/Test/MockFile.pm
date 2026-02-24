@@ -1164,19 +1164,7 @@ sub _abs_path_to_file {
 
     return unless defined $path;
 
-    my $match = 1;
-    while ($match) {
-        $match = 0;
-        $match = 1 if $path =~ s{//+}{/}xmsg;                # cleanup multiple slashes
-        $match = 1 if $path =~ s{/\.$}{/};
-        $match = 1 if $path =~ s{(?:[^/]+)/\.\.(/|$)}{$1};
-        $match = 1 if $path =~ s{/$}{};
-    }
-
-    return q[/] if $path eq q[/..];
-
-    return $path if $path =~ m{^/}xms;
-
+    # Tilde expansion must happen before making the path absolute
     # ~
     # ~/...
     # ~sawyer
@@ -1201,13 +1189,25 @@ sub _abs_path_to_file {
           or die;
 
         $path =~ s{\Q$req_homedir\E}{$pw_homedir};
-        return $path;
     }
 
-    my $cwd = Cwd::getcwd();
+    # Make path absolute if relative
+    if ( $path !~ m{^/}xms ) {
+        $path = Cwd::getcwd() . "/$path";
+    }
 
-    return $cwd if $path eq '.';
-    return Cwd::getcwd() . "/$path";
+    # Resolve path components: remove ".", resolve "..", collapse slashes
+    my @resolved;
+    for my $part ( split m{/}, $path ) {
+        next if $part eq '' || $part eq '.';
+        if ( $part eq '..' ) {
+            pop @resolved;
+            next;
+        }
+        push @resolved, $part;
+    }
+
+    return '/' . join( '/', @resolved );
 }
 
 # Override for Cwd::abs_path / Cwd::realpath that resolves mocked symlinks.
