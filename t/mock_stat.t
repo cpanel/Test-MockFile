@@ -93,7 +93,7 @@ my $basic_stat_return = array {
     item match qr/^[0-9]{3,}$/;
     item match qr/^[0-9]{3,}$/;
     item 4096;
-    item 1;
+    item 0;
 };
 
 is( Test::MockFile::_mock_stat( 'lstat', '/foo/bar' ), $basic_stat_return, "/foo/bar mock stat" );
