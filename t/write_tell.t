@@ -156,7 +156,7 @@ use Test::MockFile qw< nostrict >;
     print $fh "XY";
 
     close $fh;
-    is( $mock->contents, "ABCXYEGH", "Overwrite at position 3 replaces 2 bytes" );
+    is( $mock->contents, "ABCXYFGH", "Overwrite at position 3 replaces 2 bytes" );
 }
 
 {
