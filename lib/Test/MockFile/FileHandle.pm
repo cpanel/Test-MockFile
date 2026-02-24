@@ -186,7 +186,8 @@ sub WRITE {
     $len = int($len);    # Perl seems to do this to floats.
 
     if ( $len < 0 ) {
-        die(qq{Negative length at @{[ join ' line ', (caller)[1,2] ]}.\n});
+        CORE::warn(qq{Negative length at @{[ join ' line ', (caller)[1,2] ]}.\n});
+        return 0;
     }
 
     my $strlen = length($buf);
