@@ -1969,6 +1969,110 @@ sub _goto_is_available {
     return 0;    # 5.
 }
 
+################
+# IO::File     #
+################
+
+# IO::File::open() uses CORE::open internally, which bypasses CORE::GLOBAL::open.
+# This means IO::File->new($mocked_file) would NOT use the mock.
+# Fix: override IO::File::open to check for mocked files first.
+
+my $_orig_io_file_open;
+
+sub _io_file_mock_open {
+    my ( $fh, $abs_path, $mode ) = @_;
+    my $mock_file = _get_file_object($abs_path);
+
+    # If contents is undef and reading, file doesn't exist
+    if ( !defined $mock_file->contents() && grep { $mode eq $_ } qw/< +</ ) {
+        $! = ENOENT;
+        return;
+    }
+
+    my $rw = '';
+    $rw .= 'r' if grep { $_ eq $mode } qw/+< +> +>> </;
+    $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
+
+    # Tie the existing IO::File glob directly (don't create a new one)
+    tie *{$fh}, 'Test::MockFile::FileHandle', $abs_path, $rw;
+
+    # Track the handle
+    $mock_file->{'fh'} = $fh;
+    Scalar::Util::weaken( $mock_file->{'fh'} ) if ref $fh;
+
+    # Handle append/truncate modes
+    if ( $mode eq '>>' or $mode eq '+>>' ) {
+        $mock_file->{'contents'} //= '';
+        seek $fh, length( $mock_file->{'contents'} ), 0;
+    }
+    elsif ( $mode eq '>' or $mode eq '+>' ) {
+        $mock_file->{'contents'} = '';
+    }
+
+    return 1;
+}
+
+sub _io_file_open_override {
+    @_ >= 2 && @_ <= 4
+      or croak('usage: $fh->open(FILENAME [,MODE [,PERMS]])');
+
+    my $fh   = $_[0];
+    my $file = $_[1];
+
+    # Numeric mode → sysopen (already goes through CORE::GLOBAL::sysopen)
+    if ( @_ > 2 && $_[2] =~ /^\d+$/ ) {
+        my $perms = defined $_[3] ? $_[3] : 0666;
+        return sysopen( $fh, $file, $_[2], $perms );
+    }
+
+    my $mode;
+    if ( @_ > 2 ) {
+        if ( $_[2] =~ /:/ ) {
+
+            # IO layer mode like "<:utf8" — extract base mode
+            if ( $_[2] =~ /^([+]?[<>]{1,2})/ ) {
+                $mode = $1;
+            }
+            else {
+                # Pure layer spec without mode prefix — default to read
+                $mode = '<';
+            }
+        }
+        else {
+            $mode = IO::Handle::_open_mode_string( $_[2] );
+        }
+    }
+    else {
+        # 2-arg form: mode may be embedded in filename
+        if ( $file =~ /^\s*(>>|[+]?[<>])\s*(.+)\s*$/ ) {
+            $mode = $1;
+            $file = $2;
+        }
+        else {
+            $mode = '<';
+        }
+    }
+
+    # Pipe opens — not mockable
+    if ( $mode eq '|-' || $mode eq '-|' ) {
+        goto &$_orig_io_file_open;
+    }
+
+    # Check if file is mocked
+    my $abs_path = _find_file_or_fh( $file, 1 );
+    if ( !$abs_path || ( ref $abs_path && ( $abs_path eq BROKEN_SYMLINK || $abs_path eq CIRCULAR_SYMLINK ) ) ) {
+        goto &$_orig_io_file_open;
+    }
+
+    my $mock_file = _get_file_object($abs_path);
+    if ( !$mock_file ) {
+        goto &$_orig_io_file_open;
+    }
+
+    # File is mocked — handle via mock layer
+    return _io_file_mock_open( $fh, $abs_path, $mode );
+}
+
 ############
 # KEYWORDS #
 ############
@@ -2859,6 +2963,14 @@ BEGIN {
         *Cwd::realpath      = \&__cwd_abs_path;
         *Cwd::fast_abs_path = \&__cwd_abs_path;
         *Cwd::fast_realpath = \&__cwd_abs_path;
+    }
+
+    # Override IO::File::open to intercept mocked files.
+    # IO::File uses CORE::open internally which bypasses CORE::GLOBAL::open.
+    $_orig_io_file_open = \&IO::File::open;
+    {
+        no warnings 'redefine';
+        *IO::File::open = \&_io_file_open_override;
     }
 }
 
