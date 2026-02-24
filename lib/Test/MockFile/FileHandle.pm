@@ -221,19 +221,73 @@ read. undef is returned if tell is already at EOF.
 sub _READLINE_ONE_LINE {
     my ($self) = @_;
 
+    my $contents = $self->{'data'}->{'contents'};
+    my $len      = length($contents);
     my $tell     = $self->{'tell'};
-    my $rs       = $/ // '';
-    my $new_tell = index( $self->{'data'}->{'contents'}, $rs, $tell ) + length($rs);
 
-    if ( $new_tell == 0 ) {
-        $new_tell = length( $self->{'data'}->{'contents'} );
+    # Slurp mode: $/ = undef — return everything from tell to end
+    if ( !defined $/ ) {
+        return undef if $tell >= $len;
+        $self->{'tell'} = $len;
+        return substr( $contents, $tell );
     }
-    return undef if ( $new_tell == $tell );    # EOF
 
-    my $str = substr( $self->{'data'}->{'contents'}, $tell, $new_tell - $tell );
+    # Fixed-record mode: $/ = \N — read exactly N bytes
+    if ( ref $/ ) {
+        my $reclen = ${ $/ } + 0;
+        return undef if $tell >= $len;
+        my $remaining = $len - $tell;
+        my $read_len  = $reclen < $remaining ? $reclen : $remaining;
+        $self->{'tell'} = $tell + $read_len;
+        return substr( $contents, $tell, $read_len );
+    }
+
+    # Paragraph mode: $/ = '' — read paragraphs separated by blank lines
+    if ( $/ eq '' ) {
+        my $pos = $tell;
+
+        # Skip leading newlines
+        while ( $pos < $len && substr( $contents, $pos, 1 ) eq "\n" ) {
+            $pos++;
+        }
+        return undef if $pos >= $len;
+
+        my $start    = $pos;
+        my $boundary = index( $contents, "\n\n", $pos );
+
+        if ( $boundary == -1 ) {
+            # No more paragraph boundaries — return rest
+            $self->{'tell'} = $len;
+            return substr( $contents, $start );
+        }
+
+        # Return text up to boundary + 2 newlines (Perl collapses to exactly 2)
+        my $text = substr( $contents, $start, $boundary - $start ) . "\n\n";
+
+        # Advance past all consecutive newlines at the boundary
+        $pos = $boundary;
+        while ( $pos < $len && substr( $contents, $pos, 1 ) eq "\n" ) {
+            $pos++;
+        }
+        $self->{'tell'} = $pos;
+
+        return $text;
+    }
+
+    # Normal mode: read until $/ is found
+    return undef if $tell >= $len;
+
+    my $idx = index( $contents, $/, $tell );
+
+    if ( $idx == -1 ) {
+        # Record separator not found — return rest of string
+        $self->{'tell'} = $len;
+        return substr( $contents, $tell );
+    }
+
+    my $new_tell = $idx + length($/);
     $self->{'tell'} = $new_tell;
-
-    return $str;
+    return substr( $contents, $tell, $new_tell - $tell );
 }
 
 sub READLINE {
@@ -256,20 +310,21 @@ sub READLINE {
 
 =head2 GETC
 
-B<UNIMPLEMENTED>: Open a ticket in
-L<github|https://github.com/cpanel/Test-MockFile/issues> if you need
-this feature.
-
 This method will be called when the getc function is called. It reads 1
 character out of contents and adds 1 to tell. The character is
-returned.
+returned. Returns undef at EOF.
 
 =cut
 
 sub GETC {
     my ($self) = @_;
 
-    die('Unimplemented');
+    return undef if $self->EOF;
+
+    my $char = substr( $self->{'data'}->{'contents'}, $self->{'tell'}, 1 );
+    $self->{'tell'}++;
+
+    return $char;
 }
 
 =head2 READ
