@@ -129,6 +129,116 @@ use Test::MockFile qw< nostrict >;
 # PRINT method returns, so it is never passed to PRINT. This is a known
 # limitation of tied filehandles in Perl.
 
+{
+    note "--- +< mode: seek + print overwrites at tell position ---";
+
+    my $mock = Test::MockFile->file( '/fake/rw_overwrite', "Hello World!" );
+    open( my $fh, '+<', '/fake/rw_overwrite' ) or die;
+
+    # Seek to position 6 and overwrite
+    seek( $fh, 6, 0 );
+    is( tell($fh), 6, "tell is 6 after seek" );
+
+    print $fh "Perl!";
+    is( tell($fh), 11, "tell is 11 after printing 5 bytes at position 6" );
+
+    close $fh;
+    is( $mock->contents, "Hello Perl!!", "Overwrite at position 6 replaces 'World' with 'Perl!'" );
+}
+
+{
+    note "--- +< mode: seek + print does not extend past original when write fits ---";
+
+    my $mock = Test::MockFile->file( '/fake/rw_exact', "ABCDEFGH" );
+    open( my $fh, '+<', '/fake/rw_exact' ) or die;
+
+    seek( $fh, 3, 0 );
+    print $fh "XY";
+
+    close $fh;
+    is( $mock->contents, "ABCXYEGH", "Overwrite at position 3 replaces 2 bytes" );
+}
+
+{
+    note "--- +< mode: print at tell 0 overwrites from start ---";
+
+    my $mock = Test::MockFile->file( '/fake/rw_start', "old content" );
+    open( my $fh, '+<', '/fake/rw_start' ) or die;
+
+    # tell starts at 0
+    print $fh "NEW";
+
+    close $fh;
+    is( $mock->contents, "NEW content", "Print at position 0 overwrites first 3 bytes" );
+}
+
+{
+    note "--- +< mode: print extending past end grows the file ---";
+
+    my $mock = Test::MockFile->file( '/fake/rw_extend', "short" );
+    open( my $fh, '+<', '/fake/rw_extend' ) or die;
+
+    seek( $fh, 3, 0 );
+    print $fh "LONGER";
+
+    close $fh;
+    is( $mock->contents, "shoLONGER", "Print past end extends the file" );
+    is( length( $mock->contents ), 9, "File length is 9" );
+}
+
+{
+    note "--- >> mode: seek then print still appends ---";
+
+    my $mock = Test::MockFile->file( '/fake/append_seek', "AAAA" );
+    open( my $fh, '>>', '/fake/append_seek' ) or die;
+
+    # Even after seeking to 0, append mode writes at end
+    seek( $fh, 0, 0 );
+    print $fh "BB";
+
+    close $fh;
+    is( $mock->contents, "AAAABB", "Append mode ignores seek position" );
+}
+
+{
+    note "--- +< mode: interleaved read and write ---";
+
+    my $mock = Test::MockFile->file( '/fake/rw_interleave', "Hello World" );
+    open( my $fh, '+<', '/fake/rw_interleave' ) or die;
+
+    # Read first 5 bytes
+    my $buf;
+    read( $fh, $buf, 5 );
+    is( $buf,      "Hello", "Read 'Hello'" );
+    is( tell($fh), 5,       "tell is 5 after read" );
+
+    # Write at current position (overwrite ' World' with ' Perl!')
+    print $fh " Perl!";
+    is( tell($fh), 11, "tell is 11 after write" );
+
+    close $fh;
+    is( $mock->contents, "Hello Perl!", "Interleaved read+write produces correct output" );
+}
+
+{
+    note "--- > mode: print writes at tell position (not append) ---";
+
+    my $mock = Test::MockFile->file('/fake/write_overwrite');
+    open( my $fh, '>', '/fake/write_overwrite' ) or die;
+
+    # Write initial content
+    print $fh "ABCDEFGH";
+    is( tell($fh), 8, "tell is 8 after initial write" );
+
+    # Seek back and overwrite
+    seek( $fh, 2, 0 );
+    print $fh "XY";
+    is( tell($fh), 4, "tell is 4 after overwrite" );
+
+    close $fh;
+    is( $mock->contents, "ABXYEFGH", "Overwrite in > mode at seek position" );
+}
+
 is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" );
 
 done_testing();
