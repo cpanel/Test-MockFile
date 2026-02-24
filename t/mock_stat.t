@@ -33,6 +33,25 @@ my @abs_path = (
     [ '/../../..'                    => '/' ],
     [ '/one/two/three/four/../../..' => '/one' ],
     [ '/a.b.c.d'                     => '/a.b.c.d' ],
+
+    # Component-based resolution: /. in middle of path (GH #108)
+    [ '/there/./xyz'                 => '/there/xyz' ],
+    [ '/./foo'                       => '/foo' ],
+    [ '/a/./b/./c'                   => '/a/b/c' ],
+
+    # Component-based resolution: /.. at various positions
+    [ '/there/..'                    => '/' ],
+    [ '/..'                          => '/' ],
+    [ '/../foo'                      => '/foo' ],
+    [ '/there/sub/../file'           => '/there/file' ],
+    [ '/a/b/c/../../d'              => '/a/d' ],
+
+    # Root path preservation
+    [ '/'                            => '/' ],
+
+    # Multiple slashes
+    [ '/foo//bar'                    => '/foo/bar' ],
+    [ '///foo///bar///'              => '/foo/bar' ],
 );
 foreach my $t (@abs_path) {
     my ( $path, $normalized_path ) = @$t;
@@ -144,6 +163,34 @@ is( Test::MockFile::_mock_stat( 'stat',  '/broken_link' ), 0,                   
     mkdir $dir->path();
     ok( -d ( $dir->path() ),       'Directory /quux exists' );
     ok( -d ( $dir->path() . '/' ), 'Directory /quux/ also exists' );
+}
+
+note "path canonicalization — stat resolves . and .. components (GH #108)";
+{
+    my $dir  = Test::MockFile->dir('/there');
+    my $file = Test::MockFile->file( '/there/xyz', "content" );
+    mkdir '/there';
+
+    # /there/. should resolve to /there
+    ok( -d '/there/.',     '-d "/there/." resolves to mocked /there' );
+
+    # /there/./xyz should resolve to /there/xyz
+    ok( -e '/there/./xyz', '-e "/there/./xyz" resolves to mocked /there/xyz' );
+    ok( -f '/there/./xyz', '-f "/there/./xyz" resolves to mocked /there/xyz' );
+
+    # stat on paths with . component
+    my @st = stat('/there/./xyz');
+    ok( scalar @st, 'stat("/there/./xyz") returns stat data' );
+}
+
+{
+    my $parent = Test::MockFile->dir('/up');
+    my $child  = Test::MockFile->dir('/up/down');
+    mkdir '/up';
+    mkdir '/up/down';
+
+    # /up/down/.. should resolve to /up
+    ok( -d '/up/down/..',  '-d "/up/down/.." resolves to mocked /up' );
 }
 
 done_testing();
