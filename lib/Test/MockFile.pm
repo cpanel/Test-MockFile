@@ -843,7 +843,7 @@ file and renaming it into place.
 
     my $dir = Test::MockFile->new_dir( '/data', { 'autovivify' => 1 } );
 
-    # Files are auto-mocked when accessed — no need to declare them
+    # Files are auto-mocked when accessed -- no need to declare them
     open my $fh, '>', '/data/.tmp.cfg' or die;
     print $fh $config;
     close $fh;
