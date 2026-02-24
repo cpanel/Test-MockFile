@@ -1833,7 +1833,7 @@ returns true/false, depending on whether this object is a symlink.
 sub is_link {
     my ($self) = @_;
 
-    return ( $self->{'mode'} & S_IFLNK ) ? 1 : 0;
+    return ( ( $self->{'mode'} & S_IFMT ) == S_IFLNK ) ? 1 : 0;
 }
 
 =head2 is_dir
