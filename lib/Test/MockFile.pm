@@ -1589,11 +1589,11 @@ Calculates the block count of the file based on its size.
 sub blocks {
     my ($self) = @_;
 
-    my $blocks = int( $self->size / abs( $self->{'blksize'} ) + 1 );
-    if ( int($blocks) > $blocks ) {
-        $blocks = int($blocks) + 1;
-    }
-    return $blocks;
+    my $size    = $self->size;
+    return 0 unless $size;
+
+    my $blksize = abs( $self->{'blksize'} );
+    return int( ( $size + $blksize - 1 ) / $blksize );
 }
 
 =head2 chmod
