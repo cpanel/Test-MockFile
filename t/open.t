@@ -152,5 +152,19 @@ subtest(
     }
 );
 
+note "-------------- BROKEN SYMLINK OPEN --------------";
+{
+    use Errno qw/ELOOP/;
+
+    my $target = Test::MockFile->file( '/target_file', undef );    # non-existent target
+    my $link   = Test::MockFile->symlink( '/broken_link', '/target_file' );
+
+    # Opening a broken symlink should fail with ELOOP, not confess
+    $! = 0;
+    my $ret = open( my $fh, '<', '/broken_link' );
+    ok( !$ret,            'open on broken symlink returns false' );
+    is( $! + 0, ELOOP, 'open on broken symlink sets $! to ELOOP' );
+}
+
 done_testing();
 exit;

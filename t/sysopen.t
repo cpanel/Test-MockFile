@@ -236,5 +236,18 @@ is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache after 
 }
 is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache after existing file test" );
 
+note "O_NOFOLLOW on a symlink returns ELOOP";
+{
+    use Errno qw/ELOOP/;
+
+    my $mock = Test::MockFile->symlink( '/nofollow_link', '/some_target' );
+    my $target = Test::MockFile->file( '/some_target', "data" );
+
+    $! = 0;
+    my $ret = sysopen( my $fh, '/nofollow_link', O_RDONLY | O_NOFOLLOW );
+    ok( !$ret,          'sysopen with O_NOFOLLOW on symlink returns false' );
+    is( $! + 0, ELOOP, 'sysopen with O_NOFOLLOW on symlink sets $! to ELOOP' );
+}
+
 done_testing();
 exit;
