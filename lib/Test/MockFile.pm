@@ -617,6 +617,11 @@ sub _validate_strict_rules {
 
 my @plugins;
 
+# Declared before import() which references them for :trace support
+my @_public_access_hooks;
+my @_internal_access_hooks = ( \&_strict_mode_violation );
+my $TRACE_ENABLED;
+
 sub import {
     my ( $class, @args ) = @_;
 
@@ -2006,11 +2011,6 @@ One use might be:
     Test::MockFile::add_file_access_hook(sub { my $type = shift; print "$type called at: " . Carp::longmess() } );
 
 =cut
-
-# always use the _strict_mode_violation
-my @_public_access_hooks;
-my @_internal_access_hooks = ( \&_strict_mode_violation );
-my $TRACE_ENABLED;
 
 sub add_file_access_hook {
     my ($code_ref) = @_;
