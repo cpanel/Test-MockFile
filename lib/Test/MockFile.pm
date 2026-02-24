@@ -2016,10 +2016,51 @@ sub _io_file_open_override {
     my $fh   = $_[0];
     my $file = $_[1];
 
-    # Numeric mode → sysopen (already goes through CORE::GLOBAL::sysopen)
+    # Numeric mode (sysopen flags)
     if ( @_ > 2 && $_[2] =~ /^\d+$/ ) {
-        my $perms = defined $_[3] ? $_[3] : 0666;
-        return sysopen( $fh, $file, $_[2], $perms );
+        my $sysmode = $_[2];
+        my $abs_path = _find_file_or_fh( $file, 1 );
+        my $mock_file;
+        if ( $abs_path && !ref $abs_path ) {
+            $mock_file = _get_file_object($abs_path);
+        }
+
+        if ( !$mock_file ) {
+            # Not mocked — fall through to real sysopen
+            my $perms = defined $_[3] ? $_[3] : 0666;
+            return sysopen( $fh, $file, $sysmode, $perms );
+        }
+
+        # Handle O_CREAT / O_TRUNC / O_EXCL on the mock
+        if ( $sysmode & Fcntl::O_EXCL && $sysmode & Fcntl::O_CREAT && defined $mock_file->{'contents'} ) {
+            $! = EEXIST;
+            return;
+        }
+        if ( $sysmode & Fcntl::O_CREAT && !defined $mock_file->{'contents'} ) {
+            $mock_file->{'contents'} = '';
+        }
+        if ( !defined $mock_file->{'contents'} ) {
+            $! = ENOENT;
+            return;
+        }
+
+        # Convert sysopen flags to string mode for _io_file_mock_open
+        my $rd_wr = $sysmode & 3;
+        my $mode =
+            $rd_wr == Fcntl::O_RDONLY ? '<'
+          : $rd_wr == Fcntl::O_WRONLY ? '>'
+          : $rd_wr == Fcntl::O_RDWR   ? '+<'
+          :                             '<';
+
+        if ( $sysmode & Fcntl::O_TRUNC ) {
+            $mock_file->{'contents'} = '';
+        }
+        if ( $sysmode & Fcntl::O_APPEND ) {
+            $mode = '>>' if $rd_wr == Fcntl::O_WRONLY;
+            $mode = '+>>' if $rd_wr == Fcntl::O_RDWR;
+        }
+
+        return _io_file_mock_open( $fh, $abs_path, $mode );
     }
 
     my $mode;
