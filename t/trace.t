@@ -102,6 +102,7 @@ $test_code = <<'EOS';
 use Test::MockFile qw< :trace :nostrict >;
 
 -e '/no/such/trace/loc_test';
+ok 1, "trace logged to STDERR";
 EOS
 
 tmf_test_code(
@@ -141,6 +142,7 @@ $test_code = <<'EOS';
 use Test::MockFile qw< :trace :nostrict >;
 
 open(my $fh, '<', '/no/such/trace/openfile');
+ok 1, "open traced to STDERR";
 EOS
 
 tmf_test_code(
