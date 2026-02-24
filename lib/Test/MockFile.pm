@@ -273,6 +273,7 @@ sub file_arg_position_for_command {    # can also be used by user hooks
         'stat'     => 0,
         'sysopen'  => 1,
         'unlink'   => 0,
+        'utime'    => 2,
         'readdir'  => 0,
     };
 
@@ -2445,6 +2446,50 @@ sub __flock (*$) {
     return CORE::flock( $fh, $operation );
 }
 
+sub __utime (@) {
+    my ( $atime, $mtime, @files ) = @_;
+
+    # Not an error, report we changed zero files
+    @files
+      or return 0;
+
+    my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
+    my @unmocked_files = grep !$mocked_files{$_}, @files;
+
+    # If no files are mocked, fall through to the real utime
+    if ( @unmocked_files == @files ) {
+        _real_file_access_hook( 'utime', \@_ );
+        goto \&CORE::utime if _goto_is_available();
+        return CORE::utime( $atime, $mtime, @files );
+    }
+
+    # Handle unmocked files via CORE::utime before processing mocks
+    my $num_changed = 0;
+    if (@unmocked_files) {
+        $num_changed += CORE::utime( $atime, $mtime, @unmocked_files );
+    }
+
+    my $now = time;
+    foreach my $file (@files) {
+        my $mock = $mocked_files{$file}
+          or next;    # unmocked — already handled above
+
+        # The virtual file may not exist (e.g., file('/path', undef)).
+        if ( !$mock->exists() ) {
+            $! = ENOENT;
+            next;
+        }
+
+        $mock->{'atime'} = defined $atime ? $atime : $now;
+        $mock->{'mtime'} = defined $mtime ? $mtime : $now;
+        $mock->{'ctime'} = $now;
+
+        $num_changed++;
+    }
+
+    return $num_changed;
+}
+
 BEGIN {
     *CORE::GLOBAL::glob = !$^V || $^V lt 5.18.0
       ? sub {
@@ -2469,6 +2514,7 @@ BEGIN {
     *CORE::GLOBAL::chown = \&__chown;
     *CORE::GLOBAL::chmod = \&__chmod;
     *CORE::GLOBAL::flock = \&__flock;
+    *CORE::GLOBAL::utime = \&__utime;
 }
 
 =head1 CAEATS AND LIMITATIONS
