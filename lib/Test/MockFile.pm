@@ -95,6 +95,9 @@ throw a die when files are accessed during your tests!
     # non-strict mode
     use Test::MockFile qw< nostrict >;
 
+    # trace mode - logs unmocked file accesses to STDERR
+    use Test::MockFile qw< :trace >;
+
     # Load with one or more plugins
 
     use Test::MockFile plugin => 'FileTemp';
@@ -166,6 +169,28 @@ For example:
 If we want to load the module without strict mode:
 
     use Test::MockFile qw< nostrict >;
+
+=head3 Trace mode
+
+Trace mode logs all unmocked file access operations to STDERR. This is
+useful during development to discover which files your code touches, so
+you know what to mock.
+
+    use Test::MockFile qw< :trace >;
+
+Each unmocked file operation produces a line like:
+
+    [trace] open('/etc/hosts') at t/mytest.t line 42
+
+Trace mode can be combined with nostrict to log all accesses without
+dying:
+
+    use Test::MockFile qw< :trace :nostrict >;
+
+Tags may also be used without the colon prefix for backwards
+compatibility:
+
+    use Test::MockFile qw< trace nostrict >;
 
 Relative paths are not supported:
 
@@ -595,7 +620,7 @@ my @plugins;
 sub import {
     my ( $class, @args ) = @_;
 
-    my $strict_mode = ( grep { $_ eq 'nostrict' } @args ) ? STRICT_MODE_DISABLED : STRICT_MODE_ENABLED;
+    my $strict_mode = ( grep { $_ eq 'nostrict' || $_ eq ':nostrict' } @args ) ? STRICT_MODE_DISABLED : STRICT_MODE_ENABLED;
 
     if (
         defined $STRICT_MODE_STATUS
@@ -607,6 +632,15 @@ sub import {
         die q[Test::MockFile is imported multiple times with different strict modes (not currently supported) ] . $class;
     }
     $STRICT_MODE_STATUS = $strict_mode;
+
+    if ( grep { $_ eq 'trace' || $_ eq ':trace' } @args ) {
+        if ( !$TRACE_ENABLED ) {
+            $TRACE_ENABLED = 1;
+
+            # Insert before _strict_mode_violation so trace fires even when strict mode will die
+            unshift @_internal_access_hooks, \&_trace_hook;
+        }
+    }
 
     while ( my $opt = shift @args ) {
         next unless defined $opt && $opt eq 'plugin';
@@ -1976,6 +2010,7 @@ One use might be:
 # always use the _strict_mode_violation
 my @_public_access_hooks;
 my @_internal_access_hooks = ( \&_strict_mode_violation );
+my $TRACE_ENABLED;
 
 sub add_file_access_hook {
     my ($code_ref) = @_;
@@ -2028,6 +2063,29 @@ sub _update_parent_dir_times {
     $parent->{'ctime'} = $now;
 
     return 1;
+}
+
+sub _trace_hook {
+    my ( $access_type, $at_under_ref ) = @_;
+
+    my $file_arg = file_arg_position_for_command( $access_type, $at_under_ref );
+    my $filename = ( $file_arg >= 0 && defined $at_under_ref->[$file_arg] ) ? $at_under_ref->[$file_arg] : '<unknown>';
+
+    my @caller;
+    foreach my $level ( 1 .. _STACK_ITERATION_MAX ) {
+        @caller = caller($level);
+        last if !@caller;
+        next if $caller[0] eq __PACKAGE__;
+        next if $caller[0] eq 'Overload::FileCheck';
+        last;
+    }
+
+    my $location = @caller ? "$caller[1] line $caller[2]" : 'unknown';
+
+    # Use print STDERR rather than warn to avoid triggering Test2::Plugin::NoWarnings
+    print STDERR "[trace] $access_type('$filename') at $location\n";
+
+    return;
 }
 
 =head2 How this mocking is done:
