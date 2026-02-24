@@ -59,6 +59,9 @@ our %files_being_mocked;
 # Original Cwd functions saved before override
 my $_original_cwd_abs_path;
 
+# Tracks directories with autovivify enabled: path => mock object (weak ref)
+my %_autovivify_dirs;
+
 # From http://man7.org/linux/man-pages/man7/inode.7.html
 use constant S_IFMT    => 0170000;    # bit mask for the file type bit field
 use constant S_IFPERMS => 07777;      # bit mask for file perms.
@@ -831,10 +834,31 @@ helper method for it in the future.)
     $d = Test::MockFile->dir('/foo');
     mkdir $d, 0755;                   # ok
 
+=head3 autovivify
+
+When C<autovivify> is enabled, any file operation (open, stat, rename,
+mkdir, etc.) on a path under the directory will automatically create a
+mocked file entry. This supports the common pattern of writing to a temp
+file and renaming it into place.
+
+    my $dir = Test::MockFile->new_dir( '/data', { 'autovivify' => 1 } );
+
+    # Files are auto-mocked when accessed — no need to declare them
+    open my $fh, '>', '/data/.tmp.cfg' or die;
+    print $fh $config;
+    close $fh;
+    rename '/data/.tmp.cfg', '/data/config.ini';
+
+    -e '/data/config.ini';   # true
+
+Auto-vivified files are tied to the parent directory's lifetime: when
+the directory mock goes out of scope, all auto-vivified children are
+cleaned up.
+
 =cut
 
 sub dir {
-    my ( $class, $dirname ) = @_;
+    my ( $class, $dirname, $opts ) = @_;
 
     ( defined $dirname && length $dirname ) or confess("No directory name provided to instantiate $class");
     _is_path_mocked($dirname) and confess("It looks like $dirname is already being mocked. We don't support double mocking yet.");
@@ -846,8 +870,15 @@ sub dir {
     $path ne '/'
       and $path =~ s{[/\\]$}{}xmsg;
 
-    @_ > 2
-      and confess("You cannot set stats for nonexistent dir '$path'");
+    my $autovivify;
+    if ( ref $opts eq 'HASH' ) {
+        $autovivify = delete $opts->{'autovivify'};
+        confess("You cannot set stats for nonexistent dir '$path'")
+          if keys %{$opts};
+    }
+    elsif ( @_ > 2 ) {
+        confess("You cannot set stats for nonexistent dir '$path'");
+    }
 
     my $perms = S_IFPERMS & 0777;
     my %stats = ( 'mode' => ( $perms & ~umask ) | S_IFDIR );
@@ -856,13 +887,21 @@ sub dir {
 
     # FIXME: Quick and dirty: provide a helper method?
     my $has_content = grep m{^\Q$path/\E}xms, keys %files_being_mocked;
-    return $class->new(
+    my $self = $class->new(
         {
             'path'        => $path,
             'has_content' => $has_content,
+            'autovivify'  => $autovivify ? 1 : 0,
             %stats
         }
     );
+
+    if ($autovivify) {
+        $_autovivify_dirs{$path} = $self;
+        Scalar::Util::weaken( $_autovivify_dirs{$path} );
+    }
+
+    return $self;
 }
 
 =head2 new_dir
@@ -989,9 +1028,11 @@ sub new {
         'fileno'      => undef,     # fileno()
         'tty'         => 0,         # possibly this is already provided in mode?
         'readlink'    => '',        # what the symlink points to.
-        'path'        => undef,
-        'contents'    => undef,
-        'has_content' => undef,
+        'path'                   => undef,
+        'contents'               => undef,
+        'has_content'            => undef,
+        'autovivify'             => 0,
+        '_autovivified_children' => undef,
     }, $class;
 
     foreach my $key ( keys %opts ) {
@@ -1055,6 +1096,9 @@ sub _mock_stat {
     }
 
     my $file_data = _get_file_object($file);
+    if ( !$file_data ) {
+        $file_data = _maybe_autovivify($file);
+    }
     if ( !$file_data ) {
         _real_file_access_hook( $type, [$file_or_fh] ) unless ref $file_or_fh;
         return FALLBACK_TO_REAL_OP();
@@ -1161,6 +1205,71 @@ sub _files_in_dir {
     };
 
     return @files_in_dir;
+}
+
+# Walk up the path to find the nearest ancestor directory with autovivify enabled.
+# Returns the mock object if found, undef otherwise.
+sub _find_autovivify_parent {
+    my ($abs_path) = @_;
+
+    return unless %_autovivify_dirs;
+
+    my $dir = $abs_path;
+    while ( $dir =~ s{/[^/]+$}{} && length $dir ) {
+        if ( my $mock = $_autovivify_dirs{$dir} ) {
+            return $mock;
+        }
+    }
+
+    return;
+}
+
+# If $abs_path is under an autovivify directory, create a non-existent file mock
+# for it and return the mock. Otherwise return undef.
+sub _maybe_autovivify {
+    my ($abs_path) = @_;
+
+    return unless defined $abs_path && length $abs_path;
+
+    # Already mocked? Nothing to do.
+    return $files_being_mocked{$abs_path} if $files_being_mocked{$abs_path};
+
+    my $parent = _find_autovivify_parent($abs_path) or return;
+
+    # Create a non-existent file mock (contents=undef means "not there yet")
+    my $perms = S_IFPERMS & 0666;
+    my $now   = time;
+    my $mock  = bless {
+        'dev'                    => 0,
+        'inode'                  => 0,
+        'mode'                   => ( $perms ^ umask ) | S_IFREG,
+        'nlink'                  => 0,
+        'uid'                    => int $>,
+        'gid'                    => int $),
+        'rdev'                   => 0,
+        'atime'                  => $now,
+        'mtime'                  => $now,
+        'ctime'                  => $now,
+        'blksize'                => 4096,
+        'fileno'                 => undef,
+        'tty'                    => 0,
+        'readlink'               => '',
+        'path'                   => $abs_path,
+        'contents'               => undef,
+        'has_content'            => undef,
+        'autovivify'             => 0,
+        '_autovivified_children' => undef,
+    }, __PACKAGE__;
+
+    # Store in global hash (weak ref, as usual)
+    $files_being_mocked{$abs_path} = $mock;
+    Scalar::Util::weaken( $files_being_mocked{$abs_path} );
+
+    # Parent holds the strong ref so it stays alive until parent is destroyed
+    $parent->{'_autovivified_children'} //= [];
+    push @{ $parent->{'_autovivified_children'} }, $mock;
+
+    return $mock;
 }
 
 sub _abs_path_to_file {
@@ -1290,6 +1399,14 @@ sub DESTROY {
     # $self doesn't have a path. Either way we can't delete it.
     my $path = $self->{'path'};
     defined $path or return;
+
+    # Clean up autovivify tracking
+    delete $_autovivify_dirs{$path};
+
+    # Destroy auto-vivified children (dropping strong refs triggers their DESTROY)
+    if ( $self->{'_autovivified_children'} ) {
+        delete $self->{'_autovivified_children'};
+    }
 
     # If the object survives into global destruction, the object which is
     # the value of $files_being_mocked{$path} might destroy early.
@@ -2234,6 +2351,11 @@ sub __open (*;$@) {
 
     my $mock_file = _get_file_object($abs_path);
 
+    # Try autovivify if not mocked
+    if ( !$mock_file ) {
+        $mock_file = _maybe_autovivify($abs_path);
+    }
+
     # For now we're going to just strip off the binmode and hope for the best.
     $mode =~ s/(:.+$)//;
     my $encoding_mode = $1;
@@ -2321,6 +2443,10 @@ sub __open (*;$@) {
 
 sub __sysopen (*$$;$) {
     my $mock_file = _get_file_object( $_[1] );
+
+    if ( !$mock_file ) {
+        $mock_file = _maybe_autovivify( _abs_path_to_file( $_[1] ) );
+    }
 
     if ( !$mock_file ) {
         _real_file_access_hook( "sysopen", \@_ );
@@ -2665,6 +2791,10 @@ sub __mkdir (_;$) {
     my $mock = _get_file_object($file);
 
     if ( !$mock ) {
+        $mock = _maybe_autovivify( _abs_path_to_file($file) );
+    }
+
+    if ( !$mock ) {
         _real_file_access_hook( 'mkdir', \@_ );
         goto \&CORE::mkdir if _goto_is_available();
         return CORE::mkdir(@_);
@@ -2742,6 +2872,14 @@ sub __rename ($$) {
 
     my $mock_old = _get_file_object($old);
     my $mock_new = _get_file_object($new);
+
+    # Try autovivify for paths under mocked directories
+    if ( !$mock_old ) {
+        $mock_old = _maybe_autovivify( _abs_path_to_file($old) );
+    }
+    if ( !$mock_new ) {
+        $mock_new = _maybe_autovivify( _abs_path_to_file($new) );
+    }
 
     # If neither is mocked, pass through to real FS
     if ( !$mock_old && !$mock_new ) {
