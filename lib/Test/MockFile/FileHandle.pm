@@ -369,6 +369,11 @@ end up with some really weird strings with null bytes in them.
 sub READ {
     my ( $self, undef, $len, $offset ) = @_;
 
+    if ( !$self->{'read'} ) {
+        $! = EBADF;
+        return undef;
+    }
+
     # If the caller's buffer is undef, we need to make it a string of 0 length to start out with.
     $_[1] = '' if !defined $_[1];    # TODO: test me
 
@@ -450,6 +455,9 @@ At the moment, the call is just redirected to CLOSE.
 sub DESTROY {
     my ($self) = @_;
 
+    # During global destruction, our weak ref or even $self may be
+    # partially torn down. Guard before attempting cleanup.
+    return unless $self && $self->{'file'};
     return $self->CLOSE;
 }
 
