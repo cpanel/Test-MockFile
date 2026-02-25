@@ -131,7 +131,7 @@ my $symlink_lstat_return = array {
     item match qr/^[0-9]+$/;
     item match qr/^[0-9\s]+$/;
     item 0;
-    item 1;
+    item 11;    # length('/not/a/file') - symlink size = length of target path
     item match qr/^[0-9]{3,}$/;
     item match qr/^[0-9]{3,}$/;
     item match qr/^[0-9]{3,}$/;

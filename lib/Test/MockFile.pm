@@ -2034,8 +2034,8 @@ returns the size of the file based on its contents.
 sub size {
     my ($self) = @_;
 
-    # Lstat for a symlink returns 1 for its size.
-    return 1 if $self->is_link;
+    # Lstat for a symlink returns the length of the target path.
+    return length( $self->{'readlink'} ) if $self->is_link;
 
     # length undef is 0 not undef in perl 5.10
     if ( $] < 5.012 ) {
