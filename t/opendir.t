@@ -115,5 +115,35 @@ is(
     closedir $dh;
 }
 
+# Regression: readdir in list context at EOF must return empty list, not (undef).
+# "return undef" in Perl returns (undef) in list context — a one-element list
+# that is truthy — so while(@e = readdir $dh) would never terminate.
+{
+    my $ldir  = Test::MockFile->dir('/listctx');
+    my $lfile = Test::MockFile->file( '/listctx/a', 'x' );
+
+    opendir my $dh, '/listctx' or die "opendir: $!";
+
+    # Consume all entries in scalar context first
+    while ( defined( my $e = readdir($dh) ) ) { }
+
+    # Now at EOF: list context must return empty list, not (undef)
+    my @eof_entries = readdir($dh);
+    is( \@eof_entries, [], 'readdir in list context at EOF returns empty list, not (undef)' );
+
+    # Verify the loop pattern works: while(@entries = readdir $dh) must terminate
+    rewinddir($dh);
+    my @collected;
+    my $iterations = 0;
+    while ( my @batch = readdir($dh) ) {
+        push @collected, @batch;
+        last if ++$iterations > 100;    # safety: prevent infinite loop in case of bug
+    }
+    is( [ sort @collected ], [qw< . .. a >], 'while(@e = readdir $dh) collects all entries and terminates' );
+    ok( $iterations <= 4, 'loop terminated without hitting safety limit' );
+
+    closedir($dh);
+}
+
 done_testing();
 exit;

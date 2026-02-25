@@ -2070,7 +2070,9 @@ sub __readdir (*) {
     }
 
     # At EOF for the dir handle.
-    return undef if $obj->{'tell'} > $#{ $obj->{'files_in_readdir'} };
+    # Must use bare return (not "return undef") so list context gets ()
+    # instead of (undef). Otherwise while(@e = readdir $dh) never terminates.
+    return if $obj->{'tell'} > $#{ $obj->{'files_in_readdir'} };
 
     if (wantarray) {
         my @return;
