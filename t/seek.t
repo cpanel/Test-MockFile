@@ -29,7 +29,7 @@ my $content = "ABCDEFGHIJ";
 
     is( sysseek( $fh, 10, SEEK_SET ), 10, "SEEK_SET to 10 (EOF) returns 10" );
 
-    is( sysseek( $fh, 11, SEEK_SET ), 0, "SEEK_SET beyond EOF returns 0 (failure)" );
+    is( sysseek( $fh, 11, SEEK_SET ), 11, "SEEK_SET beyond EOF succeeds (POSIX allows seeking past end)" );
 
     is( sysseek( $fh, -1, SEEK_SET ), 0, "SEEK_SET to negative returns 0 (failure)" );
 
@@ -58,7 +58,7 @@ my $content = "ABCDEFGHIJ";
     is( sysseek( $fh, -100, SEEK_CUR ), 0, "SEEK_CUR before start of file returns 0" );
 
     # Try to seek beyond EOF
-    is( sysseek( $fh, 100, SEEK_CUR ), 0, "SEEK_CUR beyond EOF returns 0" );
+    is( sysseek( $fh, 100, SEEK_CUR ), 106, "SEEK_CUR beyond EOF succeeds (position 6 + 100 = 106)" );
 
     close $fh;
 }
@@ -80,7 +80,7 @@ my $content = "ABCDEFGHIJ";
 
     is( sysseek( $fh, -11, SEEK_END ), 0, "SEEK_END before start returns 0 (failure)" );
 
-    is( sysseek( $fh, 1, SEEK_END ), 0, "SEEK_END beyond file returns 0 (failure)" );
+    is( sysseek( $fh, 1, SEEK_END ), 11, "SEEK_END +1 beyond file succeeds (10 + 1 = 11)" );
 
     close $fh;
 }
@@ -125,7 +125,7 @@ my $content = "ABCDEFGHIJ";
     is( sysseek( $fh, 0, SEEK_SET ), "0 but true", "SEEK_SET 0 on empty file returns '0 but true'" );
     is( sysseek( $fh, 0, SEEK_END ), "0 but true", "SEEK_END 0 on empty file returns '0 but true'" );
     is( sysseek( $fh, 0, SEEK_CUR ), "0 but true", "SEEK_CUR 0 on empty file returns '0 but true'" );
-    is( sysseek( $fh, 1, SEEK_SET ), 0, "SEEK_SET 1 on empty file returns 0 (failure)" );
+    is( sysseek( $fh, 1, SEEK_SET ), 1, "SEEK_SET 1 on empty file succeeds (past EOF allowed)" );
 
     close $fh;
 }
@@ -147,6 +147,104 @@ my $content = "ABCDEFGHIJ";
     $buf = "";
     sysread( $fh, $buf, 5, 0 );
     is( $buf, "World", "Read 'World' from position 6" );
+
+    close $fh;
+}
+
+{
+    note "--- Seek past EOF then read (should get EOF) ---";
+
+    my $mock = Test::MockFile->file( '/fake/seek_past_read', $content );
+    sysopen( my $fh, '/fake/seek_past_read', O_RDONLY ) or die;
+
+    is( sysseek( $fh, 50, SEEK_SET ), 50, "SEEK_SET to 50 (past 10-byte file) succeeds" );
+
+    my $buf = "";
+    my $nread = sysread( $fh, $buf, 10 );
+    is( $nread, 0,  "sysread after seek past EOF returns 0 bytes" );
+    is( $buf,   "", "buffer is empty after seek-past-EOF read" );
+
+    ok( eof($fh), "eof() is true after seek past EOF" );
+
+    close $fh;
+}
+
+{
+    note "--- Seek past EOF then seek back and read ---";
+
+    my $mock = Test::MockFile->file( '/fake/seek_past_back', $content );
+    sysopen( my $fh, '/fake/seek_past_back', O_RDONLY ) or die;
+
+    is( sysseek( $fh, 100, SEEK_SET ), 100, "Seek to position 100 (past EOF)" );
+    ok( eof($fh), "eof() is true at position 100" );
+
+    is( sysseek( $fh, 5, SEEK_SET ), 5, "Seek back to position 5" );
+    ok( !eof($fh), "eof() is false at position 5" );
+
+    my $buf = "";
+    sysread( $fh, $buf, 5 );
+    is( $buf, "FGHIJ", "Can read normally after seeking back from past-EOF position" );
+
+    ok( eof($fh), "eof() is true after reading to end" );
+
+    close $fh;
+}
+
+{
+    note "--- Seek past EOF with SEEK_CUR and SEEK_END ---";
+
+    my $mock = Test::MockFile->file( '/fake/seek_past_modes', $content );
+    sysopen( my $fh, '/fake/seek_past_modes', O_RDONLY ) or die;
+
+    # SEEK_END past EOF
+    is( sysseek( $fh, 5, SEEK_END ), 15, "SEEK_END +5 = 10 + 5 = 15" );
+    ok( eof($fh), "eof() is true at position 15" );
+
+    # SEEK_CUR from past EOF
+    is( sysseek( $fh, 10, SEEK_CUR ), 25, "SEEK_CUR +10 from 15 = 25" );
+    ok( eof($fh), "eof() is true at position 25" );
+
+    # Can still seek back to valid range
+    is( sysseek( $fh, 0, SEEK_SET ), "0 but true", "Seek back to 0" );
+    ok( !eof($fh), "eof() is false at position 0" );
+
+    close $fh;
+}
+
+{
+    note "--- tell() on regular file handles ---";
+
+    my $mock = Test::MockFile->file( '/fake/tell_test', $content );
+    open( my $fh, '<', '/fake/tell_test' ) or die;
+
+    is( tell($fh), 0, "tell() returns 0 at start of file" );
+
+    my $line = <$fh>;
+    is( tell($fh), 10, "tell() returns 10 after reading all content" );
+
+    seek( $fh, 3, SEEK_SET );
+    is( tell($fh), 3, "tell() returns 3 after seek to position 3" );
+
+    seek( $fh, 50, SEEK_SET );
+    is( tell($fh), 50, "tell() returns 50 after seek past EOF" );
+
+    close $fh;
+}
+
+{
+    note "--- EOF warning mentions file path (not STDOUT) ---";
+
+    my $mock = Test::MockFile->file( '/fake/eof_warn', $content );
+    sysopen( my $fh, '/fake/eof_warn', O_WRONLY | O_CREAT ) or die;
+
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+
+    eof($fh);
+
+    is( scalar @warnings, 1, "eof() on write-only handle emits one warning" );
+    like( $warnings[0], qr{/fake/eof_warn}, "warning mentions the file path, not STDOUT" );
+    unlike( $warnings[0], qr{STDOUT}, "warning does not mention STDOUT" );
 
     close $fh;
 }
