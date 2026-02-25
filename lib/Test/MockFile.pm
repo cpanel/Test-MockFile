@@ -1081,6 +1081,21 @@ sub _get_file_object {
     return $files_being_mocked{$file};
 }
 
+# Like _get_file_object but follows symlinks (for chmod, chown, utime, truncate).
+# Returns BROKEN_SYMLINK or CIRCULAR_SYMLINK sentinels on symlink errors,
+# the mock object on success, or undef if not mocked.
+sub _get_file_object_follow_link {
+    my ($file_path) = @_;
+
+    my $resolved = _find_file_or_fh( $file_path, 1 );    # follow symlinks
+
+    # Propagate symlink error sentinels
+    return $resolved if ref $resolved && ( $resolved == BROKEN_SYMLINK || $resolved == CIRCULAR_SYMLINK );
+
+    return unless $resolved;
+    return $files_being_mocked{$resolved};
+}
+
 # This subroutine finds the absolute path to a file, returning the absolute path of what it ultimately points to.
 # If it is a broken link or what was passed in is undef or '', then we return undef.
 
@@ -2598,9 +2613,10 @@ sub __chown (@) {
     @files
       or return 0;
 
-    my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
+    # Follow symlinks: chown operates on the target, not the symlink itself
+    my %mocked_files   = map +( $_ => _get_file_object_follow_link($_) ), @files;
     my @unmocked_files = grep !$mocked_files{$_}, @files;
-    my @mocked_files   = map ref $_ ? $_->{'path'} : (), values %mocked_files;
+    my @mocked_files   = map { ref $_ && ref $_ ne 'A::BROKEN::SYMLINK' && ref $_ ne 'A::CIRCULAR::SYMLINK' ? $_->{'path'} : () } values %mocked_files;
 
     # The idea is that if some are mocked and some are not,
     # it's probably a mistake
@@ -2633,6 +2649,18 @@ sub __chown (@) {
             _real_file_access_hook( 'chown', \@_ );
             goto \&CORE::chown if _goto_is_available();
             return CORE::chown( $uid, $gid, @files );
+        }
+
+        # Handle broken/circular symlink errors
+        if ( ref $mock eq 'A::BROKEN::SYMLINK' ) {
+            $set_error
+              or $! = ENOENT;
+            next;
+        }
+        if ( ref $mock eq 'A::CIRCULAR::SYMLINK' ) {
+            $set_error
+              or $! = ELOOP;
+            next;
         }
 
         # Even if you're root, nonexistent file is nonexistent
@@ -2681,9 +2709,10 @@ sub __chmod (@) {
         $mode = int $mode;
     }
 
-    my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
+    # Follow symlinks: chmod operates on the target, not the symlink itself
+    my %mocked_files   = map +( $_ => _get_file_object_follow_link($_) ), @files;
     my @unmocked_files = grep !$mocked_files{$_}, @files;
-    my @mocked_files   = map ref $_ ? $_->{'path'} : (), values %mocked_files;
+    my @mocked_files   = map { ref $_ && ref $_ ne 'A::BROKEN::SYMLINK' && ref $_ ne 'A::CIRCULAR::SYMLINK' ? $_->{'path'} : () } values %mocked_files;
 
     # The idea is that if some are mocked and some are not,
     # it's probably a mistake
@@ -2703,6 +2732,16 @@ sub __chmod (@) {
             _real_file_access_hook( 'chmod', \@_ );
             goto \&CORE::chmod if _goto_is_available();
             return CORE::chmod( $mode, @files );
+        }
+
+        # Handle broken/circular symlink errors
+        if ( ref $mock eq 'A::BROKEN::SYMLINK' ) {
+            $! = ENOENT;
+            next;
+        }
+        if ( ref $mock eq 'A::CIRCULAR::SYMLINK' ) {
+            $! = ELOOP;
+            next;
         }
 
         # chmod is less specific in such errors
@@ -2743,7 +2782,8 @@ sub __utime (@) {
     @files
       or return 0;
 
-    my %mocked_files   = map +( $_ => _get_file_object($_) ), @files;
+    # Follow symlinks: utime operates on the target, not the symlink itself
+    my %mocked_files   = map +( $_ => _get_file_object_follow_link($_) ), @files;
     my @unmocked_files = grep !$mocked_files{$_}, @files;
 
     # If no files are mocked, fall through to the real utime
@@ -2764,6 +2804,16 @@ sub __utime (@) {
         my $mock = $mocked_files{$file}
           or next;    # unmocked — already handled above
 
+        # Handle broken/circular symlink errors
+        if ( ref $mock eq 'A::BROKEN::SYMLINK' ) {
+            $! = ENOENT;
+            next;
+        }
+        if ( ref $mock eq 'A::CIRCULAR::SYMLINK' ) {
+            $! = ELOOP;
+            next;
+        }
+
         # The virtual file may not exist (e.g., file('/path', undef)).
         if ( !$mock->exists() ) {
             $! = ENOENT;
@@ -2783,11 +2833,22 @@ sub __utime (@) {
 sub __truncate ($$) {
     my ( $file_or_fh, $length ) = @_;
 
-    my $mock = _get_file_object($file_or_fh);
+    # Follow symlinks: truncate operates on the target, not the symlink itself
+    my $mock = _get_file_object_follow_link($file_or_fh);
 
     if ( !$mock ) {
         _real_file_access_hook( 'truncate', \@_ );
         return CORE::truncate( $file_or_fh, $length );
+    }
+
+    # Handle broken/circular symlink errors
+    if ( ref $mock eq 'A::BROKEN::SYMLINK' ) {
+        $! = ENOENT;
+        return 0;
+    }
+    if ( ref $mock eq 'A::CIRCULAR::SYMLINK' ) {
+        $! = ELOOP;
+        return 0;
     }
 
     if ( $mock->is_dir() ) {

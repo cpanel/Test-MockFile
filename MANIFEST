@@ -48,6 +48,7 @@ t/strict-rules.t
 t/strict-rules_file-temp-example.t
 t/strict-rules_scalar.t
 t/symlink.t
+t/symlink_follow_ops.t
 t/sysopen.t
 t/sysopen_strict.t
 t/Test-MockFile_file.t
