@@ -148,4 +148,32 @@ subtest(
     }
 );
 
+subtest(
+    'Scenario 5: Non-existent dir placeholders excluded from contents' => sub {
+        my $dirname = $get_dirname->();
+        my $dir     = Test::MockFile->new_dir($dirname);
+
+        # Create a real file and a non-existent dir placeholder as children
+        my $file         = Test::MockFile->file( "$dirname/real_file", 'content' );
+        my $nonexist_dir = Test::MockFile->dir("$dirname/phantom_dir");
+
+        # The non-existent dir placeholder should NOT appear in contents
+        is(
+            $dir->contents(),
+            [qw< . .. real_file >],
+            "Non-existent dir placeholder excluded from contents()",
+        );
+
+        test_content_with_keywords( $dirname, [qw< . .. real_file >] );
+
+        # Once the dir placeholder becomes real, it should appear
+        my $real_subdir = Test::MockFile->new_dir("$dirname/real_subdir");
+        is(
+            $dir->contents(),
+            [qw< . .. real_file real_subdir >],
+            "Existing subdirectory included in contents()",
+        );
+    }
+);
+
 done_testing();
