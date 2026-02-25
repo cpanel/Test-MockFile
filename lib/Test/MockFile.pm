@@ -1691,7 +1691,7 @@ sub contents {
             # Is this content within another directory? strip that out
             $basename =~ s{^( [^/]+ ) / .*}{$1}xms;
 
-            defined $_->{'contents'} || $_->is_link() || $_->is_dir() ? ($basename) : ();
+            $_->exists() ? ($basename) : ();
         } _files_in_dir($dirname);
 
         my %uniq;
@@ -3043,6 +3043,11 @@ sub __readlink (_) {
         _real_file_access_hook( 'readlink', \@_ );
         goto \&CORE::readlink if _goto_is_available();
         return CORE::readlink($file);
+    }
+
+    if ( !$mock_object->exists() ) {
+        $! = ENOENT;
+        return;
     }
 
     if ( !$mock_object->is_link ) {

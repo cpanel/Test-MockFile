@@ -69,8 +69,8 @@ $symlink       = "$temp_dir_name/b";
 $bad_symlink   = "$temp_dir_name/c";
 
 my @mocks;
-push @mocks, Test::MockFile->file($file);
-push @mocks, Test::MockFile->dir($temp_dir_name);
+push @mocks, Test::MockFile->file( $file, "abc\n" );
+push @mocks, Test::MockFile->new_dir($temp_dir_name);
 push @mocks, Test::MockFile->symlink( "a",        $symlink );
 push @mocks, Test::MockFile->symlink( "notafile", $bad_symlink );
 
@@ -107,5 +107,20 @@ todo "Something's wrong with readlink's prototype and the warning is incorrect n
 };
 is( $got, undef, "readlink without args is undef." );
 ok( $! == EINVAL || $! == ENOENT, "\$! is EINVAL or ENOENT for a readlink() (got: " . ($! + 0) . ")" );
+
+note "--- readlink on non-existent mocks returns ENOENT ---";
+{
+    my $ne_file = Test::MockFile->file("$temp_dir_name/ne_file");
+    $! = 0;
+    is( readlink("$temp_dir_name/ne_file"), undef,  "readlink on non-existent file mock is undef" );
+    is( $! + 0,                             ENOENT, '$! is ENOENT for readlink on non-existent file mock' );
+}
+
+{
+    my $ne_dir = Test::MockFile->dir("$temp_dir_name/ne_dir");
+    $! = 0;
+    is( readlink("$temp_dir_name/ne_dir"), undef,  "readlink on non-existent dir mock is undef" );
+    is( $! + 0,                            ENOENT, '$! is ENOENT for readlink on non-existent dir mock' );
+}
 
 done_testing();
