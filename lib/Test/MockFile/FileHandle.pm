@@ -386,6 +386,9 @@ sub READ {
     }
     my $tell = $self->{'tell'};
 
+    # If tell is at or past the end of contents, nothing to read (EOF)
+    return 0 if $tell >= $contents_len;
+
     my $read_len = ( $contents_len - $tell < $len ) ? $contents_len - $tell : $len;
 
     substr( $_[1], $offset ) = substr( $self->{'data'}->{'contents'}, $tell, $read_len );
@@ -472,9 +475,10 @@ sub EOF {
     my ($self) = @_;
 
     if ( !$self->{'read'} ) {
-        CORE::warn(q{Filehandle STDOUT opened only for output});
+        my $path = $self->{'file'} // 'unknown';
+        CORE::warn("Filehandle $path opened only for output");
     }
-    return $self->{'tell'} == length $self->{'data'}->{'contents'};
+    return $self->{'tell'} >= length $self->{'data'}->{'contents'};
 }
 
 =head2 BINMODE
@@ -577,7 +581,7 @@ sub SEEK {
         die('Invalid whence value');
     }
 
-    if ( $new_pos < 0 || $new_pos > $file_size ) {
+    if ( $new_pos < 0 ) {
         return 0;
     }
 
