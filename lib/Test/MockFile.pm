@@ -2447,7 +2447,6 @@ sub __flock (*$) {
     return CORE::flock( $fh, $operation );
 }
 
-<<<<<<< HEAD
 sub __utime (@) {
     my ( $atime, $mtime, @files ) = @_;
 
