@@ -2635,6 +2635,12 @@ sub __open (*;$@) {
 
     # At this point we're mocking the file. Let's do it!
 
+    # Directories cannot be opened as regular files.
+    if ( $mock_file->is_dir() ) {
+        $! = EISDIR;
+        return;
+    }
+
     # If contents is undef, we act like the file isn't there.
     if ( !defined $mock_file->contents() && grep { $mode eq $_ } qw/< +</ ) {
         $! = ENOENT;
@@ -2697,7 +2703,30 @@ sub __open (*;$@) {
 # 8 - O_NOFOLLOW - Fail if the last path component is a symbolic link.
 
 sub __sysopen (*$$;$) {
-    my $mock_file = _get_file_object( $_[1] );
+    my $sysopen_mode = $_[2];
+
+    # Resolve the path, following symlinks unless O_NOFOLLOW is set.
+    my $mock_file;
+    my $abs_path;
+    if ( $sysopen_mode & O_NOFOLLOW ) {
+        $mock_file = _get_file_object( $_[1] );
+        if ( $mock_file && $mock_file->is_link ) {
+            $! = ELOOP;
+            return undef;
+        }
+    }
+    else {
+        $abs_path = _find_file_or_fh( $_[1], 1 );
+        if ( $abs_path && $abs_path eq BROKEN_SYMLINK ) {
+            $! = ENOENT;
+            return undef;
+        }
+        if ( $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
+            # $! already set to ELOOP by _find_file_or_fh
+            return undef;
+        }
+        $mock_file = $abs_path ? $files_being_mocked{$abs_path} : undef;
+    }
 
     if ( !$mock_file ) {
         $mock_file = _maybe_autovivify( _abs_path_to_file( $_[1] ) );
@@ -2709,16 +2738,14 @@ sub __sysopen (*$$;$) {
         return CORE::sysopen( $_[0], $_[1], @_[ 2 .. $#_ ] );
     }
 
-    my $sysopen_mode = $_[2];
-
     # Not supported by my linux vendor: O_EXLOCK | O_SHLOCK
     if ( ( $sysopen_mode & SUPPORTED_SYSOPEN_MODES ) != $sysopen_mode ) {
         confess( sprintf( "Sorry, can't open %s with 0x%x permissions. Some of your permissions are not yet supported by %s", $_[1], $sysopen_mode, __PACKAGE__ ) );
     }
 
-    # O_NOFOLLOW
-    if ( ( $sysopen_mode & O_NOFOLLOW ) == O_NOFOLLOW && $mock_file->is_link ) {
-        $! = ELOOP;
+    # Directories cannot be opened as regular files.
+    if ( $mock_file->is_dir() ) {
+        $! = EISDIR;
         return undef;
     }
 
@@ -2745,7 +2772,6 @@ sub __sysopen (*$$;$) {
     # O_TRUNC
     if ( $sysopen_mode & O_TRUNC && defined $mock_file->{'contents'} ) {
         $mock_file->{'contents'} = '';
-
     }
 
     my $rd_wr_mode = $sysopen_mode & 3;
@@ -2763,7 +2789,7 @@ sub __sysopen (*$$;$) {
         return;
     }
 
-    my $abs_path = $mock_file->{'path'};
+    $abs_path //= $mock_file->{'path'};
 
     $_[0] = IO::File->new;
     tie *{ $_[0] }, 'Test::MockFile::FileHandle', $abs_path, $rw;
@@ -2772,11 +2798,6 @@ sub __sysopen (*$$;$) {
     $files_being_mocked{$abs_path}->{'fhs'} //= [];
     push @{ $files_being_mocked{$abs_path}->{'fhs'} }, $_[0];
     Scalar::Util::weaken( $files_being_mocked{$abs_path}->{'fhs'}[-1] ) if ref $_[0];
-
-    # O_TRUNC
-    if ( $sysopen_mode & O_TRUNC ) {
-        $mock_file->{'contents'} = '';
-    }
 
     # O_APPEND
     if ( $sysopen_mode & O_APPEND ) {
