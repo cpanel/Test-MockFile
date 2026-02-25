@@ -2182,6 +2182,14 @@ sub __sysopen (*$$;$) {
     if ( $sysopen_mode & O_CREAT && !defined $mock_file->{'contents'} ) {
         $mock_file->{'contents'} = '';
         _update_parent_dir_times( $_[1] );
+
+        # Apply permissions from sysopen's 4th argument (mode/mask)
+        # On a real filesystem, sysopen(FH, $file, O_CREAT|..., $perms)
+        # creates the file with permissions ($perms & ~umask).
+        if ( defined $_[3] ) {
+            my $perms = int( $_[3] ) & S_IFPERMS;
+            $mock_file->{'mode'} = ( $perms & ~umask ) | S_IFREG;
+        }
     }
 
     # O_TRUNC

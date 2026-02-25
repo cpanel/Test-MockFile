@@ -185,5 +185,56 @@ is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" ) or 
 
 is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" );
 
+{
+    note "-------------- sysopen O_CREAT applies permissions from 4th arg --------------";
+
+    my $mock = Test::MockFile->file($filename);
+    ok( !-e $filename, "Mock file does not exist before sysopen" );
+
+    is( sysopen( my $fh, $filename, O_CREAT | O_WRONLY, 0600 ), 1, "sysopen with O_CREAT and explicit perms" );
+    ok( -e $filename, "Mock file exists after sysopen O_CREAT" );
+
+    my @stat = stat($filename);
+    my $got_perms = $stat[2] & 07777;
+    my $expected  = 0600 & ~umask;
+    is( $got_perms, $expected, sprintf( "File permissions set from sysopen arg: got %04o, expected %04o", $got_perms, $expected ) );
+
+    close $fh;
+    undef $mock;
+}
+is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache after perms test" );
+
+{
+    note "-------------- sysopen O_CREAT without perms arg keeps default --------------";
+
+    my $mock = Test::MockFile->file($filename);
+    is( sysopen( my $fh, $filename, O_CREAT | O_WRONLY ), 1, "sysopen O_CREAT without 4th arg" );
+
+    my @stat = stat($filename);
+    my $got_perms = $stat[2] & 07777;
+    my $default   = 0666 & ~umask;    # constructor default after umask
+    is( $got_perms, $default, sprintf( "File permissions remain default: got %04o, expected %04o", $got_perms, $default ) );
+
+    close $fh;
+    undef $mock;
+}
+is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache after default perms test" );
+
+{
+    note "-------------- sysopen O_CREAT on existing file does not change perms --------------";
+
+    my $mock = Test::MockFile->file( $filename, "existing content" );
+    my @stat_before = stat($filename);
+
+    is( sysopen( my $fh, $filename, O_CREAT | O_WRONLY, 0600 ), 1, "sysopen O_CREAT on existing file" );
+
+    my @stat_after = stat($filename);
+    is( $stat_after[2], $stat_before[2], "Permissions unchanged when O_CREAT on existing file" );
+
+    close $fh;
+    undef $mock;
+}
+is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache after existing file test" );
+
 done_testing();
 exit;
