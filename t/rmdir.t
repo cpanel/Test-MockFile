@@ -117,6 +117,38 @@ subtest(
     }
 );
 
+subtest(
+    'rmdir succeeds when only non-existent mocks exist in directory' => sub {
+        my $dir  = Test::MockFile->new_dir('/mydir');
+        my $file = Test::MockFile->file('/mydir/ghost');    # non-existent placeholder (undef contents)
+
+        ok( -d '/mydir',   'Directory exists' );
+        ok( !-e '/mydir/ghost', 'Ghost file does not exist' );
+
+        $! = 0;
+        is( rmdir('/mydir'), 1, 'rmdir succeeds on dir with only non-existent child mocks' );
+        is( $! + 0,          0, '$! is not set' ) or diag "$!";
+        ok( !-d '/mydir', 'Directory no longer exists after rmdir' );
+    }
+);
+
+subtest(
+    'rmdir fails when at least one existing file is in directory' => sub {
+        my $dir   = Test::MockFile->new_dir('/mixdir');
+        my $ghost = Test::MockFile->file('/mixdir/ghost');              # non-existent
+        my $real  = Test::MockFile->file( '/mixdir/real', 'content' ); # exists
+
+        ok( -d '/mixdir',       'Directory exists' );
+        ok( !-e '/mixdir/ghost', 'Ghost file does not exist' );
+        ok( -e '/mixdir/real',  'Real file exists' );
+
+        $! = 0;
+        ok( !rmdir('/mixdir'), 'rmdir fails when existing file is present' );
+        ok( $! + 0, '$! is set' );
+        ok( -d '/mixdir', 'Directory still exists' );
+    }
+);
+
 done_testing();
 
 sub touch {

@@ -3254,7 +3254,7 @@ sub __rmdir (_) {
         return 0;
     }
 
-    if ( _files_in_dir($file) ) {
+    if ( grep { $_->exists } _files_in_dir($file) ) {
         $! = ENOTEMPTY;
         return 0;
     }
