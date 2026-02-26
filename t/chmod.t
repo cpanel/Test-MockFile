@@ -233,5 +233,35 @@ subtest(
     }
 );
 
+subtest(
+    'chmod masks mode to S_IFPERMS (high bits do not corrupt file type)' => sub {
+        my $file = Test::MockFile->file( '/chmod_mask/file', 'data' );
+        my $dir  = Test::MockFile->dir('/chmod_mask');
+
+        # Passing file type bits (e.g. S_IFREG=0100000) should not corrupt
+        # the stored mode. CORE::chmod silently ignores bits above 07777.
+        chmod 0100755, '/chmod_mask/file';
+        my $got_perms = ( stat '/chmod_mask/file' )[2] & 07777;
+        is(
+            sprintf( '%04o', $got_perms ),
+            '0755',
+            'chmod with S_IFREG bits gives 0755, not corrupted mode',
+        );
+
+        ok( -f '/chmod_mask/file', 'File type preserved after chmod with high bits' );
+
+        # Same test for directory
+        chmod 0100700, '/chmod_mask';
+        my $dir_perms = ( stat '/chmod_mask' )[2] & 07777;
+        is(
+            sprintf( '%04o', $dir_perms ),
+            '0700',
+            'chmod on dir with high bits gives 0700',
+        );
+
+        ok( -d '/chmod_mask', 'Directory type preserved after chmod with high bits' );
+    }
+);
+
 done_testing();
 exit;
