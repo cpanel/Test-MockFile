@@ -2541,8 +2541,8 @@ sub __open (*;$@) {
     # Normalize two-arg to three-arg
     if ( $arg_count == 2 ) {
 
-        # The order here matters, so '>>' won't turn into '>'
-        if ( $_[1] =~ /^ ( >> | [+]?> | [+]?< ) (.+) $/xms ) {
+        # The order here matters: try +>> and >> before +> and >
+        if ( $_[1] =~ /^ ( [+]?>> | [+]?> | [+]?< ) (.+) $/xms ) {
             $mode = $1;
             $file = $2;
         }
@@ -2812,8 +2812,6 @@ sub __opendir (*$) {
     # Upgrade but ignore bareword indicator
     ( undef, @_ ) = _upgrade_barewords(@_) if defined $_[0] && !ref $_[0];
 
-    my $mock_dir = _get_file_object( $_[1] );
-
     # 1 arg Opendir doesn't work??
     if ( scalar @_ != 2 or !defined $_[1] ) {
         _real_file_access_hook( "opendir", \@_ );
@@ -2822,6 +2820,21 @@ sub __opendir (*$) {
 
         return CORE::opendir( $_[0], @_[ 1 .. $#_ ] );
     }
+
+    # Follow symlinks — opendir resolves symlinks like stat does
+    my $abs_path = _find_file_or_fh( $_[1], 1 );
+
+    if ( defined $abs_path && $abs_path eq BROKEN_SYMLINK ) {
+        $! = ENOENT;
+        return undef;
+    }
+
+    if ( defined $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
+        $! = ELOOP;
+        return undef;
+    }
+
+    my $mock_dir = defined $abs_path ? $files_being_mocked{$abs_path} : undef;
 
     if ( !$mock_dir ) {
         _real_file_access_hook( "opendir", \@_ );
@@ -2848,7 +2861,7 @@ sub __opendir (*$) {
     }
 
     # This is how we tell if the file is open by something.
-    my $abs_path = $mock_dir->{'path'};
+    # $abs_path already holds the resolved path from _find_file_or_fh above.
     $mock_dir->{'obj'} = Test::MockFile::DirHandle->new( $abs_path, $mock_dir->contents() );
     $mock_dir->{'fh'}  = "$_[0]";
 
