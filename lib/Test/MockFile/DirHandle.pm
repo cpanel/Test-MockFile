@@ -74,7 +74,7 @@ Todd Rinaldo, C<< <toddr at cpan.org> >>
 =head1 BUGS
 
 Please report any bugs or feature requests to
-L<https://github.com/CpanelInc/Test-MockFile>.
+L<https://github.com/cpanel/Test-MockFile>.
 
 =head1 SUPPORT
 
