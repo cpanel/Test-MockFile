@@ -10,7 +10,7 @@ WriteMakefile(
     ABSTRACT_FROM      => 'lib/Test/MockFile.pm',
     LICENSE            => 'artistic_2',
     PL_FILES           => {},
-    MIN_PERL_VERSION   => '5.006',
+    MIN_PERL_VERSION   => '5.010',
     CONFIGURE_REQUIRES => {
         'ExtUtils::MakeMaker' => '0',
     },
@@ -34,8 +34,8 @@ WriteMakefile(
     META_MERGE => {
         resources => {
             license    => 'http://dev.perl.org/licenses/',
-            bugtracker => 'https://github.com/cpanelinc/Test-MockFile/issues',
-            repository => 'https://github.com/cpanelinc/Test-MockFile',
+            bugtracker => 'https://github.com/cpanel/Test-MockFile/issues',
+            repository => 'https://github.com/cpanel/Test-MockFile',
         }
     },
 );

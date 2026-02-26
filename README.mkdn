@@ -498,7 +498,7 @@ Todd Rinaldo, `<toddr at cpan.org>`
 # BUGS
 
 Please report any bugs or feature requests to
-[https://github.com/CpanelInc/Test-MockFile](https://github.com/CpanelInc/Test-MockFile).
+[https://github.com/cpanel/Test-MockFile](https://github.com/cpanel/Test-MockFile).
 
 # SUPPORT
 
