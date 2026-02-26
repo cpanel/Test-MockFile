@@ -11,7 +11,7 @@ use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 
-use Errno qw/ENOENT EBADF/;
+use Errno qw/ENOENT EBADF ELOOP/;
 
 use Test::MockFile;
 
@@ -101,6 +101,51 @@ subtest '-e succeeds for existing mock' => sub {
 
     ok( $exists, '-e returns true for file mocked with content' );
     is( $! + 0, 0, '$! is not set after successful -e' );
+};
+
+subtest '-e on broken symlink sets ENOENT (not ELOOP)' => sub {
+    # Symlink to a target with no mock = broken symlink
+    my $link = Test::MockFile->symlink( '/nonexistent_target', '/broken_stat_link' );
+
+    $! = 0;
+    my $exists = -e '/broken_stat_link';
+
+    ok( !$exists, '-e returns false for broken symlink' );
+    is( $! + 0, ENOENT, '$! is ENOENT (not ELOOP) for broken symlink' );
+};
+
+subtest 'stat on broken symlink sets ENOENT' => sub {
+    my $link = Test::MockFile->symlink( '/no_such_target', '/broken_stat_link2' );
+
+    $! = 0;
+    my @st = stat('/broken_stat_link2');
+
+    is( scalar @st, 0, 'stat returns empty list for broken symlink' );
+    todo 'Overload::FileCheck XS clobbers errno on stat failure path' => sub {
+        is( $! + 0, ENOENT, '$! is ENOENT after stat on broken symlink' );
+    };
+};
+
+subtest '-e on circular symlink sets ELOOP' => sub {
+    # Two symlinks pointing at each other = circular
+    my $a = Test::MockFile->symlink( '/circ_b', '/circ_a' );
+    my $b = Test::MockFile->symlink( '/circ_a', '/circ_b' );
+
+    $! = 0;
+    my $exists = -e '/circ_a';
+
+    ok( !$exists, '-e returns false for circular symlink' );
+    is( $! + 0, ELOOP, '$! is ELOOP for circular symlink' );
+};
+
+subtest 'lstat on broken symlink succeeds (reports the link itself)' => sub {
+    my $link = Test::MockFile->symlink( '/nowhere', '/broken_lstat_link' );
+
+    $! = 0;
+    my @st = lstat('/broken_lstat_link');
+
+    ok( scalar @st > 0, 'lstat returns stats for broken symlink (the link itself)' );
+    is( $! + 0, 0, '$! is not set after successful lstat on broken symlink' );
 };
 
 done_testing();

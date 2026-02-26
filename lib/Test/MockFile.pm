@@ -1036,10 +1036,13 @@ sub _mock_stat {
     # Find the path, following the symlink if required.
     my $file = _find_file_or_fh( $file_or_fh, $follow_link );
 
+    # Broken symlink: target doesn't exist → ENOENT
     if ( defined $file && defined BROKEN_SYMLINK && $file eq BROKEN_SYMLINK ) {
-        $! = ELOOP;
+        $! = ENOENT;
         return 0;
     }
+
+    # Circular symlink: too many levels of indirection → ELOOP
     if ( defined $file && defined CIRCULAR_SYMLINK && $file eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
         return 0;
