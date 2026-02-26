@@ -8,7 +8,7 @@
 # end of a socketpair to hang waiting for EOF.
 #
 # Root cause: $_last_call_for in Overload::FileCheck stored filehandle refs.
-# Fix: Only cache string filenames, not refs.
+# Fix: Only cache string filenames, not refs (Overload::FileCheck PR #25).
 
 use strict;
 use warnings;
@@ -21,24 +21,8 @@ use Socket;
 
 use Test::MockFile qw< nostrict >;
 
-# Probe: check if Overload::FileCheck has the ref leak fix.
-# Without it (O::FC PR #25), $_last_call_for retains fh refs.
-my $ofc_has_fix;
-{
-    my $probe;
-    {
-        open my $fh, '<', '/dev/null' or die "Cannot open /dev/null: $!";
-        $probe = $fh;
-        Scalar::Util::weaken($probe);
-        no warnings;
-        -f $fh;
-    }
-    $ofc_has_fix = !defined $probe;
-}
-
 # Test 1: Filehandle passed to -f is not retained
-SKIP: {
-    skip "Overload::FileCheck does not have ref leak fix (PR #25)", 1 unless $ofc_has_fix;
+{
     my $weak_ref;
 
     {
@@ -56,8 +40,7 @@ SKIP: {
 }
 
 # Test 2: Socket filehandle passed to -S is not retained
-SKIP: {
-    skip "Overload::FileCheck does not have ref leak fix (PR #25)", 1 unless $ofc_has_fix;
+{
     my $weak_ref;
 
     {
@@ -75,7 +58,6 @@ SKIP: {
 # Test 3: The exact scenario from GH #179 — socketpair with dup'd fd
 # This would hang without the fix because the dup'd write handle stays open.
 SKIP: {
-    skip "Overload::FileCheck does not have ref leak fix (PR #25)", 1 unless $ofc_has_fix;
     skip "socketpair not available", 1 unless eval { socketpair my $a, my $b, AF_UNIX, SOCK_STREAM, 0; 1 };
 
     my $pid = fork();
