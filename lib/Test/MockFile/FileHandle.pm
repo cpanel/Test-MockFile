@@ -142,7 +142,7 @@ sub PRINT {
         $self->{'tell'} = $tell + length($output);
     }
 
-    return length($output);
+    return 1;
 }
 
 =head2 PRINTF
@@ -203,7 +203,8 @@ sub WRITE {
         $offset = $strlen + $offset;
     }
 
-    return $self->PRINT( substr( $buf, $offset, $len ) );
+    $self->PRINT( substr( $buf, $offset, $len ) );
+    return $len;
 }
 
 =head2 READLINE
