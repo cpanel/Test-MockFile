@@ -199,6 +199,12 @@ sub WRITE {
         $offset = $strlen + $offset;
     }
 
+    if ( $offset < 0 || $offset > $strlen ) {
+        CORE::warn(qq{Offset outside string at @{[ join ' line ', (caller)[1,2] ]}.\n});
+        $! = EINVAL;
+        return 0;
+    }
+
     $self->PRINT( substr( $buf, $offset, $len ) );
     return $len;
 }
