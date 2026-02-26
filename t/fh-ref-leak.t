@@ -57,21 +57,17 @@ use Test::MockFile qw< nostrict >;
 
 # Test 3: The exact scenario from GH #179 — socketpair with dup'd fd
 # This would hang without the fix because the dup'd write handle stays open.
-SKIP: {
-    skip "socketpair not available", 1 unless eval { socketpair my $a, my $b, AF_UNIX, SOCK_STREAM, 0; 1 };
+{
+    socketpair my $r, my $w, AF_UNIX, SOCK_STREAM, 0
+        or die "socketpair: $!";
 
     my $pid = fork();
-    if ( !defined $pid ) {
-        skip "fork not available", 1;
-    }
+    die "fork: $!" unless defined $pid;
 
     if ( $pid == 0 ) {
         # Child: reproduce the bug scenario with a timeout
         $SIG{ALRM} = sub { exit 1 };    # exit 1 = hung (bug present)
         alarm(5);
-
-        socketpair my $r, my $w, AF_UNIX, SOCK_STREAM, 0
-            or exit 2;
 
         my $fd = fileno $w;
         do {
@@ -84,6 +80,7 @@ SKIP: {
         exit 0;             # exit 0 = success (no hang)
     }
 
+    close $w;
     waitpid $pid, 0;
     my $exit = $? >> 8;
 
