@@ -6,7 +6,7 @@ use warnings;
 use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 
-use Errno qw/ELOOP ENOTEMPTY ENOENT/;
+use Errno qw/ELOOP ENOTEMPTY ENOENT EINVAL/;
 use Fcntl;
 
 use Test::MockFile qw< nostrict >;
@@ -46,6 +46,7 @@ subtest "syswrite with non-numeric length warns" => sub {
 
     my $ret = syswrite( $fh, "hello", "abc" );
     is( $ret, 0, "syswrite with non-numeric len returns 0" );
+    is( $! + 0, EINVAL, "\$! is set to EINVAL" );
     ok( scalar @warnings >= 1, "got a warning" );
     like( $warnings[0], qr/isn't numeric/, "warning mentions non-numeric argument" ) if @warnings;
 
@@ -61,6 +62,7 @@ subtest "syswrite with negative length warns" => sub {
 
     my $ret = syswrite( $fh, "hello", -1 );
     is( $ret, 0, "syswrite with negative length returns 0" );
+    is( $! + 0, EINVAL, "\$! is set to EINVAL" );
     ok( scalar @warnings >= 1, "got a warning" );
     like( $warnings[0], qr/Negative length/, "warning mentions negative length" ) if @warnings;
 
@@ -76,6 +78,7 @@ subtest "syswrite with offset outside string warns" => sub {
 
     my $ret = syswrite( $fh, "hello", 2, 100 );
     is( $ret, 0, "syswrite with offset beyond string returns 0" );
+    is( $! + 0, EINVAL, "\$! is set to EINVAL" );
     ok( scalar @warnings >= 1, "got a warning" );
     like( $warnings[0], qr/Offset outside string/, "warning mentions offset" ) if @warnings;
 
@@ -102,6 +105,7 @@ subtest "syswrite with too-negative offset warns" => sub {
 
     my $ret = syswrite( $fh, "hello", 2, -10 );
     is( $ret, 0, "syswrite with offset before start of string returns 0" );
+    is( $! + 0, EINVAL, "\$! is set to EINVAL" );
     ok( scalar @warnings >= 1, "got a warning" );
     like( $warnings[0], qr/Offset outside string/, "warning mentions offset" ) if @warnings;
 

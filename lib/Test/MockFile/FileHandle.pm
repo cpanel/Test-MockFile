@@ -9,7 +9,7 @@ package Test::MockFile::FileHandle;
 
 use strict;
 use warnings;
-use Errno qw/EBADF/;
+use Errno qw/EBADF EINVAL/;
 use Scalar::Util ();
 
 our $VERSION = '0.037';
@@ -180,6 +180,7 @@ sub WRITE {
 
     unless ( $len =~ m/^-?[0-9.]+$/ ) {
         CORE::warn(qq{Argument "$len" isn't numeric in syswrite at @{[ join ' line ', (caller)[1,2] ]}.\n});
+        $! = EINVAL;
         return 0;
     }
 
@@ -187,6 +188,7 @@ sub WRITE {
 
     if ( $len < 0 ) {
         CORE::warn(qq{Negative length at @{[ join ' line ', (caller)[1,2] ]}.\n});
+        $! = EINVAL;
         return 0;
     }
 
