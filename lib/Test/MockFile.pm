@@ -3167,7 +3167,7 @@ sub __chmod (@) {
             next;
         }
 
-        $mock->{'mode'} = ( $mock->{'mode'} & S_IFMT ) + $mode;
+        $mock->{'mode'} = ( $mock->{'mode'} & S_IFMT ) | ( $mode & S_IFPERMS );
 
         $num_changed++;
     }
