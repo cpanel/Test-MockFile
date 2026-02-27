@@ -249,5 +249,53 @@ note "O_NOFOLLOW on a symlink returns ELOOP";
     is( $! + 0, ELOOP, 'sysopen with O_NOFOLLOW on symlink sets $! to ELOOP' );
 }
 
+note "sysopen on non-existent file without O_CREAT returns ENOENT for all modes";
+{
+    use Errno qw/ENOENT/;
+
+    my $mock = Test::MockFile->file('/enoent_test');
+    ok( !-e '/enoent_test', 'mock file does not exist' );
+
+    # O_RDONLY without O_CREAT on non-existent file
+    $! = 0;
+    my $ret_ro = sysopen( my $fh_ro, '/enoent_test', O_RDONLY );
+    ok( !$ret_ro,            'sysopen O_RDONLY on non-existent file returns false' );
+    is( $! + 0, ENOENT,     'sysopen O_RDONLY on non-existent file sets ENOENT' );
+
+    # O_WRONLY without O_CREAT on non-existent file
+    $! = 0;
+    my $ret_wo = sysopen( my $fh_wo, '/enoent_test', O_WRONLY );
+    ok( !$ret_wo,            'sysopen O_WRONLY on non-existent file returns false' );
+    is( $! + 0, ENOENT,     'sysopen O_WRONLY on non-existent file sets ENOENT' );
+
+    # O_RDWR without O_CREAT on non-existent file
+    $! = 0;
+    my $ret_rw = sysopen( my $fh_rw, '/enoent_test', O_RDWR );
+    ok( !$ret_rw,            'sysopen O_RDWR on non-existent file returns false' );
+    is( $! + 0, ENOENT,     'sysopen O_RDWR on non-existent file sets ENOENT' );
+}
+
+note "sysopen O_WRONLY|O_CREAT on non-existent file succeeds (O_CREAT creates the file)";
+{
+    my $mock = Test::MockFile->file('/creat_test');
+    ok( !-e '/creat_test', 'mock file does not exist before O_CREAT' );
+
+    is( sysopen( my $fh, '/creat_test', O_WRONLY | O_CREAT ), 1, 'sysopen O_WRONLY|O_CREAT succeeds' );
+    ok( -e '/creat_test', 'file exists after O_CREAT' );
+    close $fh;
+}
+
+note "sysopen failure returns empty list in list context";
+{
+    use Errno qw/ENOENT/;
+
+    my $mock = Test::MockFile->file('/list_ctx_test');
+
+    my @ret = sysopen( my $fh, '/list_ctx_test', O_RDONLY );
+    is( scalar @ret, 1,          'sysopen failure returns one element in list context' );
+    ok( !$ret[0],                'sysopen failure element is false' );
+    ok( !defined $ret[0],        'sysopen failure element is undef (not "undef" string)' );
+}
+
 done_testing();
 exit;
