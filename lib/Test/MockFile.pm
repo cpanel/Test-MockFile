@@ -731,7 +731,8 @@ sub import {
     if ( $INC{'autodie.pm'} || $INC{'Fatal.pm'} ) {
         my $hints = ( caller(0) )[10];
         if (   ref $hints eq 'HASH'
-            && ( $hints->{'autodie'} || $hints->{'Fatal::open'} || $hints->{'autodie::open'} ) )
+            && ( $hints->{'autodie'} || $hints->{'Fatal::open'} || $hints->{'autodie::open'}
+              || $hints->{'Fatal::sysopen'} || $hints->{'autodie::sysopen'} ) )
         {
             $_autodie_callers{$caller} = 1;
         }
@@ -813,6 +814,45 @@ sub _throw_autodie_open {
         );
     }
     die sprintf( "Can't open '%s': '%s'", $file, $! );
+}
+
+# Check if autodie is active for 'sysopen' in the caller's scope.
+# Same strategy as _caller_has_autodie_for_open but checks sysopen hints.
+sub _caller_has_autodie_for_sysopen {
+    return unless $INC{'autodie.pm'} || $INC{'Fatal.pm'};
+
+    # Primary: walk the caller stack for lexical hints set by autodie.
+    for my $depth ( 1 .. 10 ) {
+        my @c = caller($depth);
+        last unless @c;
+        my $hints = $c[10];
+        next unless ref $hints eq 'HASH';
+        return 1
+          if $hints->{'autodie'}
+          || $hints->{'Fatal::sysopen'}
+          || $hints->{'autodie::sysopen'};
+    }
+
+    # Fallback: check if the calling package had autodie active at import time.
+    my $caller_pkg = caller(1);
+    return $_autodie_callers{$caller_pkg} if $caller_pkg;
+
+    return;
+}
+
+# Throw an autodie-compatible exception for a failed sysopen.
+sub _throw_autodie_sysopen {
+    my ($file, @args) = @_;
+    if ( eval { require autodie::exception; 1 } ) {
+        die autodie::exception->new(
+            function => 'CORE::sysopen',
+            args     => \@args,
+            errno    => "$!",
+            context  => 'scalar',
+            return   => undef,
+        );
+    }
+    die sprintf( "Can't sysopen '%s': '%s'", $file, $! );
 }
 
 # Re-install after all compilation to handle the case where
@@ -2712,6 +2752,7 @@ sub __sysopen (*$$;$) {
         $mock_file = _get_file_object( $_[1] );
         if ( $mock_file && $mock_file->is_link ) {
             $! = ELOOP;
+            _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
             return undef;
         }
     }
@@ -2719,10 +2760,12 @@ sub __sysopen (*$$;$) {
         $abs_path = _find_file_or_fh( $_[1], 1 );
         if ( $abs_path && $abs_path eq BROKEN_SYMLINK ) {
             $! = ENOENT;
+            _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
             return undef;
         }
         if ( $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
-            # $! already set to ELOOP by _find_file_or_fh
+            $! = ELOOP;
+            _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
             return undef;
         }
         $mock_file = $abs_path ? $files_being_mocked{$abs_path} : undef;
@@ -2746,12 +2789,14 @@ sub __sysopen (*$$;$) {
     # Directories cannot be opened as regular files.
     if ( $mock_file->is_dir() ) {
         $! = EISDIR;
+        _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
         return undef;
     }
 
     # O_EXCL
     if ( $sysopen_mode & O_EXCL && $sysopen_mode & O_CREAT && defined $mock_file->{'contents'} ) {
         $! = EEXIST;
+        _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
         return undef;
     }
 
@@ -2788,6 +2833,7 @@ sub __sysopen (*$$;$) {
     # O_CREAT would have already populated contents above if it was requested.
     if ( !defined $mock_file->{'contents'} ) {
         $! = ENOENT;
+        _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
         return undef;
     }
 
