@@ -72,7 +72,7 @@ is( $! + 0,                                       ENOTDIR, '$! numeric is right.
 
 # Check symlinks appear in readdir
 my $dir_for_symlink = Test::MockFile->dir('/foo');
-my $dir_in_dir      = Test::MockFile->dir('/foo/infoo');
+my $dir_in_dir      = Test::MockFile->new_dir('/foo/infoo');
 my $symlink_dest    = Test::MockFile->file( '/foo/dest', '' );
 my $symlink         = Test::MockFile->symlink( '/foo/dest', '/foo/source' );
 
