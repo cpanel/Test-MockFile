@@ -2595,12 +2595,12 @@ sub __open (*;$@) {
     if ( $abs_path eq BROKEN_SYMLINK ) {
         $! = ENOENT;
         _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
-        return;
+        return undef;
     }
     if ( $abs_path eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
         _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
-        return;
+        return undef;
     }
 
     my $mock_file = _get_file_object($abs_path);
@@ -2638,14 +2638,14 @@ sub __open (*;$@) {
     # Directories cannot be opened as regular files.
     if ( $mock_file->is_dir() ) {
         $! = EISDIR;
-        return;
+        return undef;
     }
 
     # If contents is undef, we act like the file isn't there.
     if ( !defined $mock_file->contents() && grep { $mode eq $_ } qw/< +</ ) {
         $! = ENOENT;
         _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
-        return;
+        return undef;
     }
 
     my $rw = '';
