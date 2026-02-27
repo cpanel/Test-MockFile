@@ -70,11 +70,14 @@ use Test::MockFile qw< nostrict >;
     is( $st[7], length($long_target), 'symlink size matches long target path length' );
 }
 
-# -s on a symlink follows to the target (stat, not lstat)
+# stat on a symlink follows to the target; lstat returns symlink's own size
 {
     my $target = Test::MockFile->file( '/target/file', 'hello world!' );
     my $link   = Test::MockFile->symlink( '/target/file', '/test_link_dash_s' );
-    is( -s '/test_link_dash_s', 12, '-s on symlink returns target file size (follows symlink)' );
+
+    # stat follows the symlink — size should be the target file's content length
+    my @st_stat = stat('/test_link_dash_s');
+    is( $st_stat[7], 12, 'stat on symlink returns target file size (follows symlink)' );
 
     # lstat size of the symlink itself = length of target path
     my @st = lstat('/test_link_dash_s');
