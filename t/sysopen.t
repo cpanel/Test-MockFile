@@ -285,7 +285,7 @@ note "sysopen O_WRONLY|O_CREAT on non-existent file succeeds (O_CREAT creates th
     close $fh;
 }
 
-note "sysopen failure returns empty list in list context";
+note "sysopen failure returns undef in list context (single-element list)";
 {
     use Errno qw/ENOENT/;
 
