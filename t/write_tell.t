@@ -8,6 +8,7 @@ use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 
 use Fcntl qw( O_RDWR O_CREAT O_TRUNC O_WRONLY );
+use Errno qw( EBADF EINVAL );
 
 use Test::MockFile qw< nostrict >;
 
@@ -237,6 +238,200 @@ use Test::MockFile qw< nostrict >;
 
     close $fh;
     is( $mock->contents, "ABXYEFGH", "Overwrite in > mode at seek position" );
+}
+
+{
+    note "--- syswrite must NOT inherit output record separator (\$\\) ---";
+
+    my $mock = Test::MockFile->file('/fake/syswrite_no_ors');
+    sysopen( my $fh, '/fake/syswrite_no_ors', O_WRONLY | O_CREAT | O_TRUNC ) or die;
+
+    {
+        local $\ = "\n";
+        syswrite( $fh, "Hello", 5 );
+    }
+    is( tell($fh), 5, "tell is 5 after syswrite (no ORS added)" );
+
+    close $fh;
+    is( $mock->contents, "Hello", "syswrite ignores \$\\ — no newline appended" );
+}
+
+{
+    note "--- syswrite must NOT inherit output field separator (\$,) ---";
+
+    my $mock = Test::MockFile->file('/fake/syswrite_no_ofs');
+    sysopen( my $fh, '/fake/syswrite_no_ofs', O_WRONLY | O_CREAT | O_TRUNC ) or die;
+
+    {
+        local $, = ",";
+        syswrite( $fh, "Hello", 5 );
+    }
+    is( tell($fh), 5, "tell is 5 after syswrite with \$, set" );
+
+    close $fh;
+    is( $mock->contents, "Hello", "syswrite ignores \$, — no separator" );
+}
+
+{
+    note "--- syswrite returns byte count, not boolean ---";
+
+    my $mock = Test::MockFile->file('/fake/syswrite_return');
+    sysopen( my $fh, '/fake/syswrite_return', O_WRONLY | O_CREAT | O_TRUNC ) or die;
+
+    my $ret = syswrite( $fh, "ABCDE", 5 );
+    is( $ret, 5, "syswrite returns 5 for 5 bytes written" );
+
+    $ret = syswrite( $fh, "XY", 2 );
+    is( $ret, 2, "syswrite returns 2 for 2 bytes written" );
+
+    # syswrite with $\ set should NOT include $\ in return value
+    {
+        local $\ = "\n";
+        $ret = syswrite( $fh, "end", 3 );
+    }
+    is( $ret, 3, "syswrite returns 3 even with \$\\ set (not 4)" );
+
+    close $fh;
+    is( $mock->contents, "ABCDEXYend", "All syswrite data correct, no ORS" );
+}
+
+{
+    note "--- contrast: print DOES use \$\\ while syswrite does NOT ---";
+
+    my $mock = Test::MockFile->file('/fake/print_vs_syswrite');
+    sysopen( my $fh, '/fake/print_vs_syswrite', O_RDWR | O_CREAT | O_TRUNC ) or die;
+
+    {
+        local $\ = "!";
+
+        # print should append $\
+        print $fh "Hello";
+
+        # syswrite should NOT append $\
+        syswrite( $fh, "World", 5 );
+    }
+
+    close $fh;
+    is( $mock->contents, "Hello!World", "print appends ORS, syswrite does not" );
+}
+
+{
+    note "--- syswrite on read-only handle returns EBADF ---";
+
+    my $mock = Test::MockFile->file( '/fake/syswrite_ebadf', "read only data" );
+    open( my $fh, '<', '/fake/syswrite_ebadf' ) or die;
+
+    local $!;
+    my $ret = syswrite( $fh, "nope", 4 );
+    is( $ret, 0, "syswrite on read-only handle returns 0" );
+    is( $! + 0, EBADF, "errno is EBADF for syswrite on read-only handle" );
+
+    close $fh;
+}
+
+{
+    note "--- syswrite with negative offset (counts from end of buffer) ---";
+
+    my $mock = Test::MockFile->file('/fake/syswrite_neg_offset');
+    sysopen( my $fh, '/fake/syswrite_neg_offset', O_WRONLY | O_CREAT | O_TRUNC ) or die;
+
+    # syswrite with offset -2 on "ABCDE" → starts at position 3, writes "DE"
+    my $ret = syswrite( $fh, "ABCDE", 2, -2 );
+    is( $ret, 2, "syswrite with negative offset returns bytes written" );
+
+    close $fh;
+    is( $mock->contents, "DE", "syswrite with offset -2 writes last 2 bytes of buffer" );
+}
+
+{
+    note "--- syswrite with negative offset past buffer start → error ---";
+
+    my $mock = Test::MockFile->file('/fake/syswrite_neg_oob');
+    sysopen( my $fh, '/fake/syswrite_neg_oob', O_WRONLY | O_CREAT | O_TRUNC ) or die;
+
+    # offset -10 on a 3-char string: abs(-10) > 3 → error
+    local $!;
+    my @warns;
+    local $SIG{__WARN__} = sub { push @warns, $_[0] };
+    my $ret = syswrite( $fh, "abc", 3, -10 );
+    is( $ret, 0, "syswrite with offset past buffer start returns 0" );
+    is( $! + 0, EINVAL, "errno is EINVAL for out-of-bounds negative offset" );
+    ok( grep( /Offset outside string/, @warns ), "warning emitted for out-of-bounds negative offset" );
+
+    close $fh;
+    is( $mock->contents, '', "no data written on out-of-bounds negative offset" );
+}
+
+{
+    note "--- syswrite with positive offset past buffer end → error ---";
+
+    my $mock = Test::MockFile->file('/fake/syswrite_pos_oob');
+    sysopen( my $fh, '/fake/syswrite_pos_oob', O_WRONLY | O_CREAT | O_TRUNC ) or die;
+
+    # offset 10 on a 3-char string → error
+    local $!;
+    my @warns;
+    local $SIG{__WARN__} = sub { push @warns, $_[0] };
+    my $ret = syswrite( $fh, "abc", 3, 10 );
+    is( $ret, 0, "syswrite with offset past buffer end returns 0" );
+    is( $! + 0, EINVAL, "errno is EINVAL for out-of-bounds positive offset" );
+    ok( grep( /Offset outside string/, @warns ), "warning emitted for out-of-bounds positive offset" );
+
+    close $fh;
+    is( $mock->contents, '', "no data written on out-of-bounds positive offset" );
+}
+
+{
+    note "--- syswrite with len exceeding available data (truncates silently) ---";
+
+    my $mock = Test::MockFile->file('/fake/syswrite_truncate');
+    sysopen( my $fh, '/fake/syswrite_truncate', O_WRONLY | O_CREAT | O_TRUNC ) or die;
+
+    # Ask for 100 bytes from offset 2 of "ABCDE" — only 3 available
+    my $ret = syswrite( $fh, "ABCDE", 100, 2 );
+    is( $ret, 3, "syswrite returns actual bytes written when len exceeds buffer" );
+
+    close $fh;
+    is( $mock->contents, "CDE", "syswrite truncates to available data" );
+}
+
+{
+    note "--- printf must NOT inherit output record separator (\$\\) ---";
+
+    my $mock = Test::MockFile->file('/fake/printf_no_ors');
+    open( my $fh, '>', '/fake/printf_no_ors' ) or die;
+
+    {
+        local $\ = "\n";
+        printf $fh "%s=%d", "count", 42;
+    }
+    is( tell($fh), 8, "tell is 8 after printf (no ORS added)" );
+
+    close $fh;
+    is( $mock->contents, "count=42", "printf ignores \$\\ — no newline appended" );
+}
+
+{
+    note "--- contrast: print uses \$\\, printf and syswrite do not ---";
+
+    my $mock = Test::MockFile->file('/fake/print_printf_syswrite');
+    sysopen( my $fh, '/fake/print_printf_syswrite', O_RDWR | O_CREAT | O_TRUNC ) or die;
+
+    {
+        local $\ = "!";
+
+        # print appends $\
+        print $fh "A";
+
+        # printf does NOT append $\
+        printf $fh "%s", "B";
+
+        # syswrite does NOT append $\
+        syswrite( $fh, "C", 1 );
+    }
+
+    close $fh;
+    is( $mock->contents, "A!BC", "print appends ORS; printf and syswrite do not" );
 }
 
 is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" );
