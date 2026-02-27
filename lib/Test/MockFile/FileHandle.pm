@@ -99,6 +99,34 @@ C<$!> to EBADF and return.
 
 =cut
 
+# _write_bytes: raw write of $output at the current tell position.
+# This is the shared engine for both PRINT and WRITE.
+# Returns the number of bytes written.
+sub _write_bytes {
+    my ( $self, $output ) = @_;
+
+    my $tell     = $self->{'tell'};
+    my $contents = \$self->{'data'}->{'contents'};
+
+    if ( $self->{'append'} ) {
+        # Append mode (>> / +>>): always write at end regardless of tell.
+        $$contents .= $output;
+        $self->{'tell'} = length $$contents;
+    }
+    else {
+        # Overwrite at tell position (>, +<, +>).
+        # Pad with null bytes if tell is past end of current contents.
+        my $content_len = length $$contents;
+        if ( $tell > $content_len ) {
+            $$contents .= "\0" x ( $tell - $content_len );
+        }
+        substr( $$contents, $tell, length($output), $output );
+        $self->{'tell'} = $tell + length($output);
+    }
+
+    return length($output);
+}
+
 sub PRINT {
     my ( $self, @list ) = @_;
 
@@ -123,24 +151,7 @@ sub PRINT {
     # at the C level after PRINT returns), so this only covers explicit usage.
     $output .= $\ if defined $\;
 
-    my $tell     = $self->{'tell'};
-    my $contents = \$self->{'data'}->{'contents'};
-
-    if ( $self->{'append'} ) {
-        # Append mode (>> / +>>): always write at end regardless of tell.
-        $$contents .= $output;
-        $self->{'tell'} = length $$contents;
-    }
-    else {
-        # Overwrite at tell position (>, +<, +>).
-        # Pad with null bytes if tell is past end of current contents.
-        my $content_len = length $$contents;
-        if ( $tell > $content_len ) {
-            $$contents .= "\0" x ( $tell - $content_len );
-        }
-        substr( $$contents, $tell, length($output), $output );
-        $self->{'tell'} = $tell + length($output);
-    }
+    $self->_write_bytes($output);
 
     return 1;
 }
@@ -151,7 +162,9 @@ This method will be triggered every time the tied handle is printed to
 with the printf() function. Beyond its self reference it also expects
 the format and list that was passed to the printf function.
 
-We use sprintf to format the output and then it is sent to L<PRINT>
+Per L<perlfunc/printf>, C<printf> does B<not> append C<$\> (the output
+record separator), unlike C<print>. We therefore write directly via
+C<_write_bytes> instead of delegating to C<PRINT>.
 
 =cut
 
@@ -159,7 +172,14 @@ sub PRINTF {
     my $self   = shift;
     my $format = shift;
 
-    return $self->PRINT( sprintf( $format, @_ ) );
+    if ( !$self->{'write'} ) {
+        $! = EBADF;
+        return;
+    }
+
+    $self->_write_bytes( sprintf( $format, @_ ) );
+
+    return 1;
 }
 
 =head2 WRITE
@@ -177,6 +197,11 @@ works reveals there are all sorts of weird corner cases.
 
 sub WRITE {
     my ( $self, $buf, $len, $offset ) = @_;
+
+    if ( !$self->{'write'} ) {
+        $! = EBADF;
+        return 0;
+    }
 
     unless ( $len =~ m/^-?[0-9.]+$/ ) {
         CORE::warn(qq{Argument "$len" isn't numeric in syswrite at @{[ join ' line ', (caller)[1,2] ]}.\n});
@@ -205,8 +230,10 @@ sub WRITE {
         return 0;
     }
 
-    $self->PRINT( substr( $buf, $offset, $len ) );
-    return $len;
+    # Write directly — syswrite must NOT inherit $, or $\ from PRINT.
+    # Per perlapi: if len exceeds available data after offset, writes
+    # only what is available (substr handles this naturally).
+    return $self->_write_bytes( substr( $buf, $offset, $len ) );
 }
 
 =head2 READLINE
