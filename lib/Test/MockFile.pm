@@ -3044,15 +3044,23 @@ sub __chown (@) {
         );
     }
 
-    # -1 means "keep as is"
-    $uid == -1 and $uid = $>;
-    $gid == -1 and $gid = $);
+    # Permission check uses the actual target uid/gid (not -1).
+    # -1 means "keep as is" and is handled per-file below.
+    my $target_uid = $uid == -1 ? $> : $uid;
+    my ($primary_gid) = split /\s/, $);    # $) is "gid supplementary..." — extract primary
+    my $target_gid = $gid == -1 ? $primary_gid : $gid;
 
     my $is_root     = $> == 0 || $) =~ /( ^ | \s ) 0 ( \s | $)/xms;
-    my $is_in_group = grep /(^ | \s ) \Q$gid\E ( \s | $ )/xms, $);
+    my $is_in_group = grep /(^ | \s ) \Q$target_gid\E ( \s | $ )/xms, $);
 
-    # TODO: Perl has an odd behavior that -1, -1 on a file that isn't owned by you still works
-    # Not sure how to write a test for it though...
+    # Only check permissions once (before the loop), not per-file.
+    # -1 means "keep as is" — no permission needed for unchanged fields.
+    if ( !$is_root && $uid != -1 && $gid != -1 ) {
+        if ( $> != $target_uid || !$is_in_group ) {
+            $! = EPERM;
+            return 0;
+        }
+    }
 
     my $set_error;
     my $num_changed = 0;
@@ -3089,19 +3097,9 @@ sub __chown (@) {
             next;
         }
 
-        # root can do anything, but you can't
-        # and if we are here, no point in keep trying
-        if ( !$is_root ) {
-            if ( $> != $uid || !$is_in_group ) {
-                $set_error
-                  or $! = EPERM;
-
-                last;
-            }
-        }
-
-        $mock->{'uid'} = $uid;
-        $mock->{'gid'} = $gid;
+        # -1 means "keep as is" — preserve the file's current value
+        $mock->{'uid'} = $uid == -1 ? $mock->{'uid'} : $uid;
+        $mock->{'gid'} = $gid == -1 ? $mock->{'gid'} : $gid;
 
         $num_changed++;
     }

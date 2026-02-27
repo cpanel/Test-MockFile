@@ -213,5 +213,36 @@ subtest(
     }
 );
 
+subtest(
+    'chown -1 preserves per-file ownership, not process identity' => sub {
+        # Create a file with non-default ownership
+        my $custom_uid = 12345;
+        my $custom_gid = 67890;
+        my $file = Test::MockFile->file(
+            '/chown_test_preserve' => 'data',
+            { uid => $custom_uid, gid => $custom_gid },
+        );
+
+        # chown(-1, -1) should keep the custom values, not replace with $> / $)
+        ok( chown( -1, -1, '/chown_test_preserve' ), 'chown(-1, -1) succeeds' );
+
+        my @st = stat('/chown_test_preserve');
+        is( $st[4], $custom_uid, 'uid preserved (not replaced with process uid)' );
+        is( $st[5], $custom_gid, 'gid preserved (not replaced with process gid)' );
+
+        # chown($new_uid, -1) should change uid but preserve gid
+        ok( chown( 99, -1, '/chown_test_preserve' ), 'chown(99, -1) succeeds' );
+        @st = stat('/chown_test_preserve');
+        is( $st[4], 99,          'uid changed to 99' );
+        is( $st[5], $custom_gid, 'gid still preserved after uid-only change' );
+
+        # chown(-1, $new_gid) should preserve uid but change gid
+        ok( chown( -1, 42, '/chown_test_preserve' ), 'chown(-1, 42) succeeds' );
+        @st = stat('/chown_test_preserve');
+        is( $st[4], 99, 'uid still preserved after gid-only change' );
+        is( $st[5], 42, 'gid changed to 42' );
+    }
+);
+
 done_testing();
 exit;
