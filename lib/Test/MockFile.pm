@@ -1402,6 +1402,72 @@ sub _get_file_object_follow_link {
     return $files_being_mocked{$resolved};
 }
 
+# Creates a file mock at the target of a broken symlink chain.
+# Used when open/sysopen with a create-capable mode needs to create the target.
+# The new mock is attached to the last symlink in the chain (which holds the
+# strong ref) so it stays alive as long as the symlink mock does.
+# Returns the absolute path of the newly created mock, or undef on failure.
+sub _create_file_through_broken_symlink {
+    my ($path) = @_;
+
+    my $abs = _abs_path_to_file($path);
+    return unless defined $abs;
+
+    my $depth           = 0;
+    my $last_link_abs;
+    while ( my $mock = $files_being_mocked{$abs} ) {
+        return unless $mock->is_link;    # Not a symlink — nothing to resolve
+        $last_link_abs = $abs;
+        my $target = $mock->readlink;
+        return unless defined $target && length $target;
+        $abs = _abs_path_to_file($target);
+        return unless defined $abs;
+        return if ++$depth > FOLLOW_LINK_MAX_DEPTH;    # Circular — give up
+        last unless $files_being_mocked{$abs};          # Found the broken end
+    }
+
+    return unless $last_link_abs;                        # Original path wasn't a symlink
+
+    # If autovivify can handle it, prefer that path
+    my $mock = _maybe_autovivify($abs);
+    return $abs if $mock;
+
+    # Create a non-existent file mock at the target path
+    my $perms = S_IFPERMS & 0666;
+    my $now   = time;
+    $mock = bless {
+        'dev'                    => 0,
+        'inode'                  => 0,
+        'mode'                   => ( $perms ^ umask ) | S_IFREG,
+        'nlink'                  => 0,
+        'uid'                    => int $>,
+        'gid'                    => int $),
+        'rdev'                   => 0,
+        'atime'                  => $now,
+        'mtime'                  => $now,
+        'ctime'                  => $now,
+        'blksize'                => 4096,
+        'fileno'                 => undef,
+        'tty'                    => 0,
+        'readlink'               => '',
+        'path'                   => $abs,
+        'contents'               => undef,
+        'has_content'            => undef,
+        'autovivify'             => 0,
+        '_autovivified_children' => undef,
+    }, __PACKAGE__;
+
+    $files_being_mocked{$abs} = $mock;
+    Scalar::Util::weaken( $files_being_mocked{$abs} );
+
+    # The last symlink in the chain holds the strong ref
+    my $symlink_mock = $files_being_mocked{$last_link_abs};
+    $symlink_mock->{'_autovivified_children'} //= [];
+    push @{ $symlink_mock->{'_autovivified_children'} }, $mock;
+
+    return $abs;
+}
+
 # This subroutine finds the absolute path to a file, returning the absolute path of what it ultimately points to.
 # If it is a broken link or what was passed in is undef or '', then we return undef.
 
@@ -2630,12 +2696,30 @@ sub __open (*;$@) {
     my $abs_path = _find_file_or_fh( $file, 1 );    # Follow the link.
     confess() if !$abs_path && $mode ne '|-' && $mode ne '-|';
 
-    # Broken symlinks → ENOENT (target doesn't exist).
+    # Broken symlinks: write-capable modes create the target (like real FS),
+    # read-only modes return ENOENT.
     # Circular symlinks → ELOOP (too many levels of symlinks).
     if ( $abs_path eq BROKEN_SYMLINK ) {
-        $! = ENOENT;
-        _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
-        return undef;
+        my $base_mode = $mode;
+        $base_mode =~ s/:.+$//;    # strip encoding suffix for mode check
+        if ( grep { $base_mode eq $_ } qw/> >> +> +>>/ ) {
+            my $target = _create_file_through_broken_symlink($file);
+            if ($target) {
+                $abs_path = $target;
+
+                # Fall through — new mock will be found by _get_file_object below
+            }
+            else {
+                $! = ENOENT;
+                _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
+                return undef;
+            }
+        }
+        else {
+            $! = ENOENT;
+            _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
+            return undef;
+        }
     }
     if ( $abs_path eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
@@ -2678,6 +2762,7 @@ sub __open (*;$@) {
     # Directories cannot be opened as regular files.
     if ( $mock_file->is_dir() ) {
         $! = EISDIR;
+        _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
         return undef;
     }
 
@@ -2759,9 +2844,26 @@ sub __sysopen (*$$;$) {
     else {
         $abs_path = _find_file_or_fh( $_[1], 1 );
         if ( $abs_path && $abs_path eq BROKEN_SYMLINK ) {
-            $! = ENOENT;
-            _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
-            return undef;
+
+            # O_CREAT through a broken symlink should create the target file
+            if ( $sysopen_mode & O_CREAT ) {
+                my $target = _create_file_through_broken_symlink( $_[1] );
+                if ($target) {
+                    $abs_path = $target;
+
+                    # Fall through — new mock continues below
+                }
+                else {
+                    $! = ENOENT;
+                    _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+                    return undef;
+                }
+            }
+            else {
+                $! = ENOENT;
+                _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+                return undef;
+            }
         }
         if ( $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
             $! = ELOOP;
