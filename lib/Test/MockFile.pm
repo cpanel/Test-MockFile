@@ -616,6 +616,7 @@ sub _validate_strict_rules {
 }
 
 my @plugins;
+my @_tmf_callers;
 
 # Declared before import() which references them for :trace support
 my @_public_access_hooks;
@@ -655,7 +656,59 @@ sub import {
         push @plugins, Test::MockFile::Plugins::load_plugin($what);
     }
 
+    # Install per-package overrides to handle autodie compatibility.
+    # autodie installs per-package wrappers that call CORE:: directly,
+    # bypassing CORE::GLOBAL::. By also installing into the caller's
+    # namespace, we ensure our overrides take precedence.
+    _install_package_overrides( scalar caller );
+
     return;
+}
+
+# Install goto-transparent wrappers into the caller's package namespace.
+# These use goto to preserve @_ aliasing and caller() transparency.
+sub _install_package_overrides {
+    my ($caller) = @_;
+
+    return if $caller eq __PACKAGE__;
+    return if $caller eq 'Test::MockFile::FileHandle';
+    return if $caller eq 'Test::MockFile::DirHandle';
+
+    push @_tmf_callers, $caller
+      unless grep { $_ eq $caller } @_tmf_callers;
+
+    no strict 'refs';
+    no warnings 'redefine';
+
+    *{"${caller}::open"}     = sub (*;$@)  { goto \&__open };
+    *{"${caller}::sysopen"}  = sub (*$$;$) { goto \&__sysopen };
+    *{"${caller}::opendir"}  = sub (*$)    { goto \&__opendir };
+    *{"${caller}::readdir"}  = sub (*)     { goto \&__readdir };
+    *{"${caller}::telldir"}  = sub (*)     { goto \&__telldir };
+    *{"${caller}::rewinddir"}= sub (*)     { goto \&__rewinddir };
+    *{"${caller}::seekdir"}  = sub (*$)    { goto \&__seekdir };
+    *{"${caller}::closedir"} = sub (*)     { goto \&__closedir };
+    *{"${caller}::unlink"}   = sub (@)     { goto \&__unlink };
+    *{"${caller}::readlink"} = sub (_)     { goto \&__readlink };
+    *{"${caller}::mkdir"}    = sub (_;$)   { goto \&__mkdir };
+    *{"${caller}::rmdir"}    = sub (_)     { goto \&__rmdir };
+    *{"${caller}::chown"}    = sub (@)     { goto \&__chown };
+    *{"${caller}::chmod"}    = sub (@)     { goto \&__chmod };
+}
+
+# Re-install after all compilation to handle the case where
+# autodie is loaded after Test::MockFile (autodie's import()
+# would overwrite our per-package overrides during compilation).
+# Wrapped in BEGIN+eval to avoid "Too late to run CHECK block"
+# warning when the module is loaded at runtime via require.
+# ${^GLOBAL_PHASE} requires Perl 5.14+; on older Perls we skip
+# the CHECK block entirely (import-time installation is sufficient
+# when autodie is loaded before Test::MockFile).
+BEGIN {
+    if ( $] >= 5.014 ) {
+        eval 'CHECK { _install_package_overrides($_) for @_tmf_callers }'
+          unless ${^GLOBAL_PHASE} eq 'RUN';
+    }
 }
 
 =head1 SUBROUTINES/METHODS
