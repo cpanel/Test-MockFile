@@ -240,7 +240,7 @@ my $content = "ABCDEFGHIJ";
     my @warnings;
     local $SIG{__WARN__} = sub { push @warnings, $_[0] };
 
-    eof($fh);
+    my $is_eof = eof($fh);
 
     is( scalar @warnings, 1, "eof() on write-only handle emits one warning" );
     like( $warnings[0], qr{/fake/eof_warn}, "warning mentions the file path, not STDOUT" );
