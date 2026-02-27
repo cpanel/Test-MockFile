@@ -2712,18 +2712,18 @@ sub __sysopen (*$$;$) {
         $mock_file = _get_file_object( $_[1] );
         if ( $mock_file && $mock_file->is_link ) {
             $! = ELOOP;
-            return;
+            return undef;
         }
     }
     else {
         $abs_path = _find_file_or_fh( $_[1], 1 );
         if ( $abs_path && $abs_path eq BROKEN_SYMLINK ) {
             $! = ENOENT;
-            return;
+            return undef;
         }
         if ( $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
             # $! already set to ELOOP by _find_file_or_fh
-            return;
+            return undef;
         }
         $mock_file = $abs_path ? $files_being_mocked{$abs_path} : undef;
     }
@@ -2746,13 +2746,13 @@ sub __sysopen (*$$;$) {
     # Directories cannot be opened as regular files.
     if ( $mock_file->is_dir() ) {
         $! = EISDIR;
-        return;
+        return undef;
     }
 
     # O_EXCL
     if ( $sysopen_mode & O_EXCL && $sysopen_mode & O_CREAT && defined $mock_file->{'contents'} ) {
         $! = EEXIST;
-        return;
+        return undef;
     }
 
     # O_CREAT
@@ -2788,7 +2788,7 @@ sub __sysopen (*$$;$) {
     # O_CREAT would have already populated contents above if it was requested.
     if ( !defined $mock_file->{'contents'} ) {
         $! = ENOENT;
-        return;
+        return undef;
     }
 
     $abs_path //= $mock_file->{'path'};
@@ -2833,12 +2833,12 @@ sub __opendir (*$) {
 
     if ( !defined $mock_dir->contents ) {
         $! = ENOENT;
-        return;
+        return undef;
     }
 
     if ( !( $mock_dir->{'mode'} & S_IFDIR ) ) {
         $! = ENOTDIR;
-        return;
+        return undef;
     }
 
     if ( !defined $_[0] ) {

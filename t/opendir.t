@@ -173,7 +173,7 @@ note "-------------- BAREWORD GUARD REGRESSION --------------";
     is( closedir($dh), 1, "closedir with ref fh returns 1" );
 }
 
-note "opendir failure returns empty list in list context (not (undef))";
+note "opendir failure returns undef in list context (single-element list)";
 {
     my $mock_dir = Test::MockFile->dir('/list_ctx_dir');
 
