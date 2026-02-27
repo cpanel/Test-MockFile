@@ -7,7 +7,8 @@ use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 
-use Fcntl qw( S_IFREG S_IFDIR S_IFLNK S_IFPERMS );
+use Fcntl qw( S_IFREG S_IFDIR S_IFLNK );
+use constant S_IFPERMS => 07777;
 use Errno qw( ENOENT );
 
 use Test::MockFile qw< nostrict >;
