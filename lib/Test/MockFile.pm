@@ -1363,7 +1363,7 @@ sub _mock_stat {
     }
 
     # File is not present so no stats for you!
-    if ( !$file_data->is_link && !defined $file_data->contents() ) {
+    if ( !$file_data->exists() ) {
         $! = ENOENT;
         return 0;
     }

@@ -7,6 +7,7 @@ use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 use Test2::Tools::Exception qw< lives dies >;
+use Errno qw( ENOENT );
 use Test::MockFile;
 
 my $dir  = Test::MockFile->dir('/foo');
@@ -38,6 +39,28 @@ undef $symlink;
         [qw< . .. >],
         'Directory no longer has symlink',
     );
+}
+
+# --- stat/lstat on unlinked symlinks ---
+{
+    my $target = Test::MockFile->file( '/tmp/stat_target', 'data' );
+    my $link   = Test::MockFile->symlink( '/tmp/stat_target', '/tmp/stat_link' );
+
+    # Before unlink: lstat on symlink should succeed
+    my @lstat_before = lstat('/tmp/stat_link');
+    ok( scalar @lstat_before, 'lstat on live symlink returns stat data' );
+
+    # Unlink the symlink
+    ok( unlink('/tmp/stat_link'), 'unlink symlink succeeds' );
+
+    # After unlink: lstat should fail with ENOENT
+    my @lstat_after = lstat('/tmp/stat_link');
+    is( scalar @lstat_after, 0, 'lstat on unlinked symlink returns empty list' );
+    is( $! + 0, ENOENT, 'lstat on unlinked symlink sets ENOENT' );
+
+    # stat should also fail
+    my @stat_after = stat('/tmp/stat_link');
+    is( scalar @stat_after, 0, 'stat on unlinked symlink returns empty list' );
 }
 
 done_testing();
