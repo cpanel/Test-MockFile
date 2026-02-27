@@ -618,6 +618,11 @@ sub _validate_strict_rules {
 my @plugins;
 my @_tmf_callers;
 
+# Packages where autodie was active when T::MF was imported.
+# Used as a fallback for Perl versions where caller(N)[10] hints
+# may not be reliable after goto &sub.
+my %_autodie_callers;
+
 # Declared before import() which references them for :trace support
 my @_public_access_hooks;
 my @_internal_access_hooks = ( \&_strict_mode_violation );
@@ -660,7 +665,19 @@ sub import {
     # autodie installs per-package wrappers that call CORE:: directly,
     # bypassing CORE::GLOBAL::. By also installing into the caller's
     # namespace, we ensure our overrides take precedence.
-    _install_package_overrides( scalar caller );
+    my $caller = scalar caller;
+    _install_package_overrides($caller);
+
+    # Cache autodie state at import time as a fallback for Perl versions
+    # where caller(N)[10] hints after goto &sub may not be reliable.
+    if ( $INC{'autodie.pm'} || $INC{'Fatal.pm'} ) {
+        my $hints = ( caller(0) )[10];
+        if (   ref $hints eq 'HASH'
+            && ( $hints->{'autodie'} || $hints->{'Fatal::open'} || $hints->{'autodie::open'} ) )
+        {
+            $_autodie_callers{$caller} = 1;
+        }
+    }
 
     return;
 }
@@ -701,6 +718,8 @@ sub _install_package_overrides {
 # accessible via (caller($depth))[10]. The keys vary by version.
 sub _caller_has_autodie_for_open {
     return unless $INC{'autodie.pm'} || $INC{'Fatal.pm'};
+
+    # Primary: walk the caller stack for lexical hints set by autodie.
     for my $depth ( 1 .. 10 ) {
         my @c = caller($depth);
         last unless @c;
@@ -711,6 +730,14 @@ sub _caller_has_autodie_for_open {
           || $hints->{'Fatal::open'}
           || $hints->{'autodie::open'};
     }
+
+    # Fallback: check if the calling package had autodie active at import
+    # time. On some Perl versions, caller(N)[10] hints may not propagate
+    # reliably through goto &sub. This is less precise (doesn't respect
+    # "no autodie" sub-scopes) but catches the common case.
+    my $caller_pkg = caller(1);
+    return $_autodie_callers{$caller_pkg} if $caller_pkg;
+
     return;
 }
 
@@ -740,7 +767,14 @@ sub _throw_autodie_open {
 # when autodie is loaded before Test::MockFile).
 BEGIN {
     if ( $] >= 5.014 ) {
-        eval 'CHECK { _install_package_overrides($_) for @_tmf_callers }'
+        eval 'CHECK {
+            _install_package_overrides($_) for @_tmf_callers;
+            # If autodie was loaded during compilation (possibly after T::MF),
+            # mark all T::MF callers for the autodie fallback detection.
+            if ($INC{"autodie.pm"} || $INC{"Fatal.pm"}) {
+                $_autodie_callers{$_} = 1 for @_tmf_callers;
+            }
+        }'
           unless ${^GLOBAL_PHASE} eq 'RUN';
     }
 }
