@@ -72,18 +72,18 @@ subtest '+> two-arg still works' => sub {
 subtest 'opendir follows symlink to directory' => sub {
     my $dir    = Test::MockFile->new_dir('/tmp/realdir');
     my $file   = Test::MockFile->file( '/tmp/realdir/child.txt', 'content' );
-    my $link   = Test::MockFile->symlink( '/tmp/dirlink', '/tmp/realdir' );
+    my $link   = Test::MockFile->symlink( '/tmp/realdir', '/tmp/dirlink' );
 
     ok( opendir( my $dh, '/tmp/dirlink' ), 'opendir on symlink to dir succeeds' ) or diag "opendir failed: $!";
 
-    my @entries = sort readdir $dh;
+    my @entries = sort readdir($dh);
     closedir $dh;
 
     ok( grep( { $_ eq 'child.txt' } @entries ), 'readdir through symlink finds child file' );
 };
 
 subtest 'opendir on broken symlink fails with ENOENT' => sub {
-    my $link = Test::MockFile->symlink( '/tmp/broken_dirlink', '/tmp/nonexistent_dir' );
+    my $link = Test::MockFile->symlink( '/tmp/nonexistent_dir', '/tmp/broken_dirlink' );
 
     ok( !opendir( my $dh, '/tmp/broken_dirlink' ), 'opendir on broken symlink fails' );
     is( $! + 0, ENOENT, 'errno is ENOENT for broken symlink' );
@@ -91,7 +91,7 @@ subtest 'opendir on broken symlink fails with ENOENT' => sub {
 
 subtest 'opendir on symlink to file fails with ENOTDIR' => sub {
     my $file = Test::MockFile->file( '/tmp/afile', 'data' );
-    my $link = Test::MockFile->symlink( '/tmp/filelink', '/tmp/afile' );
+    my $link = Test::MockFile->symlink( '/tmp/afile', '/tmp/filelink' );
 
     ok( !opendir( my $dh, '/tmp/filelink' ), 'opendir on symlink to file fails' );
     is( $! + 0, ENOTDIR, 'errno is ENOTDIR' );
