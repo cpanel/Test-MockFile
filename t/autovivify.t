@@ -164,4 +164,22 @@ note "-------------- autovivify: works with dir() + mkdir pattern --------------
     ok( -e '/avdir/newfile', 'file exists' );
 }
 
+note "-------------- autovivify: file permissions respect umask correctly --------------";
+{
+    # With umask 0077, perms should be 0666 & ~0077 = 0600
+    # Bug: XOR (^) gives 0666 ^ 0077 = 0611 (wrong — adds execute bits)
+    my $old_umask = umask(0077);
+
+    my $dir = Test::MockFile->new_dir( '/avperms', { 'autovivify' => 1 } );
+
+    ok( open( my $fh, '>', '/avperms/secret' ), 'create file with umask 0077' );
+    print $fh 'data';
+    close $fh;
+
+    my $mode = ( stat('/avperms/secret') )[2] & 07777;
+    is( sprintf( '%04o', $mode ), '0600', 'autovivified file perms are 0600 with umask 0077 (not 0611)' );
+
+    umask($old_umask);
+}
+
 done_testing();

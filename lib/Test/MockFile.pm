@@ -1475,7 +1475,7 @@ sub _maybe_autovivify {
     my $mock  = bless {
         'dev'                    => 0,
         'inode'                  => 0,
-        'mode'                   => ( $perms ^ umask ) | S_IFREG,
+        'mode'                   => ( $perms & ~umask ) | S_IFREG,
         'nlink'                  => 0,
         'uid'                    => int $>,
         'gid'                    => int $),
