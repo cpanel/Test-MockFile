@@ -97,10 +97,14 @@ note "--- syswrite with negative offset ---";
     my $mock = Test::MockFile->file( '/tmp/syswrite_neg_oob', '' );
     ok( open( my $fh, '>', '/tmp/syswrite_neg_oob' ), "open for write" );
 
-    # Negative offset that goes before start of string
+    # Negative offset that goes before start of string — expect warning + EINVAL
     my $buf = "hi";
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
     my $result = syswrite( $fh, $buf, 2, -10 );
     is( $result, 0, "syswrite with out-of-bounds negative offset returns 0" );
+    ok( scalar @warnings, "warning emitted for out-of-bounds offset" );
+    like( $warnings[0], qr/Offset outside string/, "warning mentions offset" );
     close($fh);
 }
 
@@ -126,10 +130,14 @@ note "--- syswrite with positive offset ---";
     my $mock = Test::MockFile->file( '/tmp/syswrite_oob_offset', '' );
     ok( open( my $fh, '>', '/tmp/syswrite_oob_offset' ), "open for write" );
 
+    # Per perlapi: len exceeding available data is NOT an error — syswrite
+    # truncates silently and writes what's available.
     my $buf = "hi";
     my $result = syswrite( $fh, $buf, 5, 0 );
-    is( $result, 0, "syswrite with len > strlen returns 0" );
+    is( $result, 2, "syswrite with len > strlen writes available bytes" );
     close($fh);
+
+    is( $mock->contents, "hi", "file contains truncated write" );
 }
 
 done_testing();
