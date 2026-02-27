@@ -696,6 +696,40 @@ sub _install_package_overrides {
     *{"${caller}::chmod"}    = sub (@)     { goto \&__chmod };
 }
 
+# Check if autodie is active for 'open' in the caller's scope.
+# autodie stores its state in the lexical hints hash (%^H),
+# accessible via (caller($depth))[10]. The keys vary by version.
+sub _caller_has_autodie_for_open {
+    return unless $INC{'autodie.pm'} || $INC{'Fatal.pm'};
+    for my $depth ( 1 .. 10 ) {
+        my @c = caller($depth);
+        last unless @c;
+        my $hints = $c[10];
+        next unless ref $hints eq 'HASH';
+        return 1
+          if $hints->{'autodie'}
+          || $hints->{'Fatal::open'}
+          || $hints->{'autodie::open'};
+    }
+    return;
+}
+
+# Throw an autodie-compatible exception for a failed open.
+# Creates a real autodie::exception if available, otherwise a plain die.
+sub _throw_autodie_open {
+    my ($file, @args) = @_;
+    if ( eval { require autodie::exception; 1 } ) {
+        die autodie::exception->new(
+            function => 'CORE::open',
+            args     => \@args,
+            errno    => "$!",
+            context  => 'scalar',
+            return   => undef,
+        );
+    }
+    die sprintf( "Can't open '%s': '%s'", $file, $! );
+}
+
 # Re-install after all compilation to handle the case where
 # autodie is loaded after Test::MockFile (autodie's import()
 # would overwrite our per-package overrides during compilation).
@@ -2468,10 +2502,12 @@ sub __open (*;$@) {
     # Circular symlinks → ELOOP (too many levels of symlinks).
     if ( $abs_path eq BROKEN_SYMLINK ) {
         $! = ENOENT;
+        _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
         return;
     }
     if ( $abs_path eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
+        _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
         return;
     }
 
@@ -2510,6 +2546,7 @@ sub __open (*;$@) {
     # If contents is undef, we act like the file isn't there.
     if ( !defined $mock_file->contents() && grep { $mode eq $_ } qw/< +</ ) {
         $! = ENOENT;
+        _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
         return;
     }
 
