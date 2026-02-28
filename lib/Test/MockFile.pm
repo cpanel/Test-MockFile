@@ -3666,6 +3666,16 @@ sub __truncate ($$) {
         return 0;
     }
 
+    # When called with a filehandle, the handle must be open for writing.
+    # POSIX ftruncate(2): EINVAL if fd is not open for writing.
+    if ( ref $file_or_fh ) {
+        my $tied = tied( *{$file_or_fh} );
+        if ( $tied && !$tied->{'write'} ) {
+            $! = EINVAL;
+            return 0;
+        }
+    }
+
     if ( $length < 0 ) {
         $! = EINVAL;
         return 0;
