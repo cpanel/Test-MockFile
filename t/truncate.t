@@ -109,4 +109,38 @@ subtest 'truncate on file with undef contents (created by open)' => sub {
     is( $mock->contents(), 'cre', 'contents shortened' );
 };
 
+subtest 'truncate via read-only filehandle fails with EINVAL' => sub {
+    my $mock = Test::MockFile->file( '/fake/readonly', 'abcdefgh' );
+    open( my $fh, '<', '/fake/readonly' ) or die "open: $!";
+
+    $! = 0;
+    my $ret = truncate( $fh, 3 );
+    ok( !$ret, 'truncate on read-only fh returns false' );
+    is( $! + 0, EINVAL, '$! is EINVAL for read-only fh' );
+    is( $mock->contents(), 'abcdefgh', 'contents unchanged' );
+
+    close $fh;
+};
+
+subtest 'truncate via write-only filehandle succeeds' => sub {
+    my $mock = Test::MockFile->file( '/fake/writeonly', 'original' );
+    open( my $fh, '>', '/fake/writeonly' ) or die "open: $!";
+
+    # > mode truncates on open, so contents are now empty
+    ok( truncate( $fh, 0 ), 'truncate on write-only fh succeeds' );
+    is( $mock->contents(), '', 'contents truncated' );
+
+    close $fh;
+};
+
+subtest 'truncate via append filehandle succeeds' => sub {
+    my $mock = Test::MockFile->file( '/fake/appendfh', 'some data' );
+    open( my $fh, '>>', '/fake/appendfh' ) or die "open: $!";
+
+    ok( truncate( $fh, 4 ), 'truncate on append fh succeeds' );
+    is( $mock->contents(), 'some', 'contents shortened via append fh' );
+
+    close $fh;
+};
+
 done_testing();
