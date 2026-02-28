@@ -3290,6 +3290,7 @@ sub __rmdir (_) {
     # Core sometimes warns: 'Use of uninitialized value $_ in rmdir'
     if ( !defined $file ) {
         carp('Use of uninitialized value in rmdir');
+        $! = ENOENT;
         return 0;
     }
 
