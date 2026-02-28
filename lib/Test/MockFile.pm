@@ -3094,7 +3094,7 @@ sub __readlink (_) {
         else {
             $! = ENOENT;
         }
-        return;
+        return undef;
     }
 
     my $mock_object = _get_file_object($file);
@@ -3106,12 +3106,12 @@ sub __readlink (_) {
 
     if ( !$mock_object->exists() ) {
         $! = ENOENT;
-        return;
+        return undef;
     }
 
     if ( !$mock_object->is_link ) {
         $! = EINVAL;
-        return;
+        return undef;
     }
     return $mock_object->readlink;
 }

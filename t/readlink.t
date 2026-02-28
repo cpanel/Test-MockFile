@@ -123,4 +123,23 @@ note "--- readlink on non-existent mocks returns ENOENT ---";
     is( $! + 0,                            ENOENT, '$! is ENOENT for readlink on non-existent dir mock' );
 }
 
+note "--- readlink failure returns undef (not empty list) in list context ---";
+{
+    my $mock_file = Test::MockFile->file("$temp_dir_name/not_a_link", "data");
+
+    # readlink on a regular file — should return (undef) in list context
+    my @ret = readlink("$temp_dir_name/not_a_link");
+    is( scalar @ret, 1,   'readlink on non-link returns one element in list context' );
+    ok( !defined $ret[0], 'readlink failure element is undef' );
+}
+
+{
+    my $mock_file = Test::MockFile->file("$temp_dir_name/nonexist");
+
+    # readlink on a non-existent mock — should return (undef) in list context
+    my @ret = readlink("$temp_dir_name/nonexist");
+    is( scalar @ret, 1,   'readlink on non-existent mock returns one element in list context' );
+    ok( !defined $ret[0], 'readlink non-existent failure element is undef' );
+}
+
 done_testing();
