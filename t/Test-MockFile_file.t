@@ -56,7 +56,8 @@ subtest 'size() and blocks()' => sub {
 
     is( $mock->size(), 5000, 'size() matches content length' );
 
-    my $expected_blocks = int( ( 5000 + 4095 ) / 4096 ) * ( 4096 / 512 );
+    # blocks() = ceil(size / blksize) — no 512-byte conversion
+    my $expected_blocks = int( ( 5000 + 4096 - 1 ) / 4096 );
     is( $mock->blocks(), $expected_blocks, 'blocks() computes correctly from size and blksize' );
 };
 
@@ -210,9 +211,11 @@ subtest 'chained write and append' => sub {
 subtest 'file() with custom stat attributes' => sub {
     my $mock = Test::MockFile->file(
         '/fake/custom_stat.txt', 'content',
-        uid   => 1000,
-        gid   => 2000,
-        mtime => 1234567890,
+        {
+            uid   => 1000,
+            gid   => 2000,
+            mtime => 1234567890,
+        }
     );
 
     my @stat = $mock->stat();
