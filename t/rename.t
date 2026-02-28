@@ -88,4 +88,31 @@ note "-------------- rename: dir over existing file fails --------------";
     is( $! + 0, ENOTDIR, 'errno is ENOTDIR' );
 }
 
+note "-------------- rename: file to self is no-op (POSIX) --------------";
+{
+    my $file = Test::MockFile->file( '/mock/self', 'precious data' );
+
+    ok( rename( '/mock/self', '/mock/self' ), 'rename to self returns true' );
+    is( $file->contents, 'precious data', 'file contents preserved after rename to self' );
+    ok( $file->exists, 'file still exists after rename to self' );
+}
+
+note "-------------- rename: directory to self is no-op (POSIX) --------------";
+{
+    my $dir = Test::MockFile->new_dir('/mock/selfdir');
+
+    ok( rename( '/mock/selfdir', '/mock/selfdir' ), 'rename dir to self returns true' );
+    ok( $dir->exists, 'directory still exists after rename to self' );
+}
+
+note "-------------- rename: symlink to self is no-op (POSIX) --------------";
+{
+    my $target = Test::MockFile->file( '/mock/selflink_target', 'data' );
+    my $link   = Test::MockFile->symlink( '/mock/selflink_target', '/mock/selflink' );
+
+    ok( rename( '/mock/selflink', '/mock/selflink' ), 'rename symlink to self returns true' );
+    ok( $link->is_link, 'symlink still a link after rename to self' );
+    is( readlink('/mock/selflink'), '/mock/selflink_target', 'symlink target preserved after rename to self' );
+}
+
 done_testing();

@@ -3363,6 +3363,9 @@ sub __rename ($$) {
         return 0;
     }
 
+    # Renaming to self is a no-op (POSIX rename(2))
+    return 1 if $mock_old == $mock_new;
+
     # Can't overwrite a directory with a non-directory
     if ( $mock_new->exists && $mock_new->is_dir && !$mock_old->is_dir ) {
         $! = EISDIR;
