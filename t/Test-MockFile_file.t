@@ -232,11 +232,15 @@ subtest 'file() — filesystem ops work on mocked file' => sub {
     is( scalar @stat, 13, 'stat() on mocked path returns 13 elements' );
     is( $stat[7], 12, 'stat[7] (size) is 12' );
 
-    # -e, -f, -s file tests
+    # -e, -f file tests
     ok( -e '/fake/fs_ops.txt', '-e returns true for mocked file' );
     ok( -f '/fake/fs_ops.txt', '-f returns true for mocked file' );
-    is( -s '/fake/fs_ops.txt', 12, '-s returns file size' );
     ok( !-d '/fake/fs_ops.txt', '-d returns false for file' );
+
+    # -s must be captured in a variable first — passing directly to is()
+    # causes argument-shifting on Perl < 5.16 due to list-context interaction.
+    my $file_size = -s '/fake/fs_ops.txt';
+    is( $file_size, 12, '-s returns file size' );
 
     # open and read
     ok( open( my $fh, '<', '/fake/fs_ops.txt' ), 'open succeeds on mocked file' );
