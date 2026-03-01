@@ -800,6 +800,7 @@ sub _install_package_overrides {
         'symlink'   => sub ($$)    { goto \&__symlink },
         'truncate'  => sub ($$)    { goto \&__truncate },
         'flock'     => sub (*$)    { goto \&__flock },
+        'utime'     => sub (@)     { goto \&__utime },
     );
 
     _install_sub( $caller, $_, $subs{$_} ) for keys %subs;
@@ -3801,6 +3802,10 @@ sub __utime (@) {
         $mock->{'ctime'} = $now;
 
         $num_changed++;
+    }
+
+    if ( $num_changed < scalar(@files) ) {
+        _throw_autodie( 'utime', @_ ) if _caller_has_autodie_for('utime');
     }
 
     return $num_changed;

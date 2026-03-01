@@ -18,7 +18,7 @@ BEGIN {
 }
 
 use autodie qw(opendir closedir unlink readlink mkdir rmdir
-               rename link symlink truncate chmod chown);
+               rename link symlink truncate chmod chown utime);
 use Test::MockFile qw(nostrict);
 
 SKIP: {
@@ -288,6 +288,21 @@ SKIP: {
         $check_autodie->( $err, 'chown', 'chown ENOENT' );
     };
 
+    # ---- utime ----
+
+    subtest 'utime dies on non-existent file' => sub {
+        my $file = Test::MockFile->file("/ad_utime_noexist_$$");
+
+        my $died = !eval {
+            utime( time, time, "/ad_utime_noexist_$$" );
+            1;
+        };
+        my $err = $@;
+
+        ok( $died, "utime dies on non-existent mocked file" );
+        $check_autodie->( $err, 'utime', 'utime ENOENT' );
+    };
+
     # ---- Success paths still work ----
 
     subtest 'successful operations do not throw under autodie' => sub {
@@ -330,6 +345,9 @@ SKIP: {
 
             # chown
             chown( $>, (split /\s/, $))[0], "/ad_success_rdst_$$" );
+
+            # utime
+            utime( time, time, "/ad_success_rdst_$$" );
 
             # unlink
             unlink("/ad_success_rdst_$$");
