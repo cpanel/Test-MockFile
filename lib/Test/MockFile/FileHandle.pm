@@ -382,8 +382,23 @@ sub READ {
         return undef;
     }
 
+    # Validate $len the same way WRITE does — match real sysread behavior.
+    unless ( $len =~ m/^-?[0-9.]+$/ ) {
+        CORE::warn(qq{Argument "$len" isn't numeric in sysread at @{[ join ' line ', (caller)[1,2] ]}.\n});
+        $! = EINVAL;
+        return undef;
+    }
+
+    $len = int($len);
+
+    if ( $len < 0 ) {
+        CORE::warn(qq{Negative length at @{[ join ' line ', (caller)[1,2] ]}.\n});
+        $! = EINVAL;
+        return undef;
+    }
+
     # If the caller's buffer is undef, we need to make it a string of 0 length to start out with.
-    $_[1] = '' if !defined $_[1];    # TODO: test me
+    $_[1] = '' if !defined $_[1];
 
     my $contents_len = length $self->{'data'}->{'contents'};
     my $buf_len      = length $_[1];
@@ -587,7 +602,8 @@ sub SEEK {
         $new_pos = $file_size + $pos;
     }
     else {
-        die('Invalid whence value');
+        $! = EINVAL;
+        return 0;
     }
 
     if ( $new_pos < 0 ) {
