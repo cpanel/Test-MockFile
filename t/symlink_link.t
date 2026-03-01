@@ -7,7 +7,7 @@ use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 
-use Errno qw/ENOENT EEXIST EPERM EXDEV EINVAL/;
+use Errno qw/ENOENT EEXIST EPERM EXDEV EINVAL ELOOP/;
 
 use Test::MockFile qw< nostrict >;
 
@@ -244,6 +244,18 @@ note "-------------- link() builtin on mocked paths --------------";
     my @entries = readdir $dh;
     closedir $dh;
     is( \@entries, [qw< . .. newhard >], 'parent dir lists the new hard link' );
+}
+
+{
+    note "link() fails with ELOOP when symlink source is circular";
+    my $link_a = Test::MockFile->symlink( '/mock/circ_b', '/mock/circ_a' );
+    my $link_b = Test::MockFile->symlink( '/mock/circ_a', '/mock/circ_b' );
+    my $dest   = Test::MockFile->file('/mock/link_circ');
+
+    $! = 0;
+    my $result = link( '/mock/circ_a', '/mock/link_circ' );
+    is( $result, 0,     'link() fails for circular symlink source' );
+    is( $! + 0, ELOOP, '$! is ELOOP (not ENOENT)' );
 }
 
 done_testing();
