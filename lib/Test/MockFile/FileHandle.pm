@@ -326,6 +326,12 @@ sub _READLINE_ONE_LINE {
 sub READLINE {
     my ($self) = @_;
 
+    if ( !$self->{'read'} ) {
+        my $path = $self->{'file'} // 'unknown';
+        CORE::warn("Filehandle $path opened only for output");
+        return;
+    }
+
     return if $self->EOF;
 
     if (wantarray) {
@@ -354,6 +360,12 @@ returned. Returns undef at EOF.
 
 sub GETC {
     my ($self) = @_;
+
+    if ( !$self->{'read'} ) {
+        my $path = $self->{'file'} // 'unknown';
+        CORE::warn("Filehandle $path opened only for output");
+        return undef;
+    }
 
     return undef if $self->EOF;
 

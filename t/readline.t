@@ -129,5 +129,45 @@ sub slurp {
     is( \@read, [ "abc\n", "def\n", "ghi\r\n", "dhdbhjdb\r" ], "readline reads in an array of stuff." );
 }
 
+note "-------------- readline on write-only handle --------------";
+{
+    my $baz = Test::MockFile->file( '/readline_writeonly', "secret data\n" );
+    open( my $wfh, '>', '/readline_writeonly' ) or die "open: $!";
+
+    # Scalar context
+    {
+        my $warn_msg;
+        local $SIG{__WARN__} = sub { $warn_msg = shift };
+        my $line = readline($wfh);
+        ok( !defined $line, 'readline on write-only handle returns undef' );
+        like( $warn_msg, qr{opened only for output}, 'readline on write-only handle warns' );
+    }
+
+    # List context
+    {
+        my $warn_msg;
+        local $SIG{__WARN__} = sub { $warn_msg = shift };
+        my @lines = <$wfh>;
+        is( scalar @lines, 0, 'readline in list context on write-only handle returns empty list' );
+        like( $warn_msg, qr{opened only for output}, 'readline list context on write-only handle warns' );
+    }
+
+    close $wfh;
+}
+
+note "-------------- getc on write-only handle --------------";
+{
+    my $baz = Test::MockFile->file( '/getc_writeonly', "XY" );
+    open( my $wfh, '>', '/getc_writeonly' ) or die "open: $!";
+
+    my $warn_msg;
+    local $SIG{__WARN__} = sub { $warn_msg = shift };
+    my $ch = getc($wfh);
+    ok( !defined $ch, 'getc on write-only handle returns undef' );
+    like( $warn_msg, qr{opened only for output}, 'getc on write-only handle warns' );
+
+    close $wfh;
+}
+
 done_testing();
 exit;
