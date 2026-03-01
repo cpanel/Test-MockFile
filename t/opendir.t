@@ -204,5 +204,30 @@ note "-------------- closedir double-close returns EBADF --------------";
     is( $errno, EBADF, 'second closedir sets EBADF' );
 }
 
+note "-------------- seekdir with negative position clamps to 0 --------------";
+{
+    my $mock = Test::MockFile->new_dir( '/seekneg', [qw/alpha beta/] );
+
+    opendir my $dh, '/seekneg' or die "opendir: $!";
+
+    # Consume one entry, then seek to -1
+    my $first = readdir($dh);
+    is( $first, '.', 'readdir returns first entry before seekdir' );
+
+    seekdir( $dh, -1 );
+    is( telldir($dh), 0, 'seekdir(-1) clamps tell to 0' );
+
+    # readdir after seekdir(-1) should return the first entry again
+    my $after = readdir($dh);
+    is( $after, '.', 'readdir after seekdir(-1) returns first entry' );
+
+    # List context: seekdir(-99) then readdir returns all entries
+    seekdir( $dh, -99 );
+    my @all = readdir($dh);
+    is( \@all, [qw/. .. alpha beta/], 'readdir list after seekdir(-99) returns all entries' );
+
+    closedir($dh);
+}
+
 done_testing();
 exit;
