@@ -2472,6 +2472,12 @@ sub _io_file_mock_open {
     my ( $fh, $abs_path, $mode ) = @_;
     my $mock_file = _get_file_object($abs_path);
 
+    # Can't open a directory as a file
+    if ( $mock_file->is_dir ) {
+        $! = EISDIR;
+        return;
+    }
+
     # If contents is undef and reading, file doesn't exist
     if ( !defined $mock_file->contents() && grep { $mode eq $_ } qw/< +</ ) {
         $! = ENOENT;
@@ -2481,6 +2487,7 @@ sub _io_file_mock_open {
     my $rw = '';
     $rw .= 'r' if grep { $_ eq $mode } qw/+< +> +>> </;
     $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
+    $rw .= 'a' if grep { $_ eq $mode } qw/>> +>>/;
 
     # Tie the existing IO::File glob directly (don't create a new one)
     tie *{$fh}, 'Test::MockFile::FileHandle', $abs_path, $rw;
@@ -2521,6 +2528,12 @@ sub _io_file_open_override {
             # Not mocked — fall through to real sysopen
             my $perms = defined $_[3] ? $_[3] : 0666;
             return sysopen( $fh, $file, $sysmode, $perms );
+        }
+
+        # Can't open a directory as a file
+        if ( $mock_file->is_dir ) {
+            $! = EISDIR;
+            return;
         }
 
         # Handle O_CREAT / O_TRUNC / O_EXCL on the mock
