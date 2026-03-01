@@ -3351,9 +3351,13 @@ sub __link ($$) {
     my $source_mock = $old_mock;
     if ( $old_mock->is_link ) {
         my $target_path = _find_file_or_fh( $oldname, 1 );    # follow_link=1
-        if ( !defined $target_path || $target_path eq BROKEN_SYMLINK || $target_path eq CIRCULAR_SYMLINK ) {
+        if ( !defined $target_path || $target_path eq BROKEN_SYMLINK ) {
             $! = ENOENT;
             _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
+            return 0;
+        }
+        if ( $target_path eq CIRCULAR_SYMLINK ) {
+            $! = ELOOP;
             return 0;
         }
         $source_mock = $files_being_mocked{$target_path};
@@ -3789,6 +3793,7 @@ sub __flock (*$) {
     }
 
     # Not a mocked file — delegate to the real flock.
+    _real_file_access_hook( 'flock', \@_ );
     goto \&CORE::flock if _goto_is_available();
     return CORE::flock( $fh, $operation );
 }
