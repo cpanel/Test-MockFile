@@ -137,7 +137,8 @@ note "-------------- CHOWN UPDATES ctime --------------";
     $mock->{'ctime'} = 1000;
     $mock->{'mtime'} = 1000;
 
-    chown 1000, 1000, '/ts/chown';
+    my ($primary_gid) = split /\s/, $);
+    chown $>, $primary_gid, '/ts/chown';
 
     isnt( $mock->ctime(), 1000, 'chown updates ctime' );
     is( $mock->mtime(), 1000, 'chown does not update mtime' );
