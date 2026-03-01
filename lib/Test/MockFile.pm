@@ -62,6 +62,9 @@ my $_original_cwd_abs_path;
 # Tracks directories with autovivify enabled: path => mock object (weak ref)
 my %_autovivify_dirs;
 
+# Auto-incrementing inode counter for unique inode assignment
+my $_next_inode = 1;
+
 # From http://man7.org/linux/man-pages/man7/inode.7.html
 use constant S_IFMT    => 0170000;    # bit mask for the file type bit field
 use constant S_IFPERMS => 07777;      # bit mask for file perms.
@@ -1213,24 +1216,26 @@ sub new_dir {
 When creating mocked files or directories, we default their stats to:
 
     my $attrs = Test::MockFile->file( $file, $contents, {
-            'dev'       => 0,        # stat[0]
-            'inode'     => 0,        # stat[1]
-            'mode'      => $mode,    # stat[2]
-            'nlink'     => 0,        # stat[3]
-            'uid'       => int $>,   # stat[4]
-            'gid'       => int $),   # stat[5]
-            'rdev'      => 0,        # stat[6]
-            'atime'     => $now,     # stat[8]
-            'mtime'     => $now,     # stat[9]
-            'ctime'     => $now,     # stat[10]
-            'blksize'   => 4096,     # stat[11]
-            'fileno'    => undef,    # fileno()
+            'dev'       => 0,            # stat[0]
+            'inode'     => $next_inode,   # stat[1] - auto-assigned unique value
+            'mode'      => $mode,         # stat[2]
+            'nlink'     => 1,             # stat[3] - 1 for files/symlinks, 2 for dirs
+            'uid'       => int $>,        # stat[4]
+            'gid'       => int $),        # stat[5]
+            'rdev'      => 0,             # stat[6]
+            'atime'     => $now,          # stat[8]
+            'mtime'     => $now,          # stat[9]
+            'ctime'     => $now,          # stat[10]
+            'blksize'   => 4096,          # stat[11]
+            'fileno'    => undef,         # fileno()
     } );
 
 You'll notice that mode, size, and blocks have been left out of this.
 Mode is set to 666 (for files) or 777 (for directories), xored against
 the current umask. Size and blocks are calculated based on the size of
-'contents' a.k.a. the fake file.
+'contents' a.k.a. the fake file. Each mock is assigned a unique inode
+number, and nlink defaults to 1 for files and symlinks, 2 for
+directories.
 
 When you want to override one of the defaults, all you need to do is
 specify that when you declare the file or directory. The rest will
@@ -1300,6 +1305,18 @@ sub new {
 
         # If it's passed in, we override them.
         $self->{$key} = $opts{$key};
+    }
+
+    # Assign a unique inode if the user didn't provide one
+    if ( !$self->{'inode'} ) {
+        $self->{'inode'} = $_next_inode++;
+    }
+
+    # Set realistic nlink defaults if the user didn't provide one.
+    # Real filesystems: files/symlinks have nlink=1, directories have nlink=2
+    # (for the directory itself and its '.' entry).
+    if ( !$self->{'nlink'} ) {
+        $self->{'nlink'} = ( $self->{'mode'} & S_IFMT ) == S_IFDIR ? 2 : 1;
     }
 
     $self->{'fileno'} //= _unused_fileno();
@@ -1437,9 +1454,9 @@ sub _create_file_through_broken_symlink {
     my $now   = time;
     $mock = bless {
         'dev'                    => 0,
-        'inode'                  => 0,
+        'inode'                  => $_next_inode++,
         'mode'                   => ( $perms & ~umask ) | S_IFREG,
-        'nlink'                  => 0,
+        'nlink'                  => 1,
         'uid'                    => int $>,
         'gid'                    => int $),
         'rdev'                   => 0,
@@ -1580,9 +1597,9 @@ sub _maybe_autovivify {
     my $now   = time;
     my $mock  = bless {
         'dev'                    => 0,
-        'inode'                  => 0,
+        'inode'                  => $_next_inode++,
         'mode'                   => ( $perms & ~umask ) | S_IFREG,
-        'nlink'                  => 0,
+        'nlink'                  => 1,
         'uid'                    => int $>,
         'gid'                    => int $),
         'rdev'                   => 0,
@@ -3394,6 +3411,7 @@ sub __mkdir (_;$) {
 
     # If the mock was a symlink or a file, we've just made it a dir.
     $mock->{'mode'} = ( $perms & ~umask ) | S_IFDIR;
+    $mock->{'nlink'} = 2;    # directories have nlink=2 (self + '.')
     delete $mock->{'readlink'};
 
     # This should now start returning content
