@@ -152,6 +152,7 @@ sub PRINT {
     $output .= $\ if defined $\;
 
     $self->_write_bytes($output);
+    $self->_update_write_times();
 
     return 1;
 }
@@ -178,6 +179,7 @@ sub PRINTF {
     }
 
     $self->_write_bytes( sprintf( $format, @_ ) );
+    $self->_update_write_times();
 
     return 1;
 }
@@ -233,7 +235,9 @@ sub WRITE {
     # Write directly — syswrite must NOT inherit $, or $\ from PRINT.
     # Per perlapi: if len exceeds available data after offset, writes
     # only what is available (substr handles this naturally).
-    return $self->_write_bytes( substr( $buf, $offset, $len ) );
+    my $bytes = $self->_write_bytes( substr( $buf, $offset, $len ) );
+    $self->_update_write_times() if $bytes;
+    return $bytes;
 }
 
 =head2 READLINE
@@ -331,10 +335,13 @@ sub READLINE {
             push @all, $line;
             $line = _READLINE_ONE_LINE($self);
         }
+        $self->_update_read_time() if @all;
         return @all;
     }
 
-    return _READLINE_ONE_LINE($self);
+    my $line = _READLINE_ONE_LINE($self);
+    $self->_update_read_time() if defined $line;
+    return $line;
 }
 
 =head2 GETC
@@ -352,6 +359,7 @@ sub GETC {
 
     my $char = substr( $self->{'data'}->{'contents'}, $self->{'tell'}, 1 );
     $self->{'tell'}++;
+    $self->_update_read_time();
 
     return $char;
 }
@@ -394,6 +402,7 @@ sub READ {
     substr( $_[1], $offset ) = substr( $self->{'data'}->{'contents'}, $tell, $read_len );
 
     $self->{'tell'} += $read_len;
+    $self->_update_read_time() if $read_len;
 
     return $read_len;
 }
@@ -603,6 +612,24 @@ exists on this method.
 sub TELL {
     my ($self) = @_;
     return $self->{'tell'};
+}
+
+# Update mtime and ctime after a successful write operation.
+sub _update_write_times {
+    my ($self) = @_;
+    my $data = $self->{'data'} or return;
+    my $now = time;
+    $data->{'mtime'} = $now;
+    $data->{'ctime'} = $now;
+    return;
+}
+
+# Update atime after a successful read operation.
+sub _update_read_time {
+    my ($self) = @_;
+    my $data = $self->{'data'} or return;
+    $data->{'atime'} = time;
+    return;
 }
 
 1;
