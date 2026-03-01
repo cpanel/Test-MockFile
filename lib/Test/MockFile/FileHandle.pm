@@ -105,8 +105,13 @@ C<$!> to EBADF and return.
 sub _write_bytes {
     my ( $self, $output ) = @_;
 
+    my $data = $self->{'data'} or do {
+        $! = EBADF;
+        return 0;
+    };
+
     my $tell     = $self->{'tell'};
-    my $contents = \$self->{'data'}->{'contents'};
+    my $contents = \$data->{'contents'};
 
     if ( $self->{'append'} ) {
         # Append mode (>> / +>>): always write at end regardless of tell.
@@ -254,7 +259,8 @@ read. undef is returned if tell is already at EOF.
 sub _READLINE_ONE_LINE {
     my ($self) = @_;
 
-    my $contents = $self->{'data'}->{'contents'};
+    my $data = $self->{'data'} or return undef;
+    my $contents = $data->{'contents'};
     my $len      = length($contents);
     my $tell     = $self->{'tell'};
 
@@ -369,7 +375,8 @@ sub GETC {
 
     return undef if $self->EOF;
 
-    my $char = substr( $self->{'data'}->{'contents'}, $self->{'tell'}, 1 );
+    my $data = $self->{'data'} or return undef;
+    my $char = substr( $data->{'contents'}, $self->{'tell'}, 1 );
     $self->{'tell'}++;
     $self->_update_read_time();
 
@@ -397,7 +404,12 @@ sub READ {
     # If the caller's buffer is undef, we need to make it a string of 0 length to start out with.
     $_[1] = '' if !defined $_[1];    # TODO: test me
 
-    my $contents_len = length $self->{'data'}->{'contents'};
+    my $data = $self->{'data'} or do {
+        $! = EBADF;
+        return 0;
+    };
+
+    my $contents_len = length $data->{'contents'};
     my $buf_len      = length $_[1];
 
     $offset //= 0;
@@ -411,7 +423,7 @@ sub READ {
 
     my $read_len = ( $contents_len - $tell < $len ) ? $contents_len - $tell : $len;
 
-    substr( $_[1], $offset ) = substr( $self->{'data'}->{'contents'}, $tell, $read_len );
+    substr( $_[1], $offset ) = substr( $data->{'contents'}, $tell, $read_len );
 
     $self->{'tell'} += $read_len;
     $self->_update_read_time() if $read_len;
@@ -495,11 +507,13 @@ C<$self-E<gt>{'tell'}>, we determine if we're at EOF.
 sub EOF {
     my ($self) = @_;
 
+    my $data = $self->{'data'} or return 1;
+
     if ( !$self->{'read'} ) {
         my $path = $self->{'file'} // 'unknown';
         CORE::warn("Filehandle $path opened only for output");
     }
-    return $self->{'tell'} >= length $self->{'data'}->{'contents'};
+    return $self->{'tell'} >= length $data->{'contents'};
 }
 
 =head2 BINMODE
@@ -581,7 +595,12 @@ exists on this method.
 sub SEEK {
     my ( $self, $pos, $whence ) = @_;
 
-    my $file_size = length $self->{'data'}->{'contents'};
+    my $data = $self->{'data'} or do {
+        $! = EBADF;
+        return 0;
+    };
+
+    my $file_size = length $data->{'contents'};
 
     my $new_pos;
 
