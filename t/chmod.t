@@ -9,6 +9,7 @@ use Test2::Plugin::NoWarnings;
 use Test2::Tools::Exception qw< lives dies >;
 use Test2::Tools::Warnings qw< warning >;
 use Test::MockFile qw< nostrict >;
+use Errno qw/ENOENT/;
 
 use File::Temp qw< tempfile >;
 
@@ -260,6 +261,38 @@ subtest(
         );
 
         ok( -d '/chmod_mask', 'Directory type preserved after chmod with high bits' );
+    }
+);
+
+subtest(
+    'chmod with broken symlink in multi-file list does not confess' => sub {
+        my $link = Test::MockFile->symlink( '/nonexistent_target', '/chmod_broken_link' );
+        my $file = Test::MockFile->file( '/chmod_real_file', 'content' );
+
+        # chmod on a mix of regular file + broken symlink should NOT die.
+        # The broken symlink should silently fail with ENOENT, and the
+        # regular file should succeed.
+        my ( $result, $errno );
+        ok(
+            lives { $result = chmod( 0755, '/chmod_broken_link', '/chmod_real_file' ); $errno = $! + 0 },
+            'chmod with broken symlink + regular file does not confess',
+        );
+        is( $result, 1, 'chmod returns 1 (one file changed)' );
+        is( $errno, ENOENT, 'errno set to ENOENT for the broken symlink' );
+    }
+);
+
+subtest(
+    'chmod with only broken symlink' => sub {
+        my $link = Test::MockFile->symlink( '/nowhere', '/chmod_only_broken' );
+
+        my ( $result, $errno );
+        ok(
+            lives { $result = chmod( 0755, '/chmod_only_broken' ); $errno = $! + 0 },
+            'chmod with only a broken symlink does not confess',
+        );
+        is( $result, 0, 'chmod returns 0 (no files changed)' );
+        is( $errno, ENOENT, 'errno set to ENOENT' );
     }
 );
 
