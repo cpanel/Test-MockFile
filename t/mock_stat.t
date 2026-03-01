@@ -193,5 +193,17 @@ note "path canonicalization — stat resolves . and .. components (GH #108)";
     ok( -d '/up/down/..',  '-d "/up/down/.." resolves to mocked /up' );
 }
 
+note "directory stat size returns blksize, not stringified arrayref length";
+{
+    my $dir = Test::MockFile->new_dir('/stat_dir_size');
+    my $child = Test::MockFile->file( '/stat_dir_size/a', 'data' );
+
+    my @st = stat('/stat_dir_size');
+    is( $st[7], 4096, 'directory stat size is blksize (4096), not stringified ref length' );
+
+    my $s = -s '/stat_dir_size';
+    is( $s, 4096, '-s on directory returns blksize' );
+}
+
 done_testing();
 exit;
