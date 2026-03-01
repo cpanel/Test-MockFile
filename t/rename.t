@@ -7,7 +7,7 @@ use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 
-use Errno qw/ENOENT EISDIR ENOTDIR/;
+use Errno qw/ENOENT EISDIR ENOTDIR ENOTEMPTY/;
 
 use Test::MockFile qw< nostrict >;
 
@@ -113,6 +113,29 @@ note "-------------- rename: symlink to self is no-op (POSIX) --------------";
     ok( rename( '/mock/selflink', '/mock/selflink' ), 'rename symlink to self returns true' );
     ok( $link->is_link, 'symlink still a link after rename to self' );
     is( readlink('/mock/selflink'), '/mock/selflink_target', 'symlink target preserved after rename to self' );
+}
+
+note "-------------- rename: dir over non-empty dir fails (ENOTEMPTY) --------------";
+{
+    my $src   = Test::MockFile->new_dir('/mock/srcdir');
+    my $dst   = Test::MockFile->new_dir('/mock/fulldir');
+    my $child = Test::MockFile->file( '/mock/fulldir/child', 'data' );
+
+    ok( !rename( '/mock/srcdir', '/mock/fulldir' ), 'cannot rename dir over non-empty dir' );
+    is( $! + 0, ENOTEMPTY, 'errno is ENOTEMPTY' );
+    ok( $src->exists,   'source dir still exists after failed rename' );
+    ok( $dst->exists,   'dest dir still exists after failed rename' );
+    ok( $child->exists, 'child file still exists after failed rename' );
+}
+
+note "-------------- rename: dir over empty dir succeeds (POSIX) --------------";
+{
+    my $src = Test::MockFile->new_dir('/mock/srcdir2');
+    my $dst = Test::MockFile->new_dir('/mock/emptydir');
+
+    ok( rename( '/mock/srcdir2', '/mock/emptydir' ), 'rename dir over empty dir succeeds' );
+    ok( !$src->exists, 'source dir no longer exists' );
+    ok( $dst->exists,  'dest dir exists after rename' );
 }
 
 done_testing();
