@@ -2806,8 +2806,19 @@ sub __open (*;$@) {
     }
     elsif ( $mode eq '>' or $mode eq '+>' ) {
         $mock_file->{'contents'} = '';
-        # Truncating on open updates mtime/ctime (like real truncate(2)).
+
+        # Truncating an existing file updates mtime/ctime (like real truncate(2)).
+        if ( !$was_new ) {
+            my $now = time;
+            $mock_file->{'mtime'} = $now;
+            $mock_file->{'ctime'} = $now;
+        }
+    }
+
+    # POSIX open(2): creating a new file sets atime, mtime, and ctime.
+    if ( $was_new && defined $mock_file->{'contents'} ) {
         my $now = time;
+        $mock_file->{'atime'} = $now;
         $mock_file->{'mtime'} = $now;
         $mock_file->{'ctime'} = $now;
     }
@@ -2906,10 +2917,11 @@ sub __sysopen (*$$;$) {
         return undef;
     }
 
-    # O_CREAT
+    # O_CREAT — POSIX open(2): creating a new file sets atime, mtime, and ctime.
     if ( $sysopen_mode & O_CREAT && !defined $mock_file->{'contents'} ) {
         $mock_file->{'contents'} = '';
         my $now = time;
+        $mock_file->{'atime'} = $now;
         $mock_file->{'mtime'} = $now;
         $mock_file->{'ctime'} = $now;
         _update_parent_dir_times( $_[1] );
@@ -3424,6 +3436,12 @@ sub __mkdir (_;$) {
 
     # This should now start returning content
     $mock->{'has_content'} = 1;
+
+    # POSIX mkdir(2): the new directory's timestamps are set to the current time.
+    my $now = time;
+    $mock->{'atime'} = $now;
+    $mock->{'mtime'} = $now;
+    $mock->{'ctime'} = $now;
 
     _update_parent_dir_times($file);
     return 1;
