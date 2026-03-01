@@ -3501,6 +3501,14 @@ sub __rename ($$) {
         return 0;
     }
 
+    # Can't overwrite a non-empty directory (POSIX rename(2))
+    if ( $mock_old->is_dir && $mock_new->exists && $mock_new->is_dir ) {
+        if ( grep { $_->exists } _files_in_dir( $mock_new->{'path'} ) ) {
+            $! = ENOTEMPTY;
+            return 0;
+        }
+    }
+
     # Move state from old to new
     if ( $mock_old->is_link ) {
         delete $mock_new->{'contents'};
