@@ -152,7 +152,13 @@ is( \%Test::MockFile::files_being_mocked, {}, "No mock files are in cache" ) or 
     is( sysread( $fh, $buf, 3, 0 ), 3, "Read 3 bytes from current position (46)." );
     is( $buf, "vwx", "Line is as expected." );
 
-    like( dies { sysseek( $fh, 10, 3 ) }, qr/Invalid whence value/, "Dies when given an invalid whence value." );
+    {
+        use Errno qw/EINVAL/;
+        $! = 0;
+        my $ret = sysseek( $fh, 10, 3 );
+        ok( !$ret, "sysseek with invalid whence returns false" );
+        is( $! + 0, EINVAL, "sysseek with invalid whence sets EINVAL" );
+    }
 
     close $fh;
     undef $bar;
