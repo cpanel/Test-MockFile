@@ -37,7 +37,7 @@ use Symbol;
 
 use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
-use Errno qw/EPERM ENOENT ELOOP ENOTEMPTY EEXIST EISDIR ENOTDIR EINVAL EXDEV/;
+use Errno qw/EPERM ENOENT EBADF ELOOP ENOTEMPTY EEXIST EISDIR ENOTDIR EINVAL EXDEV/;
 
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
@@ -3051,14 +3051,22 @@ sub __closedir (*) {
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);
 
-    if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+    if ( !$mocked_dir ) {
         _real_file_access_hook( 'closedir', \@_ );
         goto \&CORE::closedir if _goto_is_available();
         return CORE::closedir($fh);
     }
 
+    # Already closed — warn and return EBADF like real closedir
+    if ( !$mocked_dir->{'obj'} ) {
+        warnings::warnif( 'io', "closedir() attempted on invalid dirhandle $fh" );
+        $! = EBADF;
+        return undef;
+    }
+
     delete $mocked_dir->{'obj'};
-    delete $mocked_dir->{'fh'};
+
+    # Keep $mocked_dir->{'fh'} so double-close is detected as mock, not CORE
 
     return 1;
 }
