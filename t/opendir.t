@@ -206,7 +206,9 @@ note "-------------- closedir double-close returns EBADF --------------";
 
 note "-------------- seekdir with negative position clamps to 0 --------------";
 {
-    my $mock = Test::MockFile->new_dir( '/seekneg', [qw/alpha beta/] );
+    my $f1   = Test::MockFile->file( '/seekneg/alpha', '' );
+    my $f2   = Test::MockFile->file( '/seekneg/beta',  '' );
+    my $mock = Test::MockFile->new_dir('/seekneg');
 
     opendir my $dh, '/seekneg' or die "opendir: $!";
 
