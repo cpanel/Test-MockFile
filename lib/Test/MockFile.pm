@@ -3151,7 +3151,10 @@ sub __seekdir (*$) {
         confess("seekdir called on a closed dirhandle");
     }
 
-    $obj->{'tell'} = $goto;
+    # Clamp negative positions to 0.  POSIX says behavior is undefined for
+    # invalid positions; without this guard, Perl's negative-array-indexing
+    # causes readdir to return entries from the end of the list.
+    $obj->{'tell'} = $goto < 0 ? 0 : $goto;
     return 1;
 }
 
