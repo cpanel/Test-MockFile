@@ -231,5 +231,75 @@ note "-------------- seekdir with negative position clamps to 0 --------------";
     closedir($dh);
 }
 
+note "-------------- readdir on closed mock dirhandle warns --------------";
+{
+    my $mock = Test::MockFile->new_dir('/rd_closed');
+
+    opendir my $dh, '/rd_closed' or die "opendir: $!";
+    is( closedir($dh), 1, 'closedir succeeds' );
+
+    # Scalar context
+    my $entry;
+    like(
+        warning { $entry = readdir($dh) },
+        qr/readdir\(\) attempted on invalid dirhandle/,
+        'readdir on closed mock dh warns'
+    );
+    ok( !defined $entry, 'readdir on closed mock dh returns undef in scalar context' );
+
+    # List context
+    my @entries;
+    like(
+        warning { @entries = readdir($dh) },
+        qr/readdir\(\) attempted on invalid dirhandle/,
+        'readdir on closed mock dh warns in list context'
+    );
+    is( \@entries, [], 'readdir on closed mock dh returns empty list in list context' );
+}
+
+note "-------------- telldir on closed mock dirhandle warns --------------";
+{
+    my $mock = Test::MockFile->new_dir('/td_closed');
+
+    opendir my $dh, '/td_closed' or die "opendir: $!";
+    is( closedir($dh), 1, 'closedir succeeds' );
+
+    my $pos;
+    like(
+        warning { $pos = telldir($dh) },
+        qr/telldir\(\) attempted on invalid dirhandle/,
+        'telldir on closed mock dh warns'
+    );
+    ok( !defined $pos, 'telldir on closed mock dh returns undef' );
+}
+
+note "-------------- seekdir on closed mock dirhandle warns --------------";
+{
+    my $mock = Test::MockFile->new_dir('/sd_closed');
+
+    opendir my $dh, '/sd_closed' or die "opendir: $!";
+    is( closedir($dh), 1, 'closedir succeeds' );
+
+    like(
+        warning { seekdir( $dh, 0 ) },
+        qr/seekdir\(\) attempted on invalid dirhandle/,
+        'seekdir on closed mock dh warns'
+    );
+}
+
+note "-------------- rewinddir on closed mock dirhandle warns --------------";
+{
+    my $mock = Test::MockFile->new_dir('/rw_closed');
+
+    opendir my $dh, '/rw_closed' or die "opendir: $!";
+    is( closedir($dh), 1, 'closedir succeeds' );
+
+    like(
+        warning { rewinddir($dh) },
+        qr/rewinddir\(\) attempted on invalid dirhandle/,
+        'rewinddir on closed mock dh warns'
+    );
+}
+
 done_testing();
 exit;

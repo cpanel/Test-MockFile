@@ -3065,7 +3065,8 @@ sub __readdir (*) {
 
     my $obj = $mocked_dir->{'obj'};
     if ( !$obj ) {
-        confess("Read on a closed handle");
+        warnings::warnif( 'io', "readdir() attempted on invalid dirhandle $_[0]" );
+        return;
     }
 
     if ( !defined $obj->{'files_in_readdir'} ) {
@@ -3101,10 +3102,15 @@ sub __telldir (*) {
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);
 
-    if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+    if ( !$mocked_dir ) {
         _real_file_access_hook( 'telldir', \@_ );
         goto \&CORE::telldir if _goto_is_available();
         return CORE::telldir($fh);
+    }
+
+    if ( !$mocked_dir->{'obj'} ) {
+        warnings::warnif( 'io', "telldir() attempted on invalid dirhandle $fh" );
+        return undef;
     }
 
     my $obj = $mocked_dir->{'obj'};
@@ -3128,10 +3134,15 @@ sub __rewinddir (*) {
     my ($fh) = @_;
     my $mocked_dir = _get_file_object($fh);
 
-    if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+    if ( !$mocked_dir ) {
         _real_file_access_hook( 'rewinddir', \@_ );
         goto \&CORE::rewinddir if _goto_is_available();
         return CORE::rewinddir( $_[0] );
+    }
+
+    if ( !$mocked_dir->{'obj'} ) {
+        warnings::warnif( 'io', "rewinddir() attempted on invalid dirhandle $fh" );
+        return;
     }
 
     my $obj = $mocked_dir->{'obj'};
@@ -3156,10 +3167,15 @@ sub __seekdir (*$) {
     my ( $fh, $goto ) = @_;
     my $mocked_dir = _get_file_object($fh);
 
-    if ( !$mocked_dir || !$mocked_dir->{'obj'} ) {
+    if ( !$mocked_dir ) {
         _real_file_access_hook( 'seekdir', \@_ );
         goto \&CORE::seekdir if _goto_is_available();
         return CORE::seekdir( $fh, $goto );
+    }
+
+    if ( !$mocked_dir->{'obj'} ) {
+        warnings::warnif( 'io', "seekdir() attempted on invalid dirhandle $fh" );
+        return;
     }
 
     my $obj = $mocked_dir->{'obj'};
