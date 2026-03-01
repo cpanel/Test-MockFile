@@ -183,5 +183,26 @@ note "opendir failure returns undef in list context (single-element list)";
     ok( !defined $ret[0], 'opendir failure element is undef' );
 }
 
+note "-------------- closedir double-close returns EBADF --------------";
+{
+    my $mock = Test::MockFile->new_dir('/dblclose');
+
+    opendir my $dh, '/dblclose' or die "opendir: $!";
+    is( closedir($dh), 1, 'first closedir succeeds' );
+
+    my $ret;
+    my $errno;
+    like(
+        warning {
+            $ret = closedir($dh);
+            $errno = $! + 0;
+        },
+        qr/closedir\(\) attempted on invalid dirhandle/,
+        'second closedir warns about invalid dirhandle'
+    );
+    ok( !defined $ret, 'second closedir returns undef' );
+    is( $errno, EBADF, 'second closedir sets EBADF' );
+}
+
 done_testing();
 exit;
