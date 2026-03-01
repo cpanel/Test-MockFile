@@ -730,10 +730,7 @@ sub import {
     # where caller(N)[10] hints after goto &sub may not be reliable.
     if ( $INC{'autodie.pm'} || $INC{'Fatal.pm'} ) {
         my $hints = ( caller(0) )[10];
-        if (   ref $hints eq 'HASH'
-            && ( $hints->{'autodie'} || $hints->{'Fatal::open'} || $hints->{'autodie::open'}
-              || $hints->{'Fatal::sysopen'} || $hints->{'autodie::sysopen'} ) )
-        {
+        if ( ref $hints eq 'HASH' && grep { /^(?:autodie|Fatal::)/ } keys %$hints ) {
             $_autodie_callers{$caller} = 1;
         }
     }
@@ -741,8 +738,38 @@ sub import {
     return;
 }
 
+# Install a sub into a package, replicating the delete-glob trick used by
+# autodie/Fatal.pm's install_subs.  Simple glob assignment (*pkg::func = \&sub)
+# does not override builtins when autodie has already installed its wrapper —
+# the glob entry must be deleted and recreated for Perl to pick up the new sub.
+sub _install_sub {
+    my ( $pkg, $name, $ref ) = @_;
+
+    no strict 'refs';
+    no warnings qw(redefine once);
+
+    my $full_name  = "${pkg}::${name}";
+    my $pkg_sym    = "${pkg}::";
+    my $old_glob   = *$full_name;
+
+    # Delete the stash entry so Perl re-resolves the symbol.
+    delete $pkg_sym->{$name};
+
+    # Restore non-CODE slots (SCALAR, ARRAY, HASH, IO) from the old glob
+    # so we don't clobber unrelated data in the same symbol.
+    local *alias = *$full_name;
+    foreach my $slot (qw( SCALAR ARRAY HASH IO )) {
+        next unless defined( *$old_glob{$slot} );
+        *alias = *$old_glob{$slot};
+    }
+
+    *$full_name = $ref;
+}
+
 # Install goto-transparent wrappers into the caller's package namespace.
 # These use goto to preserve @_ aliasing and caller() transparency.
+# Uses the delete-glob technique so that Perl properly picks up our
+# overrides even when autodie/Fatal.pm has already installed wrappers.
 sub _install_package_overrides {
     my ($caller) = @_;
 
@@ -753,29 +780,36 @@ sub _install_package_overrides {
     push @_tmf_callers, $caller
       unless grep { $_ eq $caller } @_tmf_callers;
 
-    no strict 'refs';
-    no warnings 'redefine';
+    my %subs = (
+        'open'      => sub (*;$@)  { goto \&__open },
+        'sysopen'   => sub (*$$;$) { goto \&__sysopen },
+        'opendir'   => sub (*$)    { goto \&__opendir },
+        'readdir'   => sub (*)     { goto \&__readdir },
+        'telldir'   => sub (*)     { goto \&__telldir },
+        'rewinddir' => sub (*)     { goto \&__rewinddir },
+        'seekdir'   => sub (*$)    { goto \&__seekdir },
+        'closedir'  => sub (*)     { goto \&__closedir },
+        'unlink'    => sub (@)     { goto \&__unlink },
+        'readlink'  => sub (_)     { goto \&__readlink },
+        'mkdir'     => sub (_;$)   { goto \&__mkdir },
+        'rmdir'     => sub (_)     { goto \&__rmdir },
+        'chown'     => sub (@)     { goto \&__chown },
+        'chmod'     => sub (@)     { goto \&__chmod },
+        'rename'    => sub ($$)    { goto \&__rename },
+        'link'      => sub ($$)    { goto \&__link },
+        'symlink'   => sub ($$)    { goto \&__symlink },
+        'truncate'  => sub ($$)    { goto \&__truncate },
+        'flock'     => sub (*$)    { goto \&__flock },
+    );
 
-    *{"${caller}::open"}     = sub (*;$@)  { goto \&__open };
-    *{"${caller}::sysopen"}  = sub (*$$;$) { goto \&__sysopen };
-    *{"${caller}::opendir"}  = sub (*$)    { goto \&__opendir };
-    *{"${caller}::readdir"}  = sub (*)     { goto \&__readdir };
-    *{"${caller}::telldir"}  = sub (*)     { goto \&__telldir };
-    *{"${caller}::rewinddir"}= sub (*)     { goto \&__rewinddir };
-    *{"${caller}::seekdir"}  = sub (*$)    { goto \&__seekdir };
-    *{"${caller}::closedir"} = sub (*)     { goto \&__closedir };
-    *{"${caller}::unlink"}   = sub (@)     { goto \&__unlink };
-    *{"${caller}::readlink"} = sub (_)     { goto \&__readlink };
-    *{"${caller}::mkdir"}    = sub (_;$)   { goto \&__mkdir };
-    *{"${caller}::rmdir"}    = sub (_)     { goto \&__rmdir };
-    *{"${caller}::chown"}    = sub (@)     { goto \&__chown };
-    *{"${caller}::chmod"}    = sub (@)     { goto \&__chmod };
+    _install_sub( $caller, $_, $subs{$_} ) for keys %subs;
 }
 
-# Check if autodie is active for 'open' in the caller's scope.
+# Check if autodie is active for a given function in the caller's scope.
 # autodie stores its state in the lexical hints hash (%^H),
 # accessible via (caller($depth))[10]. The keys vary by version.
-sub _caller_has_autodie_for_open {
+sub _caller_has_autodie_for {
+    my ($func) = @_;
     return unless $INC{'autodie.pm'} || $INC{'Fatal.pm'};
 
     # Primary: walk the caller stack for lexical hints set by autodie.
@@ -786,8 +820,8 @@ sub _caller_has_autodie_for_open {
         next unless ref $hints eq 'HASH';
         return 1
           if $hints->{'autodie'}
-          || $hints->{'Fatal::open'}
-          || $hints->{'autodie::open'};
+          || $hints->{"Fatal::$func"}
+          || $hints->{"autodie::$func"};
     }
 
     # Fallback: check if the calling package had autodie active at import
@@ -800,59 +834,24 @@ sub _caller_has_autodie_for_open {
     return;
 }
 
-# Throw an autodie-compatible exception for a failed open.
+# Throw an autodie-compatible exception for a failed CORE function.
 # Creates a real autodie::exception if available, otherwise a plain die.
-sub _throw_autodie_open {
-    my ($file, @args) = @_;
+# $! must be saved before the eval since eval can clobber it.
+sub _throw_autodie {
+    my ($func, @args) = @_;
+    my $saved_errno = int($!);
+    my $saved_errstr = "$!";
     if ( eval { require autodie::exception; 1 } ) {
+        local $! = $saved_errno;
         die autodie::exception->new(
-            function => 'CORE::open',
+            function => "CORE::$func",
             args     => \@args,
-            errno    => "$!",
+            errno    => $saved_errstr,
             context  => 'scalar',
             return   => undef,
         );
     }
-    die sprintf( "Can't open '%s': '%s'", $file, $! );
-}
-
-# Check if autodie is active for 'sysopen' in the caller's scope.
-# Same strategy as _caller_has_autodie_for_open but checks sysopen hints.
-sub _caller_has_autodie_for_sysopen {
-    return unless $INC{'autodie.pm'} || $INC{'Fatal.pm'};
-
-    # Primary: walk the caller stack for lexical hints set by autodie.
-    for my $depth ( 1 .. 10 ) {
-        my @c = caller($depth);
-        last unless @c;
-        my $hints = $c[10];
-        next unless ref $hints eq 'HASH';
-        return 1
-          if $hints->{'autodie'}
-          || $hints->{'Fatal::sysopen'}
-          || $hints->{'autodie::sysopen'};
-    }
-
-    # Fallback: check if the calling package had autodie active at import time.
-    my $caller_pkg = caller(1);
-    return $_autodie_callers{$caller_pkg} if $caller_pkg;
-
-    return;
-}
-
-# Throw an autodie-compatible exception for a failed sysopen.
-sub _throw_autodie_sysopen {
-    my ($file, @args) = @_;
-    if ( eval { require autodie::exception; 1 } ) {
-        die autodie::exception->new(
-            function => 'CORE::sysopen',
-            args     => \@args,
-            errno    => "$!",
-            context  => 'scalar',
-            return   => undef,
-        );
-    }
-    die sprintf( "Can't sysopen '%s': '%s'", $file, $! );
+    die sprintf( "Can't %s '%s': '%s'", $func, $args[0] // '', $saved_errstr );
 }
 
 # Re-install after all compilation to handle the case where
@@ -2711,19 +2710,19 @@ sub __open (*;$@) {
             }
             else {
                 $! = ENOENT;
-                _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
+                _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
                 return undef;
             }
         }
         else {
             $! = ENOENT;
-            _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
+            _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
             return undef;
         }
     }
     if ( $abs_path eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
-        _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
+        _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
         return undef;
     }
 
@@ -2762,14 +2761,14 @@ sub __open (*;$@) {
     # Directories cannot be opened as regular files.
     if ( $mock_file->is_dir() ) {
         $! = EISDIR;
-        _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
+        _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
         return undef;
     }
 
     # If contents is undef, we act like the file isn't there.
     if ( !defined $mock_file->contents() && grep { $mode eq $_ } qw/< +</ ) {
         $! = ENOENT;
-        _throw_autodie_open( $file, @_ ) if _caller_has_autodie_for_open();
+        _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
         return undef;
     }
 
@@ -2841,7 +2840,7 @@ sub __sysopen (*$$;$) {
         $mock_file = _get_file_object( $_[1] );
         if ( $mock_file && $mock_file->is_link ) {
             $! = ELOOP;
-            _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+            _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
             return undef;
         }
     }
@@ -2859,19 +2858,19 @@ sub __sysopen (*$$;$) {
                 }
                 else {
                     $! = ENOENT;
-                    _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+                    _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
                     return undef;
                 }
             }
             else {
                 $! = ENOENT;
-                _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+                _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
                 return undef;
             }
         }
         if ( $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
             $! = ELOOP;
-            _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+            _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
             return undef;
         }
         $mock_file = $abs_path ? $files_being_mocked{$abs_path} : undef;
@@ -2895,14 +2894,14 @@ sub __sysopen (*$$;$) {
     # Directories cannot be opened as regular files.
     if ( $mock_file->is_dir() ) {
         $! = EISDIR;
-        _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+        _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
         return undef;
     }
 
     # O_EXCL
     if ( $sysopen_mode & O_EXCL && $sysopen_mode & O_CREAT && defined $mock_file->{'contents'} ) {
         $! = EEXIST;
-        _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+        _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
         return undef;
     }
 
@@ -2945,7 +2944,7 @@ sub __sysopen (*$$;$) {
     # O_CREAT would have already populated contents above if it was requested.
     if ( !defined $mock_file->{'contents'} ) {
         $! = ENOENT;
-        _throw_autodie_sysopen( $_[1], @_ ) if _caller_has_autodie_for_sysopen();
+        _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
         return undef;
     }
 
@@ -2986,11 +2985,13 @@ sub __opendir (*$) {
 
     if ( defined $abs_path && $abs_path eq BROKEN_SYMLINK ) {
         $! = ENOENT;
+        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
         return undef;
     }
 
     if ( defined $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
+        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
         return undef;
     }
 
@@ -3004,11 +3005,13 @@ sub __opendir (*$) {
 
     if ( !defined $mock_dir->contents ) {
         $! = ENOENT;
+        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
         return undef;
     }
 
     if ( !( $mock_dir->{'mode'} & S_IFDIR ) ) {
         $! = ENOTDIR;
+        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
         return undef;
     }
 
@@ -3173,6 +3176,7 @@ sub __closedir (*) {
     if ( !$mocked_dir->{'obj'} ) {
         warnings::warnif( 'io', "closedir() attempted on invalid dirhandle $fh" );
         $! = EBADF;
+        _throw_autodie( 'closedir', @_ ) if _caller_has_autodie_for('closedir');
         return undef;
     }
 
@@ -3199,6 +3203,10 @@ sub __unlink (@) {
         }
     }
 
+    if ( $files_deleted < scalar(@files_to_unlink) ) {
+        _throw_autodie( 'unlink', @_ ) if _caller_has_autodie_for('unlink');
+    }
+
     return $files_deleted;
 
 }
@@ -3214,6 +3222,7 @@ sub __readlink (_) {
         else {
             $! = ENOENT;
         }
+        _throw_autodie( 'readlink', @_ ) if _caller_has_autodie_for('readlink');
         return undef;
     }
 
@@ -3226,11 +3235,13 @@ sub __readlink (_) {
 
     if ( !$mock_object->exists() ) {
         $! = ENOENT;
+        _throw_autodie( 'readlink', @_ ) if _caller_has_autodie_for('readlink');
         return undef;
     }
 
     if ( !$mock_object->is_link ) {
         $! = EINVAL;
+        _throw_autodie( 'readlink', @_ ) if _caller_has_autodie_for('readlink');
         return undef;
     }
     return $mock_object->readlink;
@@ -3242,6 +3253,7 @@ sub __symlink ($$) {
     if ( !defined $newname ) {
         carp('Use of uninitialized value in symlink');
         $! = ENOENT;
+        _throw_autodie( 'symlink', @_ ) if _caller_has_autodie_for('symlink');
         return 0;
     }
 
@@ -3255,6 +3267,7 @@ sub __symlink ($$) {
 
     if ( $mock->exists ) {
         $! = EEXIST;
+        _throw_autodie( 'symlink', @_ ) if _caller_has_autodie_for('symlink');
         return 0;
     }
 
@@ -3278,6 +3291,7 @@ sub __link ($$) {
     if ( !defined $oldname || !defined $newname ) {
         carp('Use of uninitialized value in link');
         $! = ENOENT;
+        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
         return 0;
     }
 
@@ -3294,12 +3308,14 @@ sub __link ($$) {
     # Source must exist
     if ( !$old_mock || !$old_mock->exists ) {
         $! = ENOENT;
+        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
         return 0;
     }
 
     # Cannot hard-link directories
     if ( $old_mock->is_dir ) {
         $! = EPERM;
+        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
         return 0;
     }
 
@@ -3309,11 +3325,13 @@ sub __link ($$) {
         my $target_path = _find_file_or_fh( $oldname, 1 );    # follow_link=1
         if ( !defined $target_path || $target_path eq BROKEN_SYMLINK || $target_path eq CIRCULAR_SYMLINK ) {
             $! = ENOENT;
+            _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
             return 0;
         }
         $source_mock = $files_being_mocked{$target_path};
         if ( !$source_mock || !$source_mock->exists ) {
             $! = ENOENT;
+            _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
             return 0;
         }
     }
@@ -3321,12 +3339,14 @@ sub __link ($$) {
     # Destination must be a pre-declared mock
     if ( !$new_mock ) {
         $! = EXDEV;
+        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
         return 0;
     }
 
     # Destination must not already exist
     if ( $new_mock->exists ) {
         $! = EEXIST;
+        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
         return 0;
     }
 
@@ -3371,6 +3391,7 @@ sub __mkdir (_;$) {
         # mkdir warns if $file is undef
         carp("Use of uninitialized value in mkdir");
         $! = ENOENT;
+        _throw_autodie( 'mkdir', @_ ) if _caller_has_autodie_for('mkdir');
         return 0;
     }
 
@@ -3389,6 +3410,7 @@ sub __mkdir (_;$) {
     # File or directory, this exists and should fail
     if ( $mock->exists ) {
         $! = EEXIST;
+        _throw_autodie( 'mkdir', @_ ) if _caller_has_autodie_for('mkdir');
         return 0;
     }
 
@@ -3413,6 +3435,7 @@ sub __rmdir (_) {
     if ( !defined $file ) {
         carp('Use of uninitialized value in rmdir');
         $! = ENOENT;
+        _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
         return 0;
     }
 
@@ -3429,22 +3452,26 @@ sub __rmdir (_) {
     if ( $mock->exists ) {
         if ( $mock->is_file ) {
             $! = ENOTDIR;
+            _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
             return 0;
         }
 
         if ( $mock->is_link ) {
             $! = ENOTDIR;
+            _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
             return 0;
         }
     }
 
     if ( !$mock->exists ) {
         $! = ENOENT;
+        _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
         return 0;
     }
 
     if ( grep { $_->exists } _files_in_dir($file) ) {
         $! = ENOTEMPTY;
+        _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
         return 0;
     }
 
@@ -3483,6 +3510,7 @@ sub __rename ($$) {
     # Source must exist
     if ( !$mock_old->exists ) {
         $! = ENOENT;
+        _throw_autodie( 'rename', @_ ) if _caller_has_autodie_for('rename');
         return 0;
     }
 
@@ -3492,12 +3520,14 @@ sub __rename ($$) {
     # Can't overwrite a directory with a non-directory
     if ( $mock_new->exists && $mock_new->is_dir && !$mock_old->is_dir ) {
         $! = EISDIR;
+        _throw_autodie( 'rename', @_ ) if _caller_has_autodie_for('rename');
         return 0;
     }
 
     # Can't overwrite a file with a directory
     if ( $mock_old->is_dir && $mock_new->exists && !$mock_new->is_dir ) {
         $! = ENOTDIR;
+        _throw_autodie( 'rename', @_ ) if _caller_has_autodie_for('rename');
         return 0;
     }
 
@@ -3579,6 +3609,7 @@ sub __chown (@) {
     if ( !$is_root && $uid != -1 && $gid != -1 ) {
         if ( $> != $target_uid || !$is_in_group ) {
             $! = EPERM;
+            _throw_autodie( 'chown', @_ ) if _caller_has_autodie_for('chown');
             return 0;
         }
     }
@@ -3624,6 +3655,10 @@ sub __chown (@) {
         $mock->{'ctime'} = time;
 
         $num_changed++;
+    }
+
+    if ( $num_changed < scalar(@files) ) {
+        _throw_autodie( 'chown', @_ ) if _caller_has_autodie_for('chown');
     }
 
     return $num_changed;
@@ -3691,6 +3726,10 @@ sub __chmod (@) {
         $mock->{'ctime'} = time;
 
         $num_changed++;
+    }
+
+    if ( $num_changed < scalar(@files) ) {
+        _throw_autodie( 'chmod', @_ ) if _caller_has_autodie_for('chmod');
     }
 
     return $num_changed;
@@ -3781,20 +3820,24 @@ sub __truncate ($$) {
     # Handle broken/circular symlink errors
     if ( ref $mock eq 'A::BROKEN::SYMLINK' ) {
         $! = ENOENT;
+        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
         return 0;
     }
     if ( ref $mock eq 'A::CIRCULAR::SYMLINK' ) {
         $! = ELOOP;
+        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
         return 0;
     }
 
     if ( $mock->is_dir() ) {
         $! = EISDIR;
+        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
         return 0;
     }
 
     if ( !$mock->exists() ) {
         $! = ENOENT;
+        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
         return 0;
     }
 
@@ -3804,12 +3847,14 @@ sub __truncate ($$) {
         my $tied = tied( *{$file_or_fh} );
         if ( $tied && !$tied->{'write'} ) {
             $! = EINVAL;
+            _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
             return 0;
         }
     }
 
     if ( $length < 0 ) {
         $! = EINVAL;
+        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
         return 0;
     }
 
