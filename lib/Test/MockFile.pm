@@ -2143,6 +2143,11 @@ sub size {
     # Lstat for a symlink returns the length of the target path.
     return length( $self->{'readlink'} ) if $self->is_link;
 
+    # Directories have a fixed size (typically one filesystem block).
+    # Previously, length($arrayref) stringified the contents() return,
+    # producing a nonsensical ~20-byte value.
+    return $self->{'blksize'} if $self->is_dir;
+
     # length undef is 0 not undef in perl 5.10
     if ( $] < 5.012 ) {
         return undef unless $self->exists;
