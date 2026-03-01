@@ -3184,7 +3184,7 @@ sub __closedir (*) {
 }
 
 sub __unlink (@) {
-    my @files_to_unlink = @_;
+    my @files_to_unlink = @_ ? @_ : ($_);
     my $files_deleted   = 0;
 
     foreach my $file (@files_to_unlink) {
