@@ -770,6 +770,11 @@ sub _install_package_overrides {
     *{"${caller}::rmdir"}    = sub (_)     { goto \&__rmdir };
     *{"${caller}::chown"}    = sub (@)     { goto \&__chown };
     *{"${caller}::chmod"}    = sub (@)     { goto \&__chmod };
+    *{"${caller}::rename"}   = sub ($$)    { goto \&__rename };
+    *{"${caller}::link"}     = sub ($$)    { goto \&__link };
+    *{"${caller}::symlink"}  = sub ($$)    { goto \&__symlink };
+    *{"${caller}::truncate"} = sub ($$)    { goto \&__truncate };
+    *{"${caller}::flock"}    = sub (*$)    { goto \&__flock };
 }
 
 # Check if autodie is active for 'open' in the caller's scope.
@@ -3307,8 +3312,12 @@ sub __link ($$) {
     my $source_mock = $old_mock;
     if ( $old_mock->is_link ) {
         my $target_path = _find_file_or_fh( $oldname, 1 );    # follow_link=1
-        if ( !defined $target_path || $target_path eq BROKEN_SYMLINK || $target_path eq CIRCULAR_SYMLINK ) {
+        if ( !defined $target_path || $target_path eq BROKEN_SYMLINK ) {
             $! = ENOENT;
+            return 0;
+        }
+        if ( $target_path eq CIRCULAR_SYMLINK ) {
+            $! = ELOOP;
             return 0;
         }
         $source_mock = $files_being_mocked{$target_path};
@@ -3708,6 +3717,7 @@ sub __flock (*$) {
     }
 
     # Not a mocked file — delegate to the real flock.
+    _real_file_access_hook( 'flock', \@_ );
     goto \&CORE::flock if _goto_is_available();
     return CORE::flock( $fh, $operation );
 }
