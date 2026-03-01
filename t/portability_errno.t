@@ -112,4 +112,64 @@ subtest "syswrite with too-negative offset warns" => sub {
     close $fh;
 };
 
+subtest "sysread with non-numeric length warns and returns undef" => sub {
+    my $mock = Test::MockFile->file( '/tmp/read_test', 'hello world' );
+    sysopen( my $fh, '/tmp/read_test', O_RDONLY ) or die;
+
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+
+    my $buf = '';
+    my $ret = sysread( $fh, $buf, "abc" );
+    ok( !defined $ret, "sysread with non-numeric len returns undef" );
+    is( $! + 0, EINVAL, "\$! is set to EINVAL" );
+    ok( scalar @warnings >= 1, "got a warning" );
+    like( $warnings[0], qr/isn't numeric/, "warning mentions non-numeric argument" ) if @warnings;
+    is( $buf, '', "buffer is unchanged after failed sysread" );
+
+    close $fh;
+};
+
+subtest "sysread with negative length warns and returns undef" => sub {
+    my $mock = Test::MockFile->file( '/tmp/read_test2', 'hello world' );
+    sysopen( my $fh, '/tmp/read_test2', O_RDONLY ) or die;
+
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+
+    my $buf = '';
+    my $ret = sysread( $fh, $buf, -1 );
+    ok( !defined $ret, "sysread with negative length returns undef" );
+    is( $! + 0, EINVAL, "\$! is set to EINVAL" );
+    ok( scalar @warnings >= 1, "got a warning" );
+    like( $warnings[0], qr/Negative length/, "warning mentions negative length" ) if @warnings;
+    is( $buf, '', "buffer is unchanged after failed sysread" );
+
+    close $fh;
+};
+
+subtest "sysread with undef buffer initializes it" => sub {
+    my $mock = Test::MockFile->file( '/tmp/read_test3', 'ABCDEFGHIJ' );
+    sysopen( my $fh, '/tmp/read_test3', O_RDONLY ) or die;
+
+    my $buf;    # undef
+    my $ret = sysread( $fh, $buf, 5 );
+    is( $ret, 5,       "sysread with undef buffer returns 5 bytes" );
+    is( $buf, 'ABCDE', "buffer contains the read data" );
+
+    close $fh;
+};
+
+subtest "sysread with zero length returns 0" => sub {
+    my $mock = Test::MockFile->file( '/tmp/read_test4', 'hello' );
+    sysopen( my $fh, '/tmp/read_test4', O_RDONLY ) or die;
+
+    my $buf = '';
+    my $ret = sysread( $fh, $buf, 0 );
+    is( $ret, 0,  "sysread with len=0 returns 0" );
+    is( $buf, '', "buffer is empty after zero-length read" );
+
+    close $fh;
+};
+
 done_testing();

@@ -7,6 +7,7 @@ use Test2::Bundle::Extended;
 use Test2::Tools::Explain;
 use Test2::Plugin::NoWarnings;
 
+use Errno qw( EINVAL );
 use Fcntl qw( :seek O_RDONLY O_WRONLY O_CREAT O_TRUNC O_RDWR );
 
 use Test::MockFile qw< nostrict >;
@@ -91,9 +92,21 @@ my $content = "ABCDEFGHIJ";
     my $mock = Test::MockFile->file( '/fake/seek_bad', $content );
     sysopen( my $fh, '/fake/seek_bad', O_RDONLY ) or die;
 
-    like( dies { sysseek( $fh, 0, 3 ) }, qr/Invalid whence value/, "whence=3 dies with 'Invalid whence value'" );
-    like( dies { sysseek( $fh, 0, -1 ) }, qr/Invalid whence value/, "whence=-1 dies with 'Invalid whence value'" );
-    like( dies { sysseek( $fh, 0, 99 ) }, qr/Invalid whence value/, "whence=99 dies with 'Invalid whence value'" );
+    # Invalid whence values should return failure and set EINVAL, not die.
+    $! = 0;
+    my $ret = sysseek( $fh, 0, 3 );
+    ok( !$ret, "whence=3 returns false" );
+    is( $! + 0, EINVAL, "whence=3 sets \$! to EINVAL" );
+
+    $! = 0;
+    $ret = sysseek( $fh, 0, -1 );
+    ok( !$ret, "whence=-1 returns false" );
+    is( $! + 0, EINVAL, "whence=-1 sets \$! to EINVAL" );
+
+    $! = 0;
+    $ret = sysseek( $fh, 0, 99 );
+    ok( !$ret, "whence=99 returns false" );
+    is( $! + 0, EINVAL, "whence=99 sets \$! to EINVAL" );
 
     close $fh;
 }
