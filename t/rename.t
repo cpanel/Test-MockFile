@@ -138,4 +138,93 @@ note "-------------- rename: dir over empty dir succeeds (POSIX) --------------"
     ok( $dst->exists,  'dest dir exists after rename' );
 }
 
+note "-------------- rename: directory with child file re-keys children --------------";
+{
+    my $dir   = Test::MockFile->new_dir('/mock/parent');
+    my $child = Test::MockFile->file( '/mock/parent/child.txt', 'hello world' );
+    my $dest  = Test::MockFile->dir('/mock/renamed');
+
+    ok( rename( '/mock/parent', '/mock/renamed' ), 'rename directory with child succeeds' );
+    ok( !$dir->exists,  'old directory no longer exists' );
+    ok( $dest->exists,  'new directory exists' );
+
+    # Child should be accessible under new path
+    my $child_exists = -e '/mock/renamed/child.txt';
+    ok( $child_exists, 'child file exists under new directory path' );
+
+    # Child contents should be preserved
+    open( my $fh, '<', '/mock/renamed/child.txt' ) or die "open failed: $!";
+    my $got = do { local $/; <$fh> };
+    close $fh;
+    is( $got, 'hello world', 'child file contents preserved after directory rename' );
+
+    # Child should NOT be accessible under old path
+    ok( !-e '/mock/parent/child.txt', 'child file not accessible under old path' );
+}
+
+note "-------------- rename: directory with nested subdirectory --------------";
+{
+    my $dir    = Test::MockFile->new_dir('/mock/top');
+    my $subdir = Test::MockFile->new_dir('/mock/top/sub');
+    my $file   = Test::MockFile->file( '/mock/top/sub/deep.txt', 'nested' );
+    my $dest   = Test::MockFile->dir('/mock/newtop');
+
+    ok( rename( '/mock/top', '/mock/newtop' ), 'rename directory with nested subdirectory succeeds' );
+
+    # Nested subdirectory accessible under new path
+    ok( -d '/mock/newtop/sub', 'nested subdirectory exists under new path' );
+
+    # Deep file accessible under new path
+    my $deep_exists = -e '/mock/newtop/sub/deep.txt';
+    ok( $deep_exists, 'deeply nested file exists under new path' );
+
+    open( my $fh, '<', '/mock/newtop/sub/deep.txt' ) or die "open failed: $!";
+    my $got = do { local $/; <$fh> };
+    close $fh;
+    is( $got, 'nested', 'deeply nested file contents preserved' );
+
+    # Old paths should not exist
+    ok( !-e '/mock/top/sub/deep.txt', 'deep file not accessible under old path' );
+    ok( !-d '/mock/top/sub',          'nested subdir not accessible under old path' );
+}
+
+note "-------------- rename: directory readdir shows re-keyed children --------------";
+{
+    my $dir  = Test::MockFile->new_dir('/mock/rd_old');
+    my $f1   = Test::MockFile->file( '/mock/rd_old/a.txt', 'aaa' );
+    my $f2   = Test::MockFile->file( '/mock/rd_old/b.txt', 'bbb' );
+    my $dest = Test::MockFile->dir('/mock/rd_new');
+
+    ok( rename( '/mock/rd_old', '/mock/rd_new' ), 'rename directory for readdir test' );
+
+    opendir( my $dh, '/mock/rd_new' ) or die "opendir failed: $!";
+    my @entries = sort readdir($dh);
+    closedir($dh);
+
+    is( \@entries, [ '.', '..', 'a.txt', 'b.txt' ], 'readdir on renamed directory shows re-keyed children' );
+}
+
+note "-------------- rename: child mock object path updated after rename --------------";
+{
+    my $dir   = Test::MockFile->new_dir('/mock/pathtest');
+    my $child = Test::MockFile->file( '/mock/pathtest/item.dat', 'data' );
+    my $dest  = Test::MockFile->dir('/mock/pathtest2');
+
+    ok( rename( '/mock/pathtest', '/mock/pathtest2' ), 'rename for path update test' );
+
+    is( $child->path, '/mock/pathtest2/item.dat', 'child mock object path updated to new prefix' );
+}
+
+note "-------------- rename: directory DESTROY cleanup works after rename --------------";
+{
+    my $dir  = Test::MockFile->new_dir('/mock/dtor');
+    my $file = Test::MockFile->file( '/mock/dtor/f.txt', 'content' );
+    my $dest = Test::MockFile->dir('/mock/dtor2');
+
+    ok( rename( '/mock/dtor', '/mock/dtor2' ), 'rename for DESTROY test' );
+
+    # Verify child still exists under new path before cleanup
+    ok( -e '/mock/dtor2/f.txt', 'child accessible before DESTROY' );
+}
+
 done_testing();

@@ -3589,6 +3589,38 @@ sub __rename ($$) {
         delete $mock_new->{'readlink'};
         $mock_new->{'has_content'} = $mock_old->{'has_content'};
         $mock_old->{'has_content'} = undef;
+
+        # Transfer autovivify settings from old dir to new dir
+        if ( $mock_old->{'autovivify'} ) {
+            $mock_new->{'autovivify'} = delete $mock_old->{'autovivify'};
+            delete $_autovivify_dirs{ $mock_old->{'path'} };
+            $_autovivify_dirs{ $mock_new->{'path'} } = $mock_new;
+            Scalar::Util::weaken( $_autovivify_dirs{ $mock_new->{'path'} } );
+        }
+
+        # Transfer ownership of autovivified children
+        if ( $mock_old->{'_autovivified_children'} ) {
+            $mock_new->{'_autovivified_children'} = delete $mock_old->{'_autovivified_children'};
+        }
+
+        # Re-key all children from old path prefix to new path prefix
+        # in %files_being_mocked (and %_autovivify_dirs if applicable).
+        # This ensures files under the renamed directory remain accessible.
+        my $old_prefix = $mock_old->{'path'};
+        my $new_prefix = $mock_new->{'path'};
+        for my $key ( grep { m{^\Q$old_prefix/\E} } keys %files_being_mocked ) {
+            my $child = $files_being_mocked{$key};
+            ( my $new_key = $key ) =~ s{^\Q$old_prefix/\E}{$new_prefix/};
+
+            delete $files_being_mocked{$key};
+            $files_being_mocked{$new_key} = $child;
+            $child->{'path'} = $new_key;
+
+            # Update autovivify tracking for child directories
+            if ( $_autovivify_dirs{$key} ) {
+                $_autovivify_dirs{$new_key} = delete $_autovivify_dirs{$key};
+            }
+        }
     }
     else {
         delete $mock_new->{'readlink'};
