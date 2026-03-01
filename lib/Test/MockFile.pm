@@ -3556,8 +3556,9 @@ sub __chown (@) {
     my @mocked_files   = map { ref $_ && ref $_ ne 'A::BROKEN::SYMLINK' && ref $_ ne 'A::CIRCULAR::SYMLINK' ? $_->{'path'} : () } values %mocked_files;
 
     # The idea is that if some are mocked and some are not,
-    # it's probably a mistake
-    if ( @mocked_files && @mocked_files != @files ) {
+    # it's probably a mistake.  Broken/circular symlinks are mocked paths
+    # (handled per-file below), so they don't count as unmocked.
+    if ( @mocked_files && @unmocked_files ) {
         confess(
             sprintf 'You called chown() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
             ( join ', ', @mocked_files ),
@@ -3651,8 +3652,9 @@ sub __chmod (@) {
     my @mocked_files   = map { ref $_ && ref $_ ne 'A::BROKEN::SYMLINK' && ref $_ ne 'A::CIRCULAR::SYMLINK' ? $_->{'path'} : () } values %mocked_files;
 
     # The idea is that if some are mocked and some are not,
-    # it's probably a mistake
-    if ( @mocked_files && @mocked_files != @files ) {
+    # it's probably a mistake.  Broken/circular symlinks are mocked paths
+    # (handled per-file below), so they don't count as unmocked.
+    if ( @mocked_files && @unmocked_files ) {
         confess(
             sprintf 'You called chmod() on a mix of mocked (%s) and unmocked files (%s) ' . ' - this is very likely a bug on your side',
             ( join ', ', @mocked_files ),
