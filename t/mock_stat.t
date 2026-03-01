@@ -101,9 +101,9 @@ is( Test::MockFile::_mock_stat( 'stat',  ' ' ), FALLBACK_TO_REAL_OP(), "A space 
 
 my $basic_stat_return = array {
     item 0;
-    item 0;
+    item match qr/^[1-9][0-9]*$/;    # inode: unique positive integer
     item 0100644;
-    item 0;
+    item 1;                           # nlink: 1 for regular files
     item match qr/^[0-9]+$/;
     item match qr/^[0-9\s]+$/;
     item 0;
@@ -125,9 +125,9 @@ is( $! + 0, ENOENT, "Throws an ENOENT error for missing file" );
 
 my $symlink_lstat_return = array {
     item 0;
-    item 0;
+    item match qr/^[1-9][0-9]*$/;    # inode: unique positive integer
     item 0127777;
-    item 0;
+    item 1;                           # nlink: 1 for symlinks
     item match qr/^[0-9]+$/;
     item match qr/^[0-9\s]+$/;
     item 0;
