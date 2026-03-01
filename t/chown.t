@@ -253,13 +253,13 @@ subtest(
         # chown on a mix of regular file + broken symlink should NOT die.
         # The broken symlink should silently fail with ENOENT, and the
         # regular file should succeed.
-        my $result;
+        my ( $result, $errno );
         ok(
-            lives { $result = chown( $>, int($)), '/chown_broken_link', '/chown_real_file' ) },
+            lives { $result = chown( $>, int($)), '/chown_broken_link', '/chown_real_file' ); $errno = $! + 0 },
             'chown with broken symlink + regular file does not confess',
         );
         is( $result, 1, 'chown returns 1 (one file changed)' );
-        is( $! + 0, ENOENT, 'errno set to ENOENT for the broken symlink' );
+        is( $errno, ENOENT, 'errno set to ENOENT for the broken symlink' );
     }
 );
 
@@ -267,13 +267,13 @@ subtest(
     'chown with only broken symlink' => sub {
         my $link = Test::MockFile->symlink( '/nowhere', '/chown_only_broken' );
 
-        my $result;
+        my ( $result, $errno );
         ok(
-            lives { $result = chown( $>, int($)), '/chown_only_broken' ) },
+            lives { $result = chown( $>, int($)), '/chown_only_broken' ); $errno = $! + 0 },
             'chown with only a broken symlink does not confess',
         );
         is( $result, 0, 'chown returns 0 (no files changed)' );
-        is( $! + 0, ENOENT, 'errno set to ENOENT' );
+        is( $errno, ENOENT, 'errno set to ENOENT' );
     }
 );
 
