@@ -2657,10 +2657,6 @@ sub __open (*;$@) {
             $mode = $1;
             $file = $2;
         }
-        elsif ( $_[1] =~ /^[\.\/\\\w\d\-]+$/xms ) {
-            $mode = '<';
-            $file = $_[1];
-        }
         elsif ( $_[1] =~ /^\|/xms ) {
             $mode = '|-';
             $file = $_[1];
@@ -2670,7 +2666,10 @@ sub __open (*;$@) {
             $file = $_[1];
         }
         else {
-            die "Unsupported two-way open: $_[1]\n";
+            # Any filename without a mode prefix defaults to read.
+            # This handles filenames with spaces, special chars, etc.
+            $mode = '<';
+            $file = $_[1];
         }
 
         # We have all args
