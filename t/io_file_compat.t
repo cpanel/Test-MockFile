@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use Test::More;
-use Errno qw/ENOENT/;
+use Errno qw/ENOENT EISDIR/;
 
 use Test::MockFile qw< nostrict >;
 
@@ -170,6 +170,50 @@ note "-------------- IO::File getline method on mocked file --------------";
         is( $fh->getline, "second\n", " ... getline returns second line" );
         is( $fh->getline, "third\n",  " ... getline returns third line" );
         is( $fh->getline, undef,      " ... getline returns undef at EOF" );
+        $fh->close;
+    }
+}
+
+note "-------------- IO::File->new on directory mock returns EISDIR --------------";
+{
+    my $dir = Test::MockFile->dir('/fake/iofile_dir');
+    mkdir '/fake/iofile_dir';
+
+    $! = 0;
+    my $fh = IO::File->new( '/fake/iofile_dir', 'r' );
+    ok( !defined $fh, "IO::File->new on a directory returns undef" );
+    is( $! + 0, EISDIR, " ... errno is EISDIR" );
+}
+
+note "-------------- IO::File->new on directory mock via sysopen returns EISDIR --------------";
+{
+    use Fcntl qw/O_RDONLY/;
+
+    my $dir = Test::MockFile->dir('/fake/iofile_dir_sys');
+    mkdir '/fake/iofile_dir_sys';
+
+    $! = 0;
+    my $fh = IO::File->new( '/fake/iofile_dir_sys', O_RDONLY );
+    ok( !defined $fh, "IO::File->new with O_RDONLY on a directory returns undef" );
+    is( $! + 0, EISDIR, " ... errno is EISDIR" );
+}
+
+note "-------------- IO::File append mode preserves append semantics after seek --------------";
+{
+    my $mock = Test::MockFile->file( '/fake/iofile_append_seek', "AAA" );
+
+    my $fh = IO::File->new( '/fake/iofile_append_seek', 'a' );
+    ok( defined $fh, "IO::File->new with 'a' mode opens mocked file" );
+    if ($fh) {
+        # Write something in append mode
+        print $fh "BBB";
+        is( $mock->contents(), "AAABBB", " ... first append works" );
+
+        # Seek to beginning and write again — should still append
+        seek $fh, 0, 0;
+        print $fh "CCC";
+        is( $mock->contents(), "AAABBBCCC", " ... append after seek still appends" );
+
         $fh->close;
     }
 }
