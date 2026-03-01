@@ -3262,11 +3262,12 @@ sub __symlink ($$) {
     $mock->{'readlink'} = $oldname;
     $mock->{'mode'}     = 07777 | S_IFLNK;
 
-    # Mark parent directory as having content
+    # Mark parent directory as having content and update timestamps
     ( my $dirname = $mock->{'path'} ) =~ s{ / [^/]+ $ }{}xms;
     if ( $files_being_mocked{$dirname} ) {
         $files_being_mocked{$dirname}{'has_content'} = 1;
     }
+    _update_parent_dir_times($newname);
 
     return 1;
 }
@@ -3349,11 +3350,12 @@ sub __link ($$) {
     $new_mock->{'atime'}    = $source_mock->{'atime'};
     $new_mock->{'mtime'}    = $source_mock->{'mtime'};
 
-    # Mark parent directory as having content
+    # Mark parent directory as having content and update timestamps
     ( my $dirname = $new_mock->{'path'} ) =~ s{ / [^/]+ $ }{}xms;
     if ( $files_being_mocked{$dirname} ) {
         $files_being_mocked{$dirname}{'has_content'} = 1;
     }
+    _update_parent_dir_times($newname);
 
     return 1;
 }
@@ -3530,6 +3532,10 @@ sub __rename ($$) {
     my $now = time;
     $mock_new->{'ctime'} = $now;
     $mock_old->{'ctime'} = $now;
+
+    # Update parent directory timestamps (old dir loses entry, new dir gains entry)
+    _update_parent_dir_times($old);
+    _update_parent_dir_times($new);
 
     return 1;
 }
@@ -3818,6 +3824,11 @@ sub __truncate ($$) {
     }
 
     $mock->contents($contents);
+
+    # POSIX truncate(2): marks mtime and ctime for update
+    my $now = time;
+    $mock->{'mtime'} = $now;
+    $mock->{'ctime'} = $now;
 
     return 1;
 }

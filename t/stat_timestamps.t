@@ -241,5 +241,127 @@ note "-------------- PRINTF UPDATES mtime/ctime --------------";
     is( $mock->contents(), 'num=42', 'printf wrote correctly' );
 }
 
+note "-------------- TRUNCATE UPDATES mtime/ctime --------------";
+{
+    my $mock = Test::MockFile->file( '/ts/truncpath', 'some content here' );
+
+    $mock->{'mtime'} = 1000;
+    $mock->{'ctime'} = 1000;
+    $mock->{'atime'} = 1000;
+
+    truncate '/ts/truncpath', 5;
+
+    isnt( $mock->mtime(), 1000, 'truncate by path updates mtime' );
+    isnt( $mock->ctime(), 1000, 'truncate by path updates ctime' );
+    is( $mock->contents(), 'some ', 'truncate shortened contents' );
+}
+
+note "-------------- TRUNCATE via FH UPDATES mtime/ctime --------------";
+{
+    my $mock = Test::MockFile->file( '/ts/truncfh', 'file data here' );
+
+    $mock->{'mtime'} = 1000;
+    $mock->{'ctime'} = 1000;
+
+    open my $fh, '+<', '/ts/truncfh' or die "open: $!";
+    truncate $fh, 4;
+    close $fh;
+
+    isnt( $mock->mtime(), 1000, 'truncate via fh updates mtime' );
+    isnt( $mock->ctime(), 1000, 'truncate via fh updates ctime' );
+    is( $mock->contents(), 'file', 'truncate via fh shortened contents' );
+}
+
+note "-------------- TRUNCATE extend UPDATES mtime/ctime --------------";
+{
+    my $mock = Test::MockFile->file( '/ts/truncext', 'ab' );
+
+    $mock->{'mtime'} = 1000;
+    $mock->{'ctime'} = 1000;
+
+    truncate '/ts/truncext', 5;
+
+    isnt( $mock->mtime(), 1000, 'truncate extend updates mtime' );
+    isnt( $mock->ctime(), 1000, 'truncate extend updates ctime' );
+    is( length( $mock->contents() ), 5, 'truncate extended to 5 bytes' );
+}
+
+note "-------------- TRUNCATE same length still UPDATES mtime/ctime --------------";
+{
+    my $mock = Test::MockFile->file( '/ts/truncsame', 'abc' );
+
+    $mock->{'mtime'} = 1000;
+    $mock->{'ctime'} = 1000;
+
+    truncate '/ts/truncsame', 3;
+
+    isnt( $mock->mtime(), 1000, 'truncate to same length updates mtime' );
+    isnt( $mock->ctime(), 1000, 'truncate to same length updates ctime' );
+}
+
+note "-------------- LINK UPDATES parent dir mtime/ctime --------------";
+{
+    my $dir  = Test::MockFile->new_dir('/ts/linkdir');
+    my $src  = Test::MockFile->file( '/ts/linkdir/source', 'data' );
+    my $dest = Test::MockFile->file('/ts/linkdir/dest');
+
+    $dir->{'mtime'} = 1000;
+    $dir->{'ctime'} = 1000;
+
+    link '/ts/linkdir/source', '/ts/linkdir/dest';
+
+    isnt( $dir->mtime(), 1000, 'link updates parent dir mtime' );
+    isnt( $dir->ctime(), 1000, 'link updates parent dir ctime' );
+}
+
+note "-------------- SYMLINK UPDATES parent dir mtime/ctime --------------";
+{
+    my $dir  = Test::MockFile->new_dir('/ts/symlinkdir');
+    my $link = Test::MockFile->file('/ts/symlinkdir/mylink');
+
+    $dir->{'mtime'} = 1000;
+    $dir->{'ctime'} = 1000;
+
+    symlink '/some/target', '/ts/symlinkdir/mylink';
+
+    isnt( $dir->mtime(), 1000, 'symlink updates parent dir mtime' );
+    isnt( $dir->ctime(), 1000, 'symlink updates parent dir ctime' );
+}
+
+note "-------------- RENAME UPDATES both parent dirs mtime/ctime --------------";
+{
+    my $old_dir = Test::MockFile->new_dir('/ts/olddir');
+    my $new_dir = Test::MockFile->new_dir('/ts/newdir');
+    my $file    = Test::MockFile->file( '/ts/olddir/moveme', 'content' );
+    my $dest    = Test::MockFile->file('/ts/newdir/moved');
+
+    $old_dir->{'mtime'} = 1000;
+    $old_dir->{'ctime'} = 1000;
+    $new_dir->{'mtime'} = 1000;
+    $new_dir->{'ctime'} = 1000;
+
+    rename '/ts/olddir/moveme', '/ts/newdir/moved';
+
+    isnt( $old_dir->mtime(), 1000, 'rename updates old parent dir mtime' );
+    isnt( $old_dir->ctime(), 1000, 'rename updates old parent dir ctime' );
+    isnt( $new_dir->mtime(), 1000, 'rename updates new parent dir mtime' );
+    isnt( $new_dir->ctime(), 1000, 'rename updates new parent dir ctime' );
+}
+
+note "-------------- RENAME same dir UPDATES parent dir mtime/ctime --------------";
+{
+    my $dir  = Test::MockFile->new_dir('/ts/samedir');
+    my $old  = Test::MockFile->file( '/ts/samedir/old', 'data' );
+    my $new  = Test::MockFile->file('/ts/samedir/new');
+
+    $dir->{'mtime'} = 1000;
+    $dir->{'ctime'} = 1000;
+
+    rename '/ts/samedir/old', '/ts/samedir/new';
+
+    isnt( $dir->mtime(), 1000, 'rename within same dir updates parent mtime' );
+    isnt( $dir->ctime(), 1000, 'rename within same dir updates parent ctime' );
+}
+
 done_testing();
 exit;
