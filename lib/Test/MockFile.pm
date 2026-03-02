@@ -2002,6 +2002,22 @@ sub unlink {
         $self->{'contents'}    = undef;
     }
 
+    # Decrement nlink on this mock and any other hard links sharing the same inode
+    if ( $self->{'nlink'} > 0 ) {
+        my $inode = $self->{'inode'};
+        if ( $inode && $self->{'nlink'} > 1 ) {
+            for my $path ( keys %files_being_mocked ) {
+                my $m = $files_being_mocked{$path};
+                next if !$m || $m == $self;
+                next if !$m->exists;
+                if ( defined $m->{'inode'} && $m->{'inode'} == $inode ) {
+                    $m->{'nlink'}-- if $m->{'nlink'} > 0;
+                }
+            }
+        }
+        $self->{'nlink'}--;
+    }
+
     _update_parent_dir_times( $self->path );
     return 1;
 }
@@ -3586,10 +3602,12 @@ sub __rename ($$) {
         $mock_old->{'contents'} = undef;
     }
 
-    # Copy mode and ownership
+    # Copy mode, ownership, and inode metadata
     $mock_new->{'mode'}  = $mock_old->{'mode'};
     $mock_new->{'uid'}   = $mock_old->{'uid'};
     $mock_new->{'gid'}   = $mock_old->{'gid'};
+    $mock_new->{'inode'} = $mock_old->{'inode'};
+    $mock_new->{'nlink'} = $mock_old->{'nlink'};
     $mock_new->{'mtime'} = $mock_old->{'mtime'};
     $mock_new->{'atime'} = $mock_old->{'atime'};
 

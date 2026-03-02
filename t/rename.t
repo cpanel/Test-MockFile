@@ -138,4 +138,16 @@ note "-------------- rename: dir over empty dir succeeds (POSIX) --------------"
     ok( $dst->exists,  'dest dir exists after rename' );
 }
 
+note "-------------- rename: preserves inode and nlink --------------";
+{
+    my $old = Test::MockFile->file( '/mock/ino_old', 'data', { inode => 42, nlink => 3 } );
+    my $new = Test::MockFile->file('/mock/ino_new');
+
+    ok( rename( '/mock/ino_old', '/mock/ino_new' ), 'rename preserves inode metadata' );
+
+    my @st = stat('/mock/ino_new');
+    is( $st[1], 42, 'inode preserved after rename' );
+    is( $st[3], 3,  'nlink preserved after rename' );
+}
+
 done_testing();
