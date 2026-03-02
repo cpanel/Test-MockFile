@@ -248,12 +248,13 @@ note "-------------- link() builtin on mocked paths --------------";
 
 {
     note "unlink() decrements nlink on the unlinked file";
-    my $src  = Test::MockFile->file( '/mock/ul_src', 'data' );
+    my $src  = Test::MockFile->file( '/mock/ul_src', 'data', { nlink => 1, inode => 90001 } );
     my $dest = Test::MockFile->file('/mock/ul_dst');
 
     link( '/mock/ul_src', '/mock/ul_dst' );
 
     my $nlink_before = ( stat('/mock/ul_src') )[3];
+    is( $nlink_before, 2, 'source nlink is 2 after link' );
 
     unlink('/mock/ul_src');
 
@@ -261,7 +262,7 @@ note "-------------- link() builtin on mocked paths --------------";
     is( $src_nlink_after, undef, 'stat on unlinked file returns undef (no longer exists)' );
 
     my $dst_nlink = ( stat('/mock/ul_dst') )[3];
-    is( $dst_nlink, $nlink_before - 1, 'remaining hard link nlink decremented after unlink' );
+    is( $dst_nlink, 1, 'remaining hard link nlink decremented after unlink' );
 }
 
 {
