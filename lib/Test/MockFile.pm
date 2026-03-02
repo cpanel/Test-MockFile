@@ -3332,6 +3332,12 @@ sub __symlink ($$) {
     $mock->{'readlink'} = $oldname;
     $mock->{'mode'}     = 07777 | S_IFLNK;
 
+    # POSIX symlink(2): creating a symlink sets atime, mtime, and ctime.
+    my $now = time;
+    $mock->{'atime'} = $now;
+    $mock->{'mtime'} = $now;
+    $mock->{'ctime'} = $now;
+
     # Mark parent directory as having content and update timestamps
     ( my $dirname = $mock->{'path'} ) =~ s{ / [^/]+ $ }{}xms;
     if ( $files_being_mocked{$dirname} ) {
