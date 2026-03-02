@@ -1537,7 +1537,10 @@ sub _fh_to_file {
 }
 
 sub _files_in_dir {
-    my $dirname      = shift;
+    my $dirname = shift;
+
+    $dirname = _abs_path_to_file($dirname) if defined $dirname && $dirname !~ m{^/};
+
     my @files_in_dir = @files_being_mocked{
         grep m{^\Q$dirname/\E},
         keys %files_being_mocked
@@ -2341,6 +2344,8 @@ sub _real_file_access_hook {
 # directory updates the directory's mtime and ctime.
 sub _update_parent_dir_times {
     my ($path) = @_;
+
+    $path = _abs_path_to_file($path) if defined $path && $path !~ m{^/};
 
     ( my $dirname = $path ) =~ s{ / [^/]+ $ }{}xms;
     return unless length $dirname;
