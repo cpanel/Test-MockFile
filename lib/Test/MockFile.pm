@@ -1143,8 +1143,11 @@ sub dir {
 
     # TODO: Add stat information
 
-    # FIXME: Quick and dirty: provide a helper method?
-    my $has_content = grep m{^\Q$path/\E}xms, keys %files_being_mocked;
+    # Only count children that actually exist (not non-existent placeholders)
+    my $has_content = grep {
+        my $m = $files_being_mocked{$_};
+        $m && $m->exists
+    } grep m{^\Q$path/\E}xms, keys %files_being_mocked;
     my $self = $class->new(
         {
             'path'        => $path,
