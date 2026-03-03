@@ -34,6 +34,7 @@ t/open.t
 t/open_strict.t
 t/opendir.t
 t/path.t
+t/perms.t
 t/plugin-filetemp.t
 t/plugin.t
 t/pod-coverage.t
