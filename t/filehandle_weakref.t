@@ -66,15 +66,32 @@ subtest 'sysread after mock destruction returns 0' => sub {
     close $fh;
 };
 
-subtest 'print after mock destruction fails gracefully' => sub {
+subtest 'print after mock destruction returns false' => sub {
     my $fh = _open_then_destroy_mock('/fake/print', '', '>');
 
-    my $ret;
-    my $warn_msg;
-    local $SIG{__WARN__} = sub { $warn_msg = shift };
-
-    my $ok = lives { $ret = print {$fh} "hello" };
+    my ($ret, $errno);
+    my $ok = lives {
+        $ret = print {$fh} "hello";
+        $errno = $! + 0;
+    };
     ok($ok, "print does not crash after mock destruction");
+    ok(!$ret, "print returns false when mock is destroyed");
+    is($errno, EBADF, "errno is EBADF after print on destroyed mock");
+
+    close $fh;
+};
+
+subtest 'printf after mock destruction returns false' => sub {
+    my $fh = _open_then_destroy_mock('/fake/printf', '', '>');
+
+    my ($ret, $errno);
+    my $ok = lives {
+        $ret = printf {$fh} "%s", "hello";
+        $errno = $! + 0;
+    };
+    ok($ok, "printf does not crash after mock destruction");
+    ok(!$ret, "printf returns false when mock is destroyed");
+    is($errno, EBADF, "errno is EBADF after printf on destroyed mock");
 
     close $fh;
 };
