@@ -1,5 +1,8 @@
 name: testsuite
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
