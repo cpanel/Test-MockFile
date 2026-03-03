@@ -982,6 +982,60 @@ sub file_from_disk {
     return __PACKAGE__->file( $file, $contents, @stats );
 }
 
+=head2 file_passthrough
+
+Args: C<($file)>
+
+Registers C<$file> with Test::MockFile but delegates B<all> file
+operations (C<stat>, C<open>, C<-f>, etc.) to the real filesystem.
+The path is not actually mocked: it is simply allowed through strict
+mode so that XS-based modules (e.g. L<DBD::SQLite>, L<DBI>) that
+perform C-level I/O can create and use the file while Perl-level
+checks remain consistent.
+
+    use Test::MockFile;    # strict mode by default
+    use DBI;
+
+    my $mock = Test::MockFile->file_passthrough('/tmp/test.db');
+    my $dbh  = DBI->connect("dbi:SQLite:dbname=/tmp/test.db", "", "");
+
+    ok $dbh->ping,        'ping works';
+    ok -f '/tmp/test.db', 'file exists on disk';
+
+When the returned object goes out of scope, the strict-mode rule is
+removed but the real file is B<not> deleted.  Clean up the file
+yourself if needed:
+
+    undef $mock;
+    unlink '/tmp/test.db';
+
+=cut
+
+sub file_passthrough {
+    my ( $class, $file ) = @_;
+
+    ( defined $file && length $file ) or confess("No file provided to instantiate $class");
+
+    my $path = _abs_path_to_file($file);
+
+    # Build a strict-mode rule that allows all operations on this path.
+    my $rule = {
+        'command_rule' => qr/.*/,
+        'file_rule'    => qr/^\Q$path\E$/,
+        'action'       => 1,
+    };
+    push @STRICT_RULES, $rule;
+
+    # We intentionally do NOT register in %files_being_mocked.
+    # This means _mock_stat, __open, etc. will all fall through to the
+    # real filesystem via FALLBACK_TO_REAL_OP / goto &CORE::*.
+    return bless {
+        'path'              => $path,
+        '_passthrough'      => 1,
+        '_passthrough_rule' => $rule,
+    }, $class;
+}
+
 =head2 symlink
 
 Args: ($readlink, $file )
@@ -1761,6 +1815,14 @@ sub DESTROY {
     # $self doesn't have a path. Either way we can't delete it.
     my $path = $self->{'path'};
     defined $path or return;
+
+    # Passthrough mocks are not in %files_being_mocked — just remove
+    # the strict-mode rule that was created for them.
+    if ( $self->{'_passthrough'} ) {
+        my $rule = $self->{'_passthrough_rule'};
+        @STRICT_RULES = grep { $_ != $rule } @STRICT_RULES if $rule;
+        return;
+    }
 
     # Clean up autovivify tracking
     delete $_autovivify_dirs{$path};
