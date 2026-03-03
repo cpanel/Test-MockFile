@@ -258,4 +258,36 @@ note "-------------- link() builtin on mocked paths --------------";
     is( $! + 0, ELOOP, '$! is ELOOP (not ENOENT)' );
 }
 
+{
+    note "unlink() decrements nlink on the unlinked file";
+    my $src  = Test::MockFile->file( '/mock/ul_src', 'data', { nlink => 1, inode => 90001 } );
+    my $dest = Test::MockFile->file('/mock/ul_dst');
+
+    link( '/mock/ul_src', '/mock/ul_dst' );
+
+    my $nlink_before = ( stat('/mock/ul_src') )[3];
+    is( $nlink_before, 2, 'source nlink is 2 after link' );
+
+    unlink('/mock/ul_src');
+
+    my $src_nlink_after = ( stat('/mock/ul_src') )[3];
+    is( $src_nlink_after, undef, 'stat on unlinked file returns undef (no longer exists)' );
+
+    my $dst_nlink = ( stat('/mock/ul_dst') )[3];
+    is( $dst_nlink, 1, 'remaining hard link nlink decremented after unlink' );
+}
+
+{
+    note "unlink() on a file with nlink=1 decrements to 0";
+    my $file = Test::MockFile->file( '/mock/ul_single', 'data', { nlink => 1 } );
+
+    my $nlink_before = ( stat('/mock/ul_single') )[3];
+    is( $nlink_before, 1, 'nlink is 1 before unlink' );
+
+    unlink('/mock/ul_single');
+
+    # File no longer exists, but the mock object's nlink should be decremented
+    ok( !-e '/mock/ul_single', 'file no longer exists after unlink' );
+}
+
 done_testing();
