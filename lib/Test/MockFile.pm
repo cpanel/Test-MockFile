@@ -838,6 +838,13 @@ sub _caller_has_autodie_for {
     return;
 }
 
+# Check-and-throw for autodie: combines _caller_has_autodie_for + _throw_autodie
+# into a single call to reduce boilerplate at every error return site.
+sub _maybe_throw_autodie {
+    my ($func, @args) = @_;
+    _throw_autodie($func, @args) if _caller_has_autodie_for($func);
+}
+
 # Throw an autodie-compatible exception for a failed CORE function.
 # Creates a real autodie::exception if available, otherwise a plain die.
 # $! must be saved before the eval since eval can clobber it.
@@ -1255,6 +1262,51 @@ reason to call this directly.
 
 =cut
 
+# Returns the default attribute hash for a new mock object.
+# Centralizes defaults so new(), _create_file_through_broken_symlink(),
+# and _maybe_autovivify() stay in sync.
+sub _default_mock_attrs {
+    my $now = time;
+    return (
+        'dev'                    => 0,         # stat[0]
+        'inode'                  => 0,         # stat[1]
+        'mode'                   => 0,         # stat[2]
+        'nlink'                  => 0,         # stat[3]
+        'uid'                    => int $>,    # stat[4]
+        'gid'                    => int $),    # stat[5]
+        'rdev'                   => 0,         # stat[6]
+        'atime'                  => $now,      # stat[8]
+        'mtime'                  => $now,      # stat[9]
+        'ctime'                  => $now,      # stat[10]
+        'blksize'                => 4096,      # stat[11]
+        'fileno'                 => undef,     # fileno()
+        'tty'                    => 0,
+        'readlink'               => '',
+        'path'                   => undef,
+        'contents'               => undef,
+        'has_content'            => undef,
+        'autovivify'             => 0,
+        '_autovivified_children' => undef,
+    );
+}
+
+# Creates a non-existent file mock (contents=undef) with default attrs.
+# Used by _create_file_through_broken_symlink and _maybe_autovivify.
+# The caller is responsible for registering the mock in %files_being_mocked
+# and attaching it to a parent (for strong-ref lifetime management).
+sub _new_nonexistent_file_mock {
+    my ($abs_path) = @_;
+
+    my $perms = S_IFPERMS & 0666;
+    return bless {
+        _default_mock_attrs(),
+        'inode' => $_next_inode++,
+        'mode'  => ( $perms & ~umask ) | S_IFREG,
+        'nlink' => 1,
+        'path'  => $abs_path,
+    }, __PACKAGE__;
+}
+
 sub new {
     my $class = shift @_;
 
@@ -1275,31 +1327,7 @@ sub new {
         $path = $opts{'path'} = _abs_path_to_file($path);
     }
 
-    my $now = time;
-
-    my $self = bless {
-        'dev'         => 0,         # stat[0]
-        'inode'       => 0,         # stat[1]
-        'mode'        => 0,         # stat[2]
-        'nlink'       => 0,         # stat[3]
-        'uid'         => int $>,    # stat[4]
-        'gid'         => int $),    # stat[5]
-        'rdev'        => 0,         # stat[6]
-                                    # 'size'     => undef,    # stat[7] -- Method call
-        'atime'       => $now,      # stat[8]
-        'mtime'       => $now,      # stat[9]
-        'ctime'       => $now,      # stat[10]
-        'blksize'     => 4096,      # stat[11]
-                                    # 'blocks'   => 0,        # stat[12] -- Method call
-        'fileno'      => undef,     # fileno()
-        'tty'         => 0,         # possibly this is already provided in mode?
-        'readlink'    => '',        # what the symlink points to.
-        'path'                   => undef,
-        'contents'               => undef,
-        'has_content'            => undef,
-        'autovivify'             => 0,
-        '_autovivified_children' => undef,
-    }, $class;
+    my $self = bless { _default_mock_attrs(), }, $class;
 
     foreach my $key ( keys %opts ) {
 
@@ -1453,29 +1481,7 @@ sub _create_file_through_broken_symlink {
     return $abs if $mock;
 
     # Create a non-existent file mock at the target path
-    my $perms = S_IFPERMS & 0666;
-    my $now   = time;
-    $mock = bless {
-        'dev'                    => 0,
-        'inode'                  => $_next_inode++,
-        'mode'                   => ( $perms & ~umask ) | S_IFREG,
-        'nlink'                  => 1,
-        'uid'                    => int $>,
-        'gid'                    => int $),
-        'rdev'                   => 0,
-        'atime'                  => $now,
-        'mtime'                  => $now,
-        'ctime'                  => $now,
-        'blksize'                => 4096,
-        'fileno'                 => undef,
-        'tty'                    => 0,
-        'readlink'               => '',
-        'path'                   => $abs,
-        'contents'               => undef,
-        'has_content'            => undef,
-        'autovivify'             => 0,
-        '_autovivified_children' => undef,
-    }, __PACKAGE__;
+    $mock = _new_nonexistent_file_mock($abs);
 
     $files_being_mocked{$abs} = $mock;
     Scalar::Util::weaken( $files_being_mocked{$abs} );
@@ -1599,29 +1605,7 @@ sub _maybe_autovivify {
     my $parent = _find_autovivify_parent($abs_path) or return;
 
     # Create a non-existent file mock (contents=undef means "not there yet")
-    my $perms = S_IFPERMS & 0666;
-    my $now   = time;
-    my $mock  = bless {
-        'dev'                    => 0,
-        'inode'                  => $_next_inode++,
-        'mode'                   => ( $perms & ~umask ) | S_IFREG,
-        'nlink'                  => 1,
-        'uid'                    => int $>,
-        'gid'                    => int $),
-        'rdev'                   => 0,
-        'atime'                  => $now,
-        'mtime'                  => $now,
-        'ctime'                  => $now,
-        'blksize'                => 4096,
-        'fileno'                 => undef,
-        'tty'                    => 0,
-        'readlink'               => '',
-        'path'                   => $abs_path,
-        'contents'               => undef,
-        'has_content'            => undef,
-        'autovivify'             => 0,
-        '_autovivified_children' => undef,
-    }, __PACKAGE__;
+    my $mock = _new_nonexistent_file_mock($abs_path);
 
     # Store in global hash (weak ref, as usual)
     $files_being_mocked{$abs_path} = $mock;
@@ -2472,7 +2456,7 @@ sub _goto_is_available {
     return 0 if $] < 5.015;
     return 1 if $] < 5.021;
     return 1 if $] > 5.027;
-    return 0;    # 5.
+    return 0;
 }
 
 ################
@@ -2753,19 +2737,19 @@ sub __open (*;$@) {
             }
             else {
                 $! = ENOENT;
-                _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+                _maybe_throw_autodie( 'open', @_ );
                 return undef;
             }
         }
         else {
             $! = ENOENT;
-            _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+            _maybe_throw_autodie( 'open', @_ );
             return undef;
         }
     }
     if ( $abs_path eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
-        _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+        _maybe_throw_autodie( 'open', @_ );
         return undef;
     }
 
@@ -2804,14 +2788,14 @@ sub __open (*;$@) {
     # Directories cannot be opened as regular files.
     if ( $mock_file->is_dir() ) {
         $! = EISDIR;
-        _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+        _maybe_throw_autodie( 'open', @_ );
         return undef;
     }
 
     # If contents is undef, we act like the file isn't there.
     if ( !defined $mock_file->contents() && grep { $mode eq $_ } qw/< +</ ) {
         $! = ENOENT;
-        _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+        _maybe_throw_autodie( 'open', @_ );
         return undef;
     }
 
@@ -2894,7 +2878,7 @@ sub __sysopen (*$$;$) {
         $mock_file = _get_file_object( $_[1] );
         if ( $mock_file && $mock_file->is_link ) {
             $! = ELOOP;
-            _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+            _maybe_throw_autodie( 'sysopen', @_ );
             return undef;
         }
     }
@@ -2912,19 +2896,19 @@ sub __sysopen (*$$;$) {
                 }
                 else {
                     $! = ENOENT;
-                    _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+                    _maybe_throw_autodie( 'sysopen', @_ );
                     return undef;
                 }
             }
             else {
                 $! = ENOENT;
-                _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+                _maybe_throw_autodie( 'sysopen', @_ );
                 return undef;
             }
         }
         if ( $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
             $! = ELOOP;
-            _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+            _maybe_throw_autodie( 'sysopen', @_ );
             return undef;
         }
         $mock_file = $abs_path ? $files_being_mocked{$abs_path} : undef;
@@ -2948,14 +2932,14 @@ sub __sysopen (*$$;$) {
     # Directories cannot be opened as regular files.
     if ( $mock_file->is_dir() ) {
         $! = EISDIR;
-        _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+        _maybe_throw_autodie( 'sysopen', @_ );
         return undef;
     }
 
     # O_EXCL
     if ( $sysopen_mode & O_EXCL && $sysopen_mode & O_CREAT && defined $mock_file->{'contents'} ) {
         $! = EEXIST;
-        _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+        _maybe_throw_autodie( 'sysopen', @_ );
         return undef;
     }
 
@@ -2999,7 +2983,7 @@ sub __sysopen (*$$;$) {
     # O_CREAT would have already populated contents above if it was requested.
     if ( !defined $mock_file->{'contents'} ) {
         $! = ENOENT;
-        _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+        _maybe_throw_autodie( 'sysopen', @_ );
         return undef;
     }
 
@@ -3040,13 +3024,13 @@ sub __opendir (*$) {
 
     if ( defined $abs_path && $abs_path eq BROKEN_SYMLINK ) {
         $! = ENOENT;
-        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
+        _maybe_throw_autodie( 'opendir', @_ );
         return undef;
     }
 
     if ( defined $abs_path && $abs_path eq CIRCULAR_SYMLINK ) {
         $! = ELOOP;
-        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
+        _maybe_throw_autodie( 'opendir', @_ );
         return undef;
     }
 
@@ -3060,13 +3044,13 @@ sub __opendir (*$) {
 
     if ( !defined $mock_dir->contents ) {
         $! = ENOENT;
-        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
+        _maybe_throw_autodie( 'opendir', @_ );
         return undef;
     }
 
     if ( !( $mock_dir->{'mode'} & S_IFDIR ) ) {
         $! = ENOTDIR;
-        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
+        _maybe_throw_autodie( 'opendir', @_ );
         return undef;
     }
 
@@ -3250,7 +3234,7 @@ sub __closedir (*) {
     if ( !$mocked_dir->{'obj'} ) {
         warnings::warnif( 'io', "closedir() attempted on invalid dirhandle $fh" );
         $! = EBADF;
-        _throw_autodie( 'closedir', @_ ) if _caller_has_autodie_for('closedir');
+        _maybe_throw_autodie( 'closedir', @_ );
         return undef;
     }
 
@@ -3278,7 +3262,7 @@ sub __unlink (@) {
     }
 
     if ( $files_deleted < scalar(@files_to_unlink) ) {
-        _throw_autodie( 'unlink', @_ ) if _caller_has_autodie_for('unlink');
+        _maybe_throw_autodie( 'unlink', @_ );
     }
 
     return $files_deleted;
@@ -3296,7 +3280,7 @@ sub __readlink (_) {
         else {
             $! = ENOENT;
         }
-        _throw_autodie( 'readlink', @_ ) if _caller_has_autodie_for('readlink');
+        _maybe_throw_autodie( 'readlink', @_ );
         return undef;
     }
 
@@ -3309,13 +3293,13 @@ sub __readlink (_) {
 
     if ( !$mock_object->exists() ) {
         $! = ENOENT;
-        _throw_autodie( 'readlink', @_ ) if _caller_has_autodie_for('readlink');
+        _maybe_throw_autodie( 'readlink', @_ );
         return undef;
     }
 
     if ( !$mock_object->is_link ) {
         $! = EINVAL;
-        _throw_autodie( 'readlink', @_ ) if _caller_has_autodie_for('readlink');
+        _maybe_throw_autodie( 'readlink', @_ );
         return undef;
     }
     return $mock_object->readlink;
@@ -3327,7 +3311,7 @@ sub __symlink ($$) {
     if ( !defined $newname ) {
         carp('Use of uninitialized value in symlink');
         $! = ENOENT;
-        _throw_autodie( 'symlink', @_ ) if _caller_has_autodie_for('symlink');
+        _maybe_throw_autodie( 'symlink', @_ );
         return 0;
     }
 
@@ -3341,7 +3325,7 @@ sub __symlink ($$) {
 
     if ( $mock->exists ) {
         $! = EEXIST;
-        _throw_autodie( 'symlink', @_ ) if _caller_has_autodie_for('symlink');
+        _maybe_throw_autodie( 'symlink', @_ );
         return 0;
     }
 
@@ -3371,7 +3355,7 @@ sub __link ($$) {
     if ( !defined $oldname || !defined $newname ) {
         carp('Use of uninitialized value in link');
         $! = ENOENT;
-        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
+        _maybe_throw_autodie( 'link', @_ );
         return 0;
     }
 
@@ -3388,14 +3372,14 @@ sub __link ($$) {
     # Source must exist
     if ( !$old_mock || !$old_mock->exists ) {
         $! = ENOENT;
-        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
+        _maybe_throw_autodie( 'link', @_ );
         return 0;
     }
 
     # Cannot hard-link directories
     if ( $old_mock->is_dir ) {
         $! = EPERM;
-        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
+        _maybe_throw_autodie( 'link', @_ );
         return 0;
     }
 
@@ -3405,7 +3389,7 @@ sub __link ($$) {
         my $target_path = _find_file_or_fh( $oldname, 1 );    # follow_link=1
         if ( !defined $target_path || $target_path eq BROKEN_SYMLINK ) {
             $! = ENOENT;
-            _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
+            _maybe_throw_autodie( 'link', @_ );
             return 0;
         }
         if ( $target_path eq CIRCULAR_SYMLINK ) {
@@ -3415,7 +3399,7 @@ sub __link ($$) {
         $source_mock = $files_being_mocked{$target_path};
         if ( !$source_mock || !$source_mock->exists ) {
             $! = ENOENT;
-            _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
+            _maybe_throw_autodie( 'link', @_ );
             return 0;
         }
     }
@@ -3423,14 +3407,14 @@ sub __link ($$) {
     # Destination must be a pre-declared mock
     if ( !$new_mock ) {
         $! = EXDEV;
-        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
+        _maybe_throw_autodie( 'link', @_ );
         return 0;
     }
 
     # Destination must not already exist
     if ( $new_mock->exists ) {
         $! = EEXIST;
-        _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
+        _maybe_throw_autodie( 'link', @_ );
         return 0;
     }
 
@@ -3475,7 +3459,7 @@ sub __mkdir (_;$) {
         # mkdir warns if $file is undef
         carp("Use of uninitialized value in mkdir");
         $! = ENOENT;
-        _throw_autodie( 'mkdir', @_ ) if _caller_has_autodie_for('mkdir');
+        _maybe_throw_autodie( 'mkdir', @_ );
         return 0;
     }
 
@@ -3494,7 +3478,7 @@ sub __mkdir (_;$) {
     # File or directory, this exists and should fail
     if ( $mock->exists ) {
         $! = EEXIST;
-        _throw_autodie( 'mkdir', @_ ) if _caller_has_autodie_for('mkdir');
+        _maybe_throw_autodie( 'mkdir', @_ );
         return 0;
     }
 
@@ -3526,7 +3510,7 @@ sub __rmdir (_) {
     if ( !defined $file ) {
         carp('Use of uninitialized value in rmdir');
         $! = ENOENT;
-        _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
+        _maybe_throw_autodie( 'rmdir', @_ );
         return 0;
     }
 
@@ -3543,26 +3527,26 @@ sub __rmdir (_) {
     if ( $mock->exists ) {
         if ( $mock->is_file ) {
             $! = ENOTDIR;
-            _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
+            _maybe_throw_autodie( 'rmdir', @_ );
             return 0;
         }
 
         if ( $mock->is_link ) {
             $! = ENOTDIR;
-            _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
+            _maybe_throw_autodie( 'rmdir', @_ );
             return 0;
         }
     }
 
     if ( !$mock->exists ) {
         $! = ENOENT;
-        _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
+        _maybe_throw_autodie( 'rmdir', @_ );
         return 0;
     }
 
     if ( grep { $_->exists } _files_in_dir($file) ) {
         $! = ENOTEMPTY;
-        _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
+        _maybe_throw_autodie( 'rmdir', @_ );
         return 0;
     }
 
@@ -3601,7 +3585,7 @@ sub __rename ($$) {
     # Source must exist
     if ( !$mock_old->exists ) {
         $! = ENOENT;
-        _throw_autodie( 'rename', @_ ) if _caller_has_autodie_for('rename');
+        _maybe_throw_autodie( 'rename', @_ );
         return 0;
     }
 
@@ -3611,14 +3595,14 @@ sub __rename ($$) {
     # Can't overwrite a directory with a non-directory
     if ( $mock_new->exists && $mock_new->is_dir && !$mock_old->is_dir ) {
         $! = EISDIR;
-        _throw_autodie( 'rename', @_ ) if _caller_has_autodie_for('rename');
+        _maybe_throw_autodie( 'rename', @_ );
         return 0;
     }
 
     # Can't overwrite a file with a directory
     if ( $mock_old->is_dir && $mock_new->exists && !$mock_new->is_dir ) {
         $! = ENOTDIR;
-        _throw_autodie( 'rename', @_ ) if _caller_has_autodie_for('rename');
+        _maybe_throw_autodie( 'rename', @_ );
         return 0;
     }
 
@@ -3741,12 +3725,11 @@ sub __chown (@) {
     if ( !$is_root && $uid != -1 && $gid != -1 ) {
         if ( $> != $target_uid || !$is_in_group ) {
             $! = EPERM;
-            _throw_autodie( 'chown', @_ ) if _caller_has_autodie_for('chown');
+            _maybe_throw_autodie( 'chown', @_ );
             return 0;
         }
     }
 
-    my $set_error;
     my $num_changed = 0;
     foreach my $file (@files) {
         my $mock = $mocked_files{$file};
@@ -3761,23 +3744,17 @@ sub __chown (@) {
 
         # Handle broken/circular symlink errors
         if ( ref $mock eq 'A::BROKEN::SYMLINK' ) {
-            $set_error
-              or $! = ENOENT;
+            $! = ENOENT;
             next;
         }
         if ( ref $mock eq 'A::CIRCULAR::SYMLINK' ) {
-            $set_error
-              or $! = ELOOP;
+            $! = ELOOP;
             next;
         }
 
         # Even if you're root, nonexistent file is nonexistent
         if ( !$mock->exists() ) {
-
-            # Only set the error once
-            $set_error
-              or $! = ENOENT;
-
+            $! = ENOENT;
             next;
         }
 
@@ -3790,7 +3767,7 @@ sub __chown (@) {
     }
 
     if ( $num_changed < scalar(@files) ) {
-        _throw_autodie( 'chown', @_ ) if _caller_has_autodie_for('chown');
+        _maybe_throw_autodie( 'chown', @_ );
     }
 
     return $num_changed;
@@ -3862,7 +3839,7 @@ sub __chmod (@) {
     }
 
     if ( $num_changed < scalar(@files) ) {
-        _throw_autodie( 'chmod', @_ ) if _caller_has_autodie_for('chmod');
+        _maybe_throw_autodie( 'chmod', @_ );
     }
 
     return $num_changed;
@@ -3938,7 +3915,7 @@ sub __utime (@) {
     }
 
     if ( $num_changed < scalar(@files) ) {
-        _throw_autodie( 'utime', @_ ) if _caller_has_autodie_for('utime');
+        _maybe_throw_autodie( 'utime', @_ );
     }
 
     return $num_changed;
@@ -3958,24 +3935,24 @@ sub __truncate ($$) {
     # Handle broken/circular symlink errors
     if ( ref $mock eq 'A::BROKEN::SYMLINK' ) {
         $! = ENOENT;
-        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
+        _maybe_throw_autodie( 'truncate', @_ );
         return 0;
     }
     if ( ref $mock eq 'A::CIRCULAR::SYMLINK' ) {
         $! = ELOOP;
-        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
+        _maybe_throw_autodie( 'truncate', @_ );
         return 0;
     }
 
     if ( $mock->is_dir() ) {
         $! = EISDIR;
-        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
+        _maybe_throw_autodie( 'truncate', @_ );
         return 0;
     }
 
     if ( !$mock->exists() ) {
         $! = ENOENT;
-        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
+        _maybe_throw_autodie( 'truncate', @_ );
         return 0;
     }
 
@@ -3985,14 +3962,14 @@ sub __truncate ($$) {
         my $tied = tied( *{$file_or_fh} );
         if ( $tied && !$tied->{'write'} ) {
             $! = EINVAL;
-            _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
+            _maybe_throw_autodie( 'truncate', @_ );
             return 0;
         }
     }
 
     if ( $length < 0 ) {
         $! = EINVAL;
-        _throw_autodie( 'truncate', @_ ) if _caller_has_autodie_for('truncate');
+        _maybe_throw_autodie( 'truncate', @_ );
         return 0;
     }
 
@@ -4066,7 +4043,7 @@ BEGIN {
     }
 }
 
-=head1 CAEATS AND LIMITATIONS
+=head1 CAVEATS AND LIMITATIONS
 
 =head2 DEBUGGER UNDER STRICT MODE
 
