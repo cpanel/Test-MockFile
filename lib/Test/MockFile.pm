@@ -3410,6 +3410,7 @@ sub __link ($$) {
         }
         if ( $target_path eq CIRCULAR_SYMLINK ) {
             $! = ELOOP;
+            _throw_autodie( 'link', @_ ) if _caller_has_autodie_for('link');
             return 0;
         }
         $source_mock = $files_being_mocked{$target_path};
@@ -3626,6 +3627,7 @@ sub __rename ($$) {
     if ( $mock_old->is_dir && $mock_new->exists && $mock_new->is_dir ) {
         if ( grep { $_->exists } _files_in_dir( $mock_new->{'path'} ) ) {
             $! = ENOTEMPTY;
+            _throw_autodie( 'rename', @_ ) if _caller_has_autodie_for('rename');
             return 0;
         }
     }
@@ -3746,7 +3748,6 @@ sub __chown (@) {
         }
     }
 
-    my $set_error;
     my $num_changed = 0;
     foreach my $file (@files) {
         my $mock = $mocked_files{$file};
@@ -3761,23 +3762,17 @@ sub __chown (@) {
 
         # Handle broken/circular symlink errors
         if ( ref $mock eq 'A::BROKEN::SYMLINK' ) {
-            $set_error
-              or $! = ENOENT;
+            $! = ENOENT;
             next;
         }
         if ( ref $mock eq 'A::CIRCULAR::SYMLINK' ) {
-            $set_error
-              or $! = ELOOP;
+            $! = ELOOP;
             next;
         }
 
         # Even if you're root, nonexistent file is nonexistent
         if ( !$mock->exists() ) {
-
-            # Only set the error once
-            $set_error
-              or $! = ENOENT;
-
+            $! = ENOENT;
             next;
         }
 
