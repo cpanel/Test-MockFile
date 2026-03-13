@@ -263,5 +263,18 @@ subtest(
     }
 );
 
+subtest(
+    'chmod updates ctime' => sub {
+        my $file = Test::MockFile->file( '/chmod_ctime/file', 'data' );
+
+        my $ctime_before = ( stat '/chmod_ctime/file' )[10];
+        sleep 1;
+        chmod 0600, '/chmod_ctime/file';
+        my $ctime_after = ( stat '/chmod_ctime/file' )[10];
+
+        ok( $ctime_after > $ctime_before, 'ctime updated after chmod' );
+    }
+);
+
 done_testing();
 exit;

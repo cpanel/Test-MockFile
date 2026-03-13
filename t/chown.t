@@ -244,5 +244,21 @@ subtest(
     }
 );
 
+subtest(
+    'chown updates ctime' => sub {
+        my $file = Test::MockFile->file(
+            '/chown_ctime_test' => 'data',
+            { uid => 1000, gid => 1000 },
+        );
+
+        my $ctime_before = ( stat '/chown_ctime_test' )[10];
+        sleep 1;
+        chown -1, -1, '/chown_ctime_test';
+        my $ctime_after = ( stat '/chown_ctime_test' )[10];
+
+        ok( $ctime_after > $ctime_before, 'ctime updated after chown' );
+    }
+);
+
 done_testing();
 exit;
