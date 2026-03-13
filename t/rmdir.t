@@ -48,8 +48,10 @@ subtest "undef rmdir" => sub {
     is( $returns, 0, " - returns 0" );
 
     local $_;
+    $! = 0;
     like( warning { $returns = rmdir(undef) }, qr/^Use of uninitialized value in rmdir at.+\n$/, "REAL mkdir when undef is passed as the directory." );
-    is( $returns, 0, " - returns 0" );
+    is( $returns, 0,      " - returns 0" );
+    is( $! + 0,   ENOENT, " - \$! is ENOENT" );
 };
 
 subtest "rmdir existing file" => sub {
