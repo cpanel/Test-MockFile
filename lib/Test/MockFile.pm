@@ -1360,9 +1360,15 @@ sub new_dir {
     my ( $class, $dirname, $opts ) = @_;
 
     my $mode;
+    my %stat_overrides;
     my @args = $opts ? $opts : ();
-    if ( ref $opts eq 'HASH' && $opts->{'mode'} ) {
-        $mode = delete $opts->{'mode'};
+    if ( ref $opts eq 'HASH' ) {
+        $mode = delete $opts->{'mode'} if $opts->{'mode'};
+
+        # Extract stat overrides that dir() doesn't accept
+        for my $key (qw(uid gid)) {
+            $stat_overrides{$key} = delete $opts->{$key} if exists $opts->{$key};
+        }
 
         # This is to make sure the error checking still happens as expected
         if ( keys %{$opts} == 0 ) {
@@ -1376,6 +1382,11 @@ sub new_dir {
     }
     else {
         __mkdir($dirname);
+    }
+
+    # Apply stat overrides after mkdir has created the directory
+    for my $key ( keys %stat_overrides ) {
+        $dir->{$key} = $stat_overrides{$key};
     }
 
     return $dir;
