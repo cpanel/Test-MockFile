@@ -156,10 +156,15 @@ sub PRINT {
     # at the C level after PRINT returns), so this only covers explicit usage.
     $output .= $\ if defined $\;
 
+    my $data = $self->{'data'} or do {
+        $! = EBADF;
+        return 0;
+    };
+
     my $bytes = $self->_write_bytes($output);
     $self->_update_write_times() if $bytes;
 
-    return $bytes ? 1 : 0;
+    return 1;
 }
 
 =head2 PRINTF
@@ -183,10 +188,15 @@ sub PRINTF {
         return;
     }
 
+    my $data = $self->{'data'} or do {
+        $! = EBADF;
+        return 0;
+    };
+
     my $bytes = $self->_write_bytes( sprintf( $format, @_ ) );
     $self->_update_write_times() if $bytes;
 
-    return $bytes ? 1 : 0;
+    return 1;
 }
 
 =head2 WRITE
