@@ -37,7 +37,7 @@ use Symbol;
 
 use Overload::FileCheck '-from-stat' => \&_mock_stat, q{:check};
 
-use Errno qw/EPERM ENOENT EBADF ELOOP ENOTEMPTY EEXIST EISDIR ENOTDIR EINVAL EXDEV/;
+use Errno qw/EPERM EACCES ENOENT EBADF ELOOP ENOTEMPTY EEXIST EISDIR ENOTDIR EINVAL EXDEV/;
 
 use constant FOLLOW_LINK_MAX_DEPTH => 10;
 
@@ -668,6 +668,112 @@ sub _validate_strict_rules {
 }
 
 my @plugins;
+
+# Mock user identity for permission checks (GH #3)
+# When set, file operations check Unix permissions against this identity.
+# When undef, no permission checks are performed (backward compatible).
+my $_mock_uid;
+my @_mock_gids;
+
+=head2 set_user
+
+Args: ($uid, @gids)
+
+Sets a mock user identity for permission checking. When set, all
+mocked file operations will check Unix permissions (owner/group/other)
+against this identity instead of the real process credentials.
+
+The first gid in C<@gids> is the primary group. If no gids are provided,
+the primary group defaults to 0.
+
+    Test::MockFile->set_user(1000, 1000);  # uid=1000, gid=1000
+    my $f = Test::MockFile->file('/foo', 'bar', { mode => 0600, uid => 0 });
+    open(my $fh, '<', '/foo') or die;  # dies: EACCES (not owner)
+
+    Test::MockFile->set_user(0, 0);  # root can read anything
+    open(my $fh, '<', '/foo') or die;  # succeeds
+
+=cut
+
+sub set_user {
+    my ( $class, $uid, @gids ) = @_;
+
+    defined $uid or croak("set_user() requires a uid argument");
+
+    $_mock_uid  = int $uid;
+    @_mock_gids = @gids ? map { int $_ } @gids : (0);
+
+    return;
+}
+
+=head2 clear_user
+
+Clears the mock user identity, disabling permission checks.
+File operations will succeed regardless of mode bits (the default
+behavior).
+
+    Test::MockFile->clear_user();
+
+=cut
+
+sub clear_user {
+    $_mock_uid  = undef;
+    @_mock_gids = ();
+
+    return;
+}
+
+# _check_perms($mock, $access)
+# Checks Unix permission bits on a mock file object.
+# $access is a bitmask: 4=read, 2=write, 1=execute (same as R_OK/W_OK/X_OK)
+# Returns 1 if access is allowed, 0 if denied.
+# When no mock user is set ($_mock_uid is undef), always returns 1.
+sub _check_perms {
+    my ( $mock, $access ) = @_;
+
+    return 1 unless defined $_mock_uid;
+
+    my $mode = $mock->{'mode'} & S_IFPERMS;
+
+    # Root bypass: root can read/write anything.
+    # For execute, root needs at least one x bit set.
+    if ( $_mock_uid == 0 ) {
+        return ( $access & 1 ) ? ( $mode & 0111 ? 1 : 0 ) : 1;
+    }
+
+    # Determine which permission triad applies
+    my $bits;
+    if ( $_mock_uid == $mock->{'uid'} ) {
+        $bits = ( $mode >> 6 ) & 07;
+    }
+    elsif ( grep { $_ == $mock->{'gid'} } @_mock_gids ) {
+        $bits = ( $mode >> 3 ) & 07;
+    }
+    else {
+        $bits = $mode & 07;
+    }
+
+    return ( $bits & $access ) == $access ? 1 : 0;
+}
+
+# _check_parent_perms($path, $access)
+# Checks permissions on the parent directory of $path.
+# Used for operations that modify directory contents (unlink, mkdir, rmdir).
+# Returns 1 if allowed, 0 if denied.
+sub _check_parent_perms {
+    my ( $path, $access ) = @_;
+
+    return 1 unless defined $_mock_uid;
+
+    ( my $parent = $path ) =~ s{ / [^/]+ $ }{}xms;
+    $parent = '/' if $parent eq '';
+
+    my $parent_mock = _get_file_object($parent);
+    return 1 unless $parent_mock;    # Parent not mocked, skip check
+
+    return _check_perms( $parent_mock, $access );
+}
+
 my @_tmf_callers;
 
 # Packages where autodie was active when T::MF was imported.
@@ -1254,9 +1360,15 @@ sub new_dir {
     my ( $class, $dirname, $opts ) = @_;
 
     my $mode;
+    my %stat_overrides;
     my @args = $opts ? $opts : ();
-    if ( ref $opts eq 'HASH' && $opts->{'mode'} ) {
-        $mode = delete $opts->{'mode'};
+    if ( ref $opts eq 'HASH' ) {
+        $mode = delete $opts->{'mode'} if $opts->{'mode'};
+
+        # Extract stat overrides that dir() doesn't accept
+        for my $key (qw(uid gid)) {
+            $stat_overrides{$key} = delete $opts->{$key} if exists $opts->{$key};
+        }
 
         # This is to make sure the error checking still happens as expected
         if ( keys %{$opts} == 0 ) {
@@ -1270,6 +1382,11 @@ sub new_dir {
     }
     else {
         __mkdir($dirname);
+    }
+
+    # Apply stat overrides after mkdir has created the directory
+    for my $key ( keys %stat_overrides ) {
+        $dir->{$key} = $stat_overrides{$key};
     }
 
     return $dir;
@@ -2568,6 +2685,29 @@ sub _io_file_mock_open {
     $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
     $rw .= 'a' if grep { $_ eq $mode } qw/>> +>>/;
 
+    # Permission check (GH #3)
+    if ( defined $_mock_uid ) {
+        if ( defined $mock_file->contents() ) {
+            # Existing file: check file permissions
+            my $need = 0;
+            $need |= 4 if $rw =~ /r/;
+            $need |= 2 if $rw =~ /w/;
+            if ( !_check_perms( $mock_file, $need ) ) {
+                $! = EACCES;
+                _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+                return undef;
+            }
+        }
+        elsif ( $rw =~ /w/ ) {
+            # Creating new file: check parent dir write+execute
+            if ( !_check_parent_perms( $abs_path, 2 | 1 ) ) {
+                $! = EACCES;
+                _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+                return undef;
+            }
+        }
+    }
+
     # Tie the existing IO::File glob directly (don't create a new one)
     tie *{$fh}, 'Test::MockFile::FileHandle', $abs_path, $rw;
 
@@ -2882,6 +3022,27 @@ sub __open (*;$@) {
     $rw .= 'w' if grep { $_ eq $mode } qw/+< +> +>> > >>/;
     $rw .= 'a' if grep { $_ eq $mode } qw/>> +>>/;
 
+    # Permission check (GH #3) — IO::File path must match __open
+    if ( defined $_mock_uid ) {
+        if ( defined $mock_file->contents() ) {
+            my $need = 0;
+            $need |= 4 if $rw =~ /r/;
+            $need |= 2 if $rw =~ /w/;
+            if ( !_check_perms( $mock_file, $need ) ) {
+                $! = EACCES;
+                _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+                return undef;
+            }
+        }
+        elsif ( $rw =~ /w/ ) {
+            if ( !_check_parent_perms( $abs_path, 2 | 1 ) ) {
+                $! = EACCES;
+                _throw_autodie( 'open', @_ ) if _caller_has_autodie_for('open');
+                return undef;
+            }
+        }
+    }
+
     my $filefh = IO::File->new;
     tie *{$filefh}, 'Test::MockFile::FileHandle', $abs_path, $rw;
 
@@ -3065,6 +3226,27 @@ sub __sysopen (*$$;$) {
         return undef;
     }
 
+    # Permission check (GH #3)
+    if ( defined $_mock_uid ) {
+        if ( defined $mock_file->{'contents'} ) {
+            my $need = 0;
+            $need |= 4 if $rw =~ /r/;
+            $need |= 2 if $rw =~ /w/;
+            if ( !_check_perms( $mock_file, $need ) ) {
+                $! = EACCES;
+                _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+                return undef;
+            }
+        }
+        elsif ( $rw =~ /w/ ) {
+            if ( !_check_parent_perms( $mock_file->{'path'}, 2 | 1 ) ) {
+                $! = EACCES;
+                _throw_autodie( 'sysopen', @_ ) if _caller_has_autodie_for('sysopen');
+                return undef;
+            }
+        }
+    }
+
     $abs_path //= $mock_file->{'path'};
 
     $_[0] = IO::File->new;
@@ -3129,6 +3311,13 @@ sub __opendir (*$) {
     if ( !( $mock_dir->{'mode'} & S_IFDIR ) ) {
         $! = ENOTDIR;
         _maybe_throw_autodie( 'opendir', @_ );
+        return undef;
+    }
+
+    # Permission check: opendir needs read permission on directory (GH #3)
+    if ( defined $_mock_uid && !_check_perms( $mock_dir, 4 ) ) {
+        $! = EACCES;
+        _throw_autodie( 'opendir', @_ ) if _caller_has_autodie_for('opendir');
         return undef;
     }
 
@@ -3335,6 +3524,11 @@ sub __unlink (@) {
             $files_deleted += CORE::unlink($file);
         }
         else {
+            # Permission check: unlink needs write+execute on parent dir (GH #3)
+            if ( defined $_mock_uid && !_check_parent_perms( $mock->{'path'}, 2 | 1 ) ) {
+                $! = EACCES;
+                next;
+            }
             $files_deleted += $mock->unlink;
         }
     }
@@ -3554,6 +3748,13 @@ sub __mkdir (_;$) {
         return CORE::mkdir(@_);
     }
 
+    # Permission check: mkdir needs write+execute on parent dir (GH #3)
+    if ( defined $_mock_uid && !_check_parent_perms( $mock->{'path'}, 2 | 1 ) ) {
+        $! = EACCES;
+        _throw_autodie( 'mkdir', @_ ) if _caller_has_autodie_for('mkdir');
+        return 0;
+    }
+
     # File or directory, this exists and should fail
     if ( $mock->exists ) {
         $! = EEXIST;
@@ -3620,6 +3821,13 @@ sub __rmdir (_) {
     if ( !$mock->exists ) {
         $! = ENOENT;
         _maybe_throw_autodie( 'rmdir', @_ );
+        return 0;
+    }
+
+    # Permission check: rmdir needs write+execute on parent dir (GH #3)
+    if ( defined $_mock_uid && !_check_parent_perms( $mock->{'path'}, 2 | 1 ) ) {
+        $! = EACCES;
+        _throw_autodie( 'rmdir', @_ ) if _caller_has_autodie_for('rmdir');
         return 0;
     }
 
@@ -3794,18 +4002,22 @@ sub __chown (@) {
     }
 
     # Permission check uses the actual target uid/gid (not -1).
+    # Use mock user identity if set, otherwise real process credentials (GH #3)
+    my $eff_uid  = defined $_mock_uid ? $_mock_uid : $>;
+    my $eff_gids = defined $_mock_uid ? join( ' ', @_mock_gids ) : $);
+
     # -1 means "keep as is" and is handled per-file below.
-    my $target_uid = $uid == -1 ? $> : $uid;
-    my ($primary_gid) = split /\s/, $);    # $) is "gid supplementary..." — extract primary
+    my $target_uid = $uid == -1 ? $eff_uid : $uid;
+    my ($primary_gid) = split /\s/, $eff_gids;
     my $target_gid = $gid == -1 ? $primary_gid : $gid;
 
-    my $is_root     = $> == 0 || $) =~ /( ^ | \s ) 0 ( \s | $)/xms;
-    my $is_in_group = grep /(^ | \s ) \Q$target_gid\E ( \s | $ )/xms, $);
+    my $is_root     = $eff_uid == 0 || $eff_gids =~ /( ^ | \s ) 0 ( \s | $)/xms;
+    my $is_in_group = grep /(^ | \s ) \Q$target_gid\E ( \s | $ )/xms, $eff_gids;
 
     # Only check permissions once (before the loop), not per-file.
     # -1 means "keep as is" — no permission needed for unchanged fields.
     if ( !$is_root && $uid != -1 && $gid != -1 ) {
-        if ( $> != $target_uid || !$is_in_group ) {
+        if ( $eff_uid != $target_uid || !$is_in_group ) {
             $! = EPERM;
             _maybe_throw_autodie( 'chown', @_ );
             return 0;
@@ -3911,6 +4123,12 @@ sub __chmod (@) {
         # chmod $mode, '/foo/' still yields ENOENT
         if ( !$mock->exists() ) {
             $! = ENOENT;
+            next;
+        }
+
+        # Permission check: only owner or root can chmod (GH #3)
+        if ( defined $_mock_uid && $_mock_uid != 0 && $_mock_uid != $mock->{'uid'} ) {
+            $! = EPERM;
             next;
         }
 
