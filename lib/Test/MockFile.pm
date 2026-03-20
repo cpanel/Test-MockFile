@@ -991,23 +991,31 @@ sub file_from_disk {
 
 =head2 file_passthrough
 
-Args: C<($file)>
+Args: C<($file_or_glob)>
 
-Registers C<$file> with Test::MockFile but delegates B<all> file
-operations (C<stat>, C<open>, C<-f>, etc.) to the real filesystem.
-The path is not actually mocked: it is simply allowed through strict
-mode so that XS-based modules (e.g. L<DBD::SQLite>, L<DBI>) that
-perform C-level I/O can create and use the file while Perl-level
-checks remain consistent.
+Registers a path (or shell glob pattern) with Test::MockFile but delegates
+B<all> file operations (C<stat>, C<open>, C<-f>, etc.) to the real filesystem.
+The path is not actually mocked: it is simply allowed through strict mode so
+that XS-based modules (e.g. L<DBD::SQLite>, L<DBI>) that perform C-level I/O
+can create and use the file while Perl-level checks remain consistent.
+
+A glob pattern (containing C<*>, C<?>  or C<[>C<]>) matches any path that fits
+the pattern.  This is useful for modules like L<DBD::SQLite> that create
+auxiliary files alongside the main database (e.g. C<.db-wal>, C<.db-shm>):
 
     use Test::MockFile;    # strict mode by default
     use DBI;
 
-    my $mock = Test::MockFile->file_passthrough('/tmp/test.db');
+    # Allow the SQLite database and any auxiliary files it creates.
+    my $mock = Test::MockFile->file_passthrough('/tmp/test.db*');
     my $dbh  = DBI->connect("dbi:SQLite:dbname=/tmp/test.db", "", "");
 
     ok $dbh->ping,        'ping works';
     ok -f '/tmp/test.db', 'file exists on disk';
+
+For a single, exact path:
+
+    my $mock = Test::MockFile->file_passthrough('/tmp/test.db');
 
 When the returned object goes out of scope, the strict-mode rule is
 removed but the real file is B<not> deleted.  Clean up the file
@@ -1025,10 +1033,20 @@ sub file_passthrough {
 
     my $path = _abs_path_to_file($file);
 
-    # Build a strict-mode rule that allows all operations on this path.
+    # If the pattern contains glob metacharacters, build a regex from it.
+    # Otherwise use a literal match.
+    my $file_rule;
+    if ( $path =~ /[*?\[\{]/ ) {
+        $file_rule = Text::Glob::glob_to_regex($path);
+    }
+    else {
+        $file_rule = qr/^\Q$path\E$/;
+    }
+
+    # Build a strict-mode rule that allows all operations on matching paths.
     my $rule = {
         'command_rule' => qr/.*/,
-        'file_rule'    => qr/^\Q$path\E$/,
+        'file_rule'    => $file_rule,
         'action'       => 1,
     };
     push @STRICT_RULES, $rule;

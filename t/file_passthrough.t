@@ -122,6 +122,38 @@ subtest(
 );
 
 subtest(
+    'file_passthrough with glob pattern matches multiple files' => sub {
+        my $base = "$dir/mydb.sqlite";
+
+        # Register all SQLite auxiliary files with a single glob
+        my $mock = Test::MockFile->file_passthrough("$dir/mydb.sqlite*");
+
+        # Create real files via CORE:: (simulating what XS code like DBD::SQLite does)
+        CORE::open( my $fh1, '>', $base )         or die "Cannot create $base: $!";
+        print {$fh1} "db\n";
+        CORE::close($fh1);
+
+        CORE::open( my $fh2, '>', "$base-wal" )   or die "Cannot create $base-wal: $!";
+        print {$fh2} "wal\n";
+        CORE::close($fh2);
+
+        CORE::open( my $fh3, '>', "$base-shm" )   or die "Cannot create $base-shm: $!";
+        print {$fh3} "shm\n";
+        CORE::close($fh3);
+
+        # Perl-level checks should all pass through to real FS without strict violation
+        ok( -f $base,         'main db file visible via -f' );
+        ok( -f "$base-wal",   'wal file visible via -f' );
+        ok( -f "$base-shm",   'shm file visible via -f' );
+
+        my @st = stat($base);
+        ok( scalar @st, 'stat works on main db file' );
+
+        CORE::unlink $base, "$base-wal", "$base-shm";
+    }
+);
+
+subtest(
     'file_passthrough rejects undefined path' => sub {
         like(
             dies { Test::MockFile->file_passthrough(undef) },
@@ -142,7 +174,8 @@ done_testing();
 # Cleanup — use CORE:: to bypass Test::MockFile strict mode
 END {
     if ( defined $dir ) {
-        CORE::unlink "$dir/$_" for qw(basic.txt delegate.txt regular.txt pass.txt scoped.txt);
+        CORE::unlink "$dir/$_" for qw(basic.txt delegate.txt regular.txt pass.txt scoped.txt
+            mydb.sqlite mydb.sqlite-wal mydb.sqlite-shm);
         CORE::rmdir $dir;
     }
 }
