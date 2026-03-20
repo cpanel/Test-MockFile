@@ -3491,6 +3491,7 @@ sub __chown (@) {
         # -1 means "keep as is" — preserve the file's current value
         $mock->{'uid'} = $uid == -1 ? $mock->{'uid'} : $uid;
         $mock->{'gid'} = $gid == -1 ? $mock->{'gid'} : $gid;
+        $mock->{'ctime'} = time;
 
         $num_changed++;
     }
@@ -3557,6 +3558,7 @@ sub __chmod (@) {
         }
 
         $mock->{'mode'} = ( $mock->{'mode'} & S_IFMT ) | ( $mode & S_IFPERMS );
+        $mock->{'ctime'} = time;
 
         $num_changed++;
     }

@@ -9,6 +9,7 @@ use Test2::Plugin::NoWarnings;
 use Test2::Tools::Exception qw< lives dies >;
 use Test2::Tools::Warnings qw< warning >;
 use Test::MockFile qw< nostrict >;
+use Errno qw/ENOENT/;
 
 use File::Temp qw< tempfile >;
 
