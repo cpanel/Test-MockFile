@@ -3718,9 +3718,20 @@ sub __link ($$) {
     $new_mock->{'inode'}       = $source_mock->{'inode'};
     $new_mock->{'dev'}         = $source_mock->{'dev'};
 
-    # Update link counts
+    # Update link counts — propagate to ALL same-inode mocks (mirrors unlink behavior)
     $source_mock->{'nlink'}++;
     $new_mock->{'nlink'} = $source_mock->{'nlink'};
+    my $inode = $source_mock->{'inode'};
+    if ($inode) {
+        for my $path ( keys %files_being_mocked ) {
+            my $m = $files_being_mocked{$path};
+            next if !$m || $m == $source_mock || $m == $new_mock;
+            next if !$m->exists;
+            if ( defined $m->{'inode'} && $m->{'inode'} == $inode ) {
+                $m->{'nlink'} = $source_mock->{'nlink'};
+            }
+        }
+    }
 
     # Update ctime (inode change) on both
     my $now = time;
