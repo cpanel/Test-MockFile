@@ -3718,9 +3718,20 @@ sub __link ($$) {
     $new_mock->{'inode'}       = $source_mock->{'inode'};
     $new_mock->{'dev'}         = $source_mock->{'dev'};
 
-    # Update link counts
+    # Update link counts — propagate to ALL same-inode mocks (mirrors unlink behavior)
     $source_mock->{'nlink'}++;
     $new_mock->{'nlink'} = $source_mock->{'nlink'};
+    my $inode = $source_mock->{'inode'};
+    if ($inode) {
+        for my $path ( keys %files_being_mocked ) {
+            my $m = $files_being_mocked{$path};
+            next if !$m || $m == $source_mock || $m == $new_mock;
+            next if !$m->exists;
+            if ( defined $m->{'inode'} && $m->{'inode'} == $inode ) {
+                $m->{'nlink'} = $source_mock->{'nlink'};
+            }
+        }
+    }
 
     # Update ctime (inode change) on both
     my $now = time;
@@ -4034,8 +4045,14 @@ sub __chown (@) {
 
     # Only check permissions once (before the loop), not per-file.
     # -1 means "keep as is" — no permission needed for unchanged fields.
-    if ( !$is_root && $uid != -1 && $gid != -1 ) {
-        if ( $eff_uid != $target_uid || !$is_in_group ) {
+    # POSIX: non-root cannot change uid; can only change gid to a group they belong to.
+    if ( !$is_root ) {
+        if ( $uid != -1 && $eff_uid != $target_uid ) {
+            $! = EPERM;
+            _maybe_throw_autodie( 'chown', @_ );
+            return 0;
+        }
+        if ( $gid != -1 && !$is_in_group ) {
             $! = EPERM;
             _maybe_throw_autodie( 'chown', @_ );
             return 0;
