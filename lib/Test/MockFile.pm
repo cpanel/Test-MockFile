@@ -4045,8 +4045,14 @@ sub __chown (@) {
 
     # Only check permissions once (before the loop), not per-file.
     # -1 means "keep as is" — no permission needed for unchanged fields.
-    if ( !$is_root && $uid != -1 && $gid != -1 ) {
-        if ( $eff_uid != $target_uid || !$is_in_group ) {
+    # POSIX: non-root cannot change uid; can only change gid to a group they belong to.
+    if ( !$is_root ) {
+        if ( $uid != -1 && $eff_uid != $target_uid ) {
+            $! = EPERM;
+            _maybe_throw_autodie( 'chown', @_ );
+            return 0;
+        }
+        if ( $gid != -1 && !$is_in_group ) {
             $! = EPERM;
             _maybe_throw_autodie( 'chown', @_ );
             return 0;
